@@ -1,0 +1,444 @@
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="">
+    <title>Mars Meeting Planner</title>
+    
+<link href="https://getbootstrap.com/docs/5.0/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-+0n0xVW2eSR5OomGNYDnhzAbDsOXxcvSN1TPprVMTNDbiYZCxYbOOl7+AMvyTG2x" crossorigin="anonymous">
+
+
+<meta name="theme-color" content="#7952b3">
+
+
+    <style>
+      .bd-placeholder-img {
+        font-size: 1.125rem;
+        text-anchor: middle;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        user-select: none;
+      }
+
+      @media (min-width: 768px) {
+        .bd-placeholder-img-lg {
+          font-size: 3.5rem;
+        }
+      }
+
+      .themed-grid-col {
+        padding-top: .75rem;
+        padding-bottom: .75rem;
+        background-color: rgba(86, 61, 124, .15);
+        border: 1px solid rgba(86, 61, 124, .2);
+        }
+
+        .red-grid-col {
+        padding-top: .75rem;
+        padding-bottom: .75rem;
+        background-color: rgba(235, 85, 85, 0.15);
+        border: 1px solid rgba(86, 61, 124, .2);
+        }
+        .yellow-grid-col {
+        padding-top: .75rem;
+        padding-bottom: .75rem;
+        background-color: rgba(235, 225, 86, 0.15);
+        border: 1px solid rgba(86, 61, 124, .2);
+        }
+        .green-grid-col {
+        padding-top: .75rem;
+        padding-bottom: .75rem;
+        background-color: rgba(70, 224, 117, 0.15);
+        border: 1px solid rgba(86, 61, 124, .2);
+        }
+
+    </style>
+
+
+  </head>
+  <body class="py-4" onload="initialiseForm();">
+<main>
+  <div class="container">
+
+    <h1>Planning an interplanetary meeting?</h1>
+    <p class="lead">This tool will help schedule a suitable time</p>
+    <p>Select the date and timezones.</p>
+    <p></p><label for='date'>Date: </label><input type='date' name='date' id='date' value="2021-05-21"></p>
+
+
+
+    <p><label for='tz1_offset'>Earth Time Zone 1</label>
+        <select name='tz1_offset' id='tz1_offset'>
+            <option value="-12">UTC -12</option>
+            <option value="-11">UTC -11</option>
+            <option value="-10">UTC -10</option>
+            <option value="-09">UTC -9</option>
+            <option value="-08">UTC -8</option>
+            <option value="-07">UTC -7</option>
+            <option value="-06">UTC -6</option>
+            <option value="-05">UTC -5</option>
+            <option value="-04">UTC -4</option>
+            <option value="-03">UTC -3</option>
+            <option value="-02">UTC -2</option>
+            <option value="-01">UTC -1</option>
+            <option value="+00" selected>UTC (Coordinated Earth Time)</option>
+            <option value="+01">UTC +1</option>
+            <option value="+02">UTC +2</option>
+            <option value="+03">UTC +3</option>
+            <option value="+04">UTC +4</option>
+            <option value="+05">UTC +5</option>
+            <option value="+06">UTC +6</option>
+            <option value="+07">UTC +7</option>
+            <option value="+08">UTC +8</option>
+            <option value="+09">UTC +9</option>
+            <option value="+10">UTC +10</option>
+            <option value="+11">UTC +11</option>
+            <option value="+12">UTC +12</option>
+            <option value="+13">UTC +13</option>
+        </select>
+        </p>
+
+    <p><label for='tz2_offset'>Earth Time Zone 2</label>
+        <select name='tz2_offset' id='tz2_offset'>
+            <option value="-12">UTC -12</option>
+            <option value="-11">UTC -11</option>
+            <option value="-10">UTC -10</option>
+            <option value="-09">UTC -9</option>
+            <option value="-08">UTC -8</option>
+            <option value="-07">UTC -7</option>
+            <option value="-06">UTC -6</option>
+            <option value="-05">UTC -5</option>
+            <option value="-04">UTC -4</option>
+            <option value="-03">UTC -3</option>
+            <option value="-02">UTC -2</option>
+            <option value="-01">UTC -1</option>
+            <option value="+00" selected>UTC (Coordinated Earth Time)</option>
+            <option value="+01">UTC +1</option>
+            <option value="+02">UTC +2</option>
+            <option value="+03">UTC +3</option>
+            <option value="+04">UTC +4</option>
+            <option value="+05">UTC +5</option>
+            <option value="+06">UTC +6</option>
+            <option value="+07">UTC +7</option>
+            <option value="+08">UTC +8</option>
+            <option value="+09">UTC +9</option>
+            <option value="+10">UTC +10</option>
+            <option value="+11">UTC +11</option>
+            <option value="+12">UTC +12</option>
+            <option value="+13">UTC +13</option>
+        </select>
+        </p>
+
+        <p><label for='amt_offset'>Mars Time Zone</label>
+            <select name='amt_offset' id='amt_offset'>
+                <option value="-12">AMT -12</option>
+                <option value="-11">AMT -11</option>
+                <option value="-10">AMT -10</option>
+                <option value="-09">AMT -9</option>
+                <option value="-08">AMT -8</option>
+                <option value="-07">AMT -7</option>
+                <option value="-06">AMT -6</option>
+                <option value="-05">AMT -5</option>
+                <option value="-04">AMT -4</option>
+                <option value="-03">AMT -3</option>
+                <option value="-02">AMT -2</option>
+                <option value="-01">AMT -1</option>
+                <option value="+00" selected>AMT (Airy Mean Time)</option>
+                <option value="+01">AMT +1</option>
+                <option value="+02">AMT +2</option>
+                <option value="+03">AMT +3</option>
+                <option value="+04">AMT +4</option>
+                <option value="+05">AMT +5</option>
+                <option value="+06">AMT +6</option>
+                <option value="+07">AMT +7</option>
+                <option value="+08">AMT +8</option>
+                <option value="+09">AMT +9</option>
+                <option value="+10">AMT +10</option>
+                <option value="+11">AMT +11</option>
+                <option value="+12">AMT +12</option>
+            </select>
+            </p>
+
+            <button onClick="showPlanner();">Show Meeting Planner</button>
+
+            <script>
+                
+                var leapSeconds = {
+                    63072e6: 10,
+                    787968e5: 11,
+                    946944e5: 12,
+                    1262304e5: 13,
+                    1577664e5: 14,
+                    1893024e5: 15,
+                    2209248e5: 16,
+                    2524608e5: 17,
+                    2839968e5: 18,
+                    3155328e5: 19,
+                    3627936e5: 20,
+                    3943296e5: 21,
+                    4258656e5: 22,
+                    489024e6: 23,
+                    5679936e5: 24,
+                    631152e6: 25,
+                    662688e6: 26,
+                    7099488e5: 27,
+                    7414848e5: 28,
+                    7730208e5: 29,
+                    8204544e5: 30,
+                    8677152e5: 31,
+                    9151488e5: 32,
+                    11360736e5: 33,
+                    1230768e6: 34,
+                    13411008e5: 35,
+                    14357088e5: 36,
+                    14832288e5: 37
+                };
+
+
+                function getMarsTime(fromTime) {
+                    var leapSecondAnswer = 0;
+
+                    for (var time in leapSeconds) {
+                        if (parseInt(time) < fromTime) {
+                        leapSecondAnswer = leapSeconds[time];
+                        }
+                    
+                    }
+
+                    fromTime = fromTime - (( leapSecondAnswer - 32.184) * 1000); 
+
+
+                    var julianDate =  2440587.5 + (fromTime / 86400000);
+                    var mst = (24 * ((julianDate - 2451549.5) / 1.0274912517) + 44796.0 - 0.0009626 + 12) % 24;
+                    var mstHour = Math.floor(mst);
+                    var mstMS = Math.floor((mst - mstHour) * 60 * 60 * 1000); 
+                    var mstMinute = Math.floor(mstMS / 60 /1000); 
+                    var mstSecond = Math.floor((mstMS / 1000) - (mstMinute * 60) );
+                    var mstMilliseconds = Math.floor(mstMS - (mstMinute * 60 * 1000)) - (mstSecond * 1000);
+
+
+
+                    var marsYearZero = new Date("1953-05-24T09:03:58.464+00:00").getTime(); // Mars Year Zero start 
+                    var marsYearZeroJulianDate = 2440587.5 + (marsYearZero / 86400000);
+
+
+                    var marsSolsSinceJulian = (julianDate - 2405522) /1.02749;
+                    var marsSolsSinceMarsEpoch = (julianDate - marsYearZeroJulianDate) /1.02749;
+
+
+                    var marsSolarDaysPerYear = 668.5991;
+
+                    var marsYear = Math.floor(marsSolsSinceMarsEpoch / marsSolarDaysPerYear);
+                    // console.log('Mars Year: ' + marsYear);
+
+                    var marsSol = Math.floor(marsSolsSinceMarsEpoch % marsSolarDaysPerYear);
+                    var marsSolJulian = Math.floor(marsSolsSinceJulian);
+                    // console.log('Mars Sol: ' + marsSol);
+
+
+                    var solOfTheWeek = Math.floor((marsSolsSinceMarsEpoch + 1) % 7);
+
+                    var result = [mstHour, mstMinute, mstSecond, mstMilliseconds, marsYear, marsSolJulian, marsSol, solOfTheWeek];
+
+                    return result;
+
+                }
+
+
+                function initialiseForm() {
+                    var now = new Date();
+                    var userTZminutes = now.getTimezoneOffset();
+
+                    var tz1Offset = parseInt(-parseInt(userTZminutes) / 60);
+
+
+                    if (tz1Offset > -10 && tz1Offset < 0)
+                    {
+                        tz1Offset = tz1Offset.toString().replace("-", "-0");
+                    }
+                    else if (tz1Offset >= 0 && tz1Offset > 10)
+                    {
+                        tz1Offset = '+0' + tz1Offset.toString();
+                    }
+                    else if (tz1Offset >= 10)
+                    {
+                        tz1Offset = '+' + tz1Offset.toString();
+                    }
+
+                    document.getElementById('tz1_offset').value = tz1Offset;
+
+                    var month = (now.getMonth() + 1);
+                    if (month < 10) {
+                        month = "0" + month;
+                    }
+                    var date = now.getDate();
+                    if (date < 10) {
+                        date = "0" + date;
+                    }
+                    var dateString = now.getFullYear() + '-' + month + '-'  + date;
+                    document.getElementById('date').value = dateString;
+                    
+
+                }
+                
+                
+
+
+
+                function showPlanner() {
+                    var date = document.getElementById('date').value;
+                    var amtOffset = document.getElementById('amt_offset').value;
+                    var tz1Offset = document.getElementById('tz1_offset').value;
+                    var tz2Offset = document.getElementById('tz2_offset').value;
+
+
+
+
+                    var plannerStartTime = new Date(date + "T00:00:00" + tz1Offset + ":00").getTime();
+                    var plannerStartTimeObject = new Date(date + "T00:00:00" + tz1Offset + ":00");
+                    // console.log(plannerStartTime);
+
+                    // var tz1Start = new Date(plannerStartTime);
+                    // console.log(tz1Start.getHours() + ":" + tz1Start.getMinutes());
+
+                    // var tz2StartTime = plannerStartTime - (parseInt(tz2Offset) * 60 * 60 * 1000);
+                    // console.log(tz2StartTime);
+                    
+                    var tz1StartHour = 0;
+                    var tz2StartHour = (-(tz1StartHour + parseInt(tz1Offset) - parseInt(tz2Offset)) + 24) % 24;
+                    // console.log(tz2StartHour);
+
+
+                    var marsTime = getMarsTime(plannerStartTime);
+
+                    marsTime[0] = (marsTime[0] + parseInt(amtOffset) + 24) % 24;
+
+                    var marsStartHour = marsTime[0];
+
+                    // console.log(marsTime[0]);
+
+                    var tz1Hour = tz1StartHour;
+                    var tz2Hour = tz2StartHour;
+                    var marsHour = marsStartHour;
+
+
+                    // Probably better working with date objects here
+                    var tz1date1 = plannerStartTimeObject.getDate();
+                    var tz1day1 = plannerStartTimeObject.getDay();
+                    var tz1month1 = plannerStartTimeObject.getMonth() + 1;
+                    var tz1year1 = plannerStartTimeObject.getFullYear();
+                    
+                    var tz2date1 = plannerStartTimeObject.getDate();
+                    var tz2date2 = tz1date1;
+                    var tz2day1 = plannerStartTimeObject.getDay();
+                    var tz2day2 = tz1day1;
+                    var tz2month1 = plannerStartTimeObject.getMonth() + 1;
+                    var tz2month2 = tz1month1;
+                    var tz2year1 = plannerStartTimeObject.getFullYear();
+                    var tz2year2 = tz1year1;
+
+                    if (tz1Hour < tz2Hour)
+                    {
+                        tz2date1 = tz2date1 - 1;
+                        if (tz2date1 == 0)
+                        {
+                            tz2month1 = tz2month1 - 1;
+                            if (tz2month1 == 0)
+                            {
+                                tz2month1 = 12;
+                                tz2year1 = tz2year1 - 1;
+                            }
+                            tz2date1 = getDaysInMonth(tz2month1, tz2year1);
+                                
+                        }
+                        tz2day1 = (tz2day1 + 6) % 7;
+                    }
+
+
+                    var days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+
+                    document.getElementById('tz1_row_title').innerHTML = "UTC " + tz1Offset + " "  + days[tz1day1] + " " + tz1date1 + " " + tz1month1 + " " + tz1year1;
+                    document.getElementById('tz2_row_title').innerHTML = "UTC " + tz2Offset + " "  + days[tz2day1] + " " + tz2date1 + " " + tz2month1 + " " + tz2year1 + " - " + days[tz2day2] + " " + tz2date2 + " " + tz2month2 + " " + tz2year2;
+                    document.getElementById('mars_row_title').innerHTML = "AMT " + amtOffset + " " + days[marsTime[7]] + " Sol: " + marsTime[6] + " Year: " + marsTime[4] + " - " + days[(marsTime[7] + 8) % 7] + " Sol: " + (marsTime[6] + 1) + " Year: " + marsTime[4];
+
+                    document.getElementById('tz1_row').innerHTML = "";
+                    document.getElementById('tz2_row').innerHTML = "";
+                    document.getElementById('mars_row').innerHTML = "";
+
+                    // Mars minute offset
+                    var marsMinuteOffset = 4.11 * (marsTime[1] / 60);
+                    document.getElementById('tz1_row').innerHTML += '<div class="themed-grid-col" style="width:' + marsMinuteOffset + '%;font-size: 0.75em;">.</div>';
+                    document.getElementById('tz2_row').innerHTML += '<div class="themed-grid-col" style="width:' + marsMinuteOffset + '%;font-size: 0.75em;">.</div>';
+
+                    for (var i = 0; i < 24; i++) {
+
+                        var tz1Colour = "red";
+                        var tz2Colour = "red";
+                        var marsColour = "red";
+
+                        if (tz1Hour > 6 && tz1Hour < 22) {
+                            tz1Colour = "yellow";
+                        }
+                        if (tz1Hour > 7 && tz1Hour < 18) {
+                            tz1Colour = "green";
+                        }
+
+                        if (tz2Hour > 6 && tz2Hour < 22) {
+                            tz2Colour = "yellow";
+                        }
+                        if (tz2Hour > 7 && tz2Hour < 18) {
+                            tz2Colour = "green";
+                        }
+
+                        if (marsHour > 6 && marsHour < 22) {
+                            marsColour = "yellow";
+                        }
+                        if (marsHour > 7 && marsHour < 18) {
+                            marsColour = "green";
+                        }
+
+        
+
+                        document.getElementById('tz1_row').innerHTML += '<div class="' + tz1Colour + '-grid-col" style="width:4%;font-size: 0.75em;">' + tz1Hour + ':00</div>';
+                        document.getElementById('tz2_row').innerHTML += '<div class="' + tz2Colour + '-grid-col" style="width:4%;font-size: 0.75em;">' + tz2Hour + ':00</div>';
+                        document.getElementById('mars_row').innerHTML += '<div class="' + marsColour + '-grid-col" style="width:4.11%;font-size: 0.75em;">' + marsHour + ':00</div>';
+
+                        tz1Hour = (tz1Hour + 1) % 24;
+                        tz2Hour = (tz2Hour + 1) % 24;
+                        marsHour = (marsHour + 1) % 24;
+
+
+
+                    }
+                    
+
+
+                }
+            </script>
+
+            <h2 class="mt-4">Scheduler</h2>
+
+            <p id="tz1_row_title">Earth Time Zone 1.</p>
+            <div class="row mb-3" id="tz1_row">
+            </div>
+
+            <p id="tz2_row_title">Earth Time Zone 2.</p>
+            <div class="row mb-3" id="tz2_row">
+            </div>
+
+            <p id="mars_row_title">Mars Time.</p>
+            <div class="row mb-3" id="mars_row">
+            </div>
+
+  </div>
+
+  <div class="container-fluid themed-container" style="bottom: 0px; position: fixed;">Matthew Watt - 2021</div>
+</main>
+
+
+    
+  </body>
+</html>
