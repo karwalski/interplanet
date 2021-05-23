@@ -261,7 +261,7 @@
                     {
                         tz1Offset = tz1Offset.toString().replace("-", "-0");
                     }
-                    else if (tz1Offset >= 0 && tz1Offset > 10)
+                    else if (tz1Offset >= 0 && tz1Offset < 10)
                     {
                         tz1Offset = '+0' + tz1Offset.toString();
                     }
