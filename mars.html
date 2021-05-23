@@ -254,7 +254,7 @@
                     var now = new Date();
                     var userTZminutes = now.getTimezoneOffset();
 
-                    var tz1Offset = parseInt(-parseInt(userTZminutes) / 60);
+                    var tz1Offset = Math.floor(parseInt(-parseInt(userTZminutes) / 60));
 
 
                     if (tz1Offset > -10 && tz1Offset < 0)
