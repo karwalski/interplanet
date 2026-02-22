@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>InterPlanet — Interplanetary Time &amp; Meeting Scheduler</title>
+<link rel="icon" type="image/x-icon" href="favicon.ico">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#060614">
+<link rel="stylesheet" href="sky.css?v=1.0.0">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/fontawesome.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/solid.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
+</head>
+<body>
+
+<!-- Skip navigation link (visible on focus for keyboard users) -->
+<a href="#app" class="skip-link" data-i18n="app.skip_link">Skip to content</a>
+
+<!-- Screen-reader live status region (tour steps, toast messages) -->
+<div id="sr-status" aria-live="polite" aria-atomic="true" class="sr-only"></div>
+
+<!-- Floating controls -->
+<div id="controls" role="toolbar" data-i18n-aria="app.toolbar_aria" aria-label="App controls">
+  <button id="meeting-btn" data-i18n-aria="ctrl.schedule_aria" aria-label="Open meeting scheduler — find overlapping work hours across locations and planets" aria-expanded="false" aria-controls="meeting-panel"><i class="fa-solid fa-calendar-plus" aria-hidden="true"></i> <span data-i18n="ctrl.schedule">Schedule</span></button>
+  <button class="ctl" id="layout-ctl" data-i18n-attr="title:ctrl.layout_aria,aria-label:ctrl.layout_aria" title="Toggle layout (vertical columns / horizontal rows)" aria-label="Toggle layout between vertical columns and horizontal rows" aria-pressed="false"><i class="fa-solid fa-arrows-up-down" aria-hidden="true"></i></button>
+  <button class="ctl" id="share-ctl"  data-i18n-attr="title:ctrl.share_aria,aria-label:ctrl.share_aria" title="Share this view — generates a shareable link" aria-label="Share this view"><i class="fa-solid fa-share-from-square" aria-hidden="true"></i></button>
+  <button class="ctl font-ctl" id="font-dec" title="Decrease text size" aria-label="Decrease text size">A−</button>
+  <button class="ctl font-ctl" id="font-inc" title="Increase text size" aria-label="Increase text size">A+</button>
+  <button class="ctl" id="settings-ctl" data-i18n-aria="ctrl.settings_aria" title="Settings" aria-label="Open settings panel" aria-expanded="false" aria-controls="settings-panel"><i class="fa-solid fa-gear" aria-hidden="true"></i><span class="notif-dot" aria-hidden="true"></span></button>
+</div>
+
+<!-- Quick-action strip (top-left when no cities, or always visible) -->
+<div id="quick-actions">
+  <button class="qa-btn" id="qa-random" title="Add 6 random locations" data-i18n="qa.random">Random locations</button>
+  <button class="qa-btn" id="qa-myloc"  title="Add your current location" data-i18n="qa.my_location">+ My location</button>
+</div>
+
+<!-- Hour tooltip -->
+<div id="hpop"></div>
+
+<!-- Main app -->
+<div id="app">
+  <div id="cities-wrap">
+    <div id="utc-placeholder">
+      <div class="ph-center">
+        <div class="ph-time" id="ph-utc-time">00:00</div>
+        <div class="ph-dow" id="ph-utc-dow">Mon</div>
+        <div class="ph-label">UTC</div>
+      </div>
+      <div class="ph-hint" data-i18n="app.add_hint">Click + to add a location</div>
+    </div>
+    <button id="add-col" aria-label="Add a location — search for a city or planet (Ctrl+K / ⌘K)" title="Add location (Ctrl+K / ⌘K)" data-i18n-attr="title:ctrl.add_hint"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>
+  </div>
+</div>
+
+<!-- Mobile manage button (shown when cities exist on mobile) -->
+<button id="manage-btn" aria-label="Manage cities" aria-pressed="false">
+  <i class="fa-solid fa-trash-can" aria-hidden="true"></i>
+  <span>Manage</span>
+</button>
+
+<!-- Manage action bar -->
+<div id="manage-bar" role="toolbar" aria-label="City management actions">
+  <button class="mb-clear-btn" onclick="clearAllCities()" aria-label="Remove all cities">
+    <i class="fa-solid fa-trash" aria-hidden="true"></i> Clear all
+  </button>
+  <button class="mb-done-btn" onclick="exitManageMode()" aria-label="Done managing">Done</button>
+</div>
+
+<!-- Meeting panel -->
+<div id="meeting-panel" role="dialog" aria-modal="true" data-i18n-aria="meeting.panel_aria" aria-label="Meeting Scheduler" aria-labelledby="mp-title-text">
+  <div class="mp-head">
+    <span class="mp-title" id="mp-title-text" data-i18n="meeting.title">Meeting Scheduler</span>
+    <div style="display:flex;align-items:center;gap:0.5rem;">
+      <a id="mp-fullscreen-link" href="?schedule=fullscreen" title="Open full-page scheduler" aria-label="Open full-page scheduler"><i class="fa-solid fa-expand" aria-hidden="true"></i></a>
+      <button class="mp-close" id="mp-close" data-i18n-aria="meeting.close_aria" aria-label="Close meeting scheduler"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+    </div>
+  </div>
+  <div class="mp-controls">
+    <button class="mp-nav-btn" id="mp-prev" data-i18n-attr="title:meeting.prev_day" title="Previous day"><i class="fa-solid fa-chevron-left" aria-hidden="true"></i></button>
+    <input type="date" class="mp-date-input" id="mp-date" data-i18n-aria="meeting.date_aria" aria-label="Meeting date">
+    <button class="mp-nav-btn" id="mp-next" data-i18n-attr="title:meeting.next_day" title="Next day"><i class="fa-solid fa-chevron-right" aria-hidden="true"></i></button>
+    <div class="mp-days-toggle">
+      <button class="mp-days-btn active" data-days="1" data-i18n="meeting.days_1">1 day</button>
+      <button class="mp-days-btn" data-days="3" data-i18n="meeting.days_3">3 days</button>
+      <button class="mp-days-btn" data-days="7" data-i18n="meeting.days_7">7 days</button>
+    </div>
+    <button class="mp-overlap-btn" id="mp-overlap-btn"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> <span data-i18n="meeting.next_overlap">Next overlap</span></button>
+    <button class="mp-overlap-btn" id="mp-signal-btn"><i class="fa-solid fa-satellite-dish" aria-hidden="true"></i> <span data-i18n="meeting.best_windows">Best windows</span></button>
+  </div>
+  <div class="mp-overlap-result" id="mp-overlap-result" aria-live="polite" aria-atomic="true"></div>
+  <div id="mp-signal-result" aria-live="polite" aria-atomic="true"></div>
+  <div id="mp-llm-result" aria-live="polite" aria-atomic="true"></div>
+  <div class="mp-legend">
+    <div class="mp-leg"><div class="mp-leg-dot" style="background:rgba(76,175,80,0.6)"></div><span data-i18n="meeting.legend_work">Work hours</span></div>
+    <div class="mp-leg"><div class="mp-leg-dot" style="background:rgba(255,152,0,0.5)"></div><span data-i18n="meeting.legend_marginal">Marginal</span></div>
+    <div class="mp-leg"><div class="mp-leg-dot" style="background:rgba(244,67,54,0.35)"></div><span data-i18n="meeting.legend_rest">Rest</span></div>
+    <div class="mp-leg"><div class="mp-leg-dot" style="background:rgba(91,141,239,0.6)"></div><span data-i18n="meeting.legend_overlap">Good overlap</span></div>
+  </div>
+  <div id="mp-content"></div>
+</div>
+
+<!-- Search modal -->
+<div id="search-modal" role="dialog" aria-modal="true" data-i18n-aria="search.modal_aria" aria-label="Search cities and planets">
+  <div id="search-box">
+    <div id="search-head">
+      <i class="fa-solid fa-magnifying-glass" style="opacity:.4;font-size:.9rem" aria-hidden="true"></i>
+      <input id="search-input" type="text" placeholder="Search cities or planets…" data-i18n-placeholder="search.placeholder" autocomplete="off" aria-label="Search for a city or planet to add">
+      <button id="search-close" data-i18n-aria="search.close_aria" aria-label="Close search"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+    </div>
+    <div id="search-results" role="listbox" data-i18n-aria="search.results_aria" aria-label="Search results" tabindex="0"></div>
+  </div>
+</div>
+
+<!-- Settings panel -->
+<div id="settings-panel" role="dialog" aria-modal="true" data-i18n-aria="settings.title" aria-label="Settings">
+  <div class="sp-head"><span data-i18n="settings.title">Settings</span><button class="sp-close" id="sp-close" data-i18n-aria="settings.close_aria" aria-label="Close settings"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></div>
+
+  <div class="sp-sec" id="sp-lang-sec">
+    <div class="sp-sec-title" data-i18n="settings.section_language">Language</div>
+    <div class="tog-row">
+      <label class="tog-label" for="s-lang" data-i18n="settings.language_label">Display language</label>
+      <select id="s-lang" class="sp-lang-select"></select>
+    </div>
+  </div>
+
+  <div class="sp-sec">
+    <div class="sp-sec-title" data-i18n="settings.section_theme">Theme</div>
+    <div class="tog-row">
+      <label class="tog-label" for="s-theme" data-i18n="settings.theme_label">Colour theme</label>
+      <select id="s-theme" class="sp-lang-select">
+        <option value="system" data-i18n="settings.theme_system">Follow browser</option>
+        <option value="light"  data-i18n="settings.theme_light">Light</option>
+        <option value="dark"   data-i18n="settings.theme_dark">Dark</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="sp-sec">
+    <div class="sp-sec-title" id="settings-display-label" data-i18n="settings.section_display">Display</div>
+    <div class="tog-row" title="Show or hide the large clock face in each card">
+      <label class="tog-label" for="s-time" data-i18n="settings.show_time">Show time</label>
+      <label class="tog"><input type="checkbox" id="s-time" checked aria-describedby="s-time-desc"><span class="tog-sl"></span></label>
+      <span id="s-time-desc" class="sr-only" data-i18n="settings.show_time_desc">Toggles the large clock display in each location card</span>
+    </div>
+    <div class="tog-row" title="Show or hide the timezone abbreviation and UTC offset (e.g. AEDT UTC+11)">
+      <label class="tog-label" for="s-tz" data-i18n="settings.show_timezone">Show timezone</label>
+      <label class="tog"><input type="checkbox" id="s-tz" checked aria-describedby="s-tz-desc"><span class="tog-sl"></span></label>
+      <span id="s-tz-desc" class="sr-only" data-i18n="settings.show_timezone_desc">Toggles the timezone abbreviation and UTC offset label</span>
+    </div>
+    <div class="tog-row" title="Show or hide the city or planet name (editable by clicking)">
+      <label class="tog-label" for="s-city" data-i18n="settings.show_city">Show city name</label>
+      <label class="tog"><input type="checkbox" id="s-city" checked aria-describedby="s-city-desc"><span class="tog-sl"></span></label>
+      <span id="s-city-desc" class="sr-only" data-i18n="settings.show_city_desc">Toggles the city or planet name. Click the name to edit it.</span>
+    </div>
+    <div class="tog-row" title="Show or hide the country or region name">
+      <label class="tog-label" for="s-country" data-i18n="settings.show_country">Show country</label>
+      <label class="tog"><input type="checkbox" id="s-country" checked aria-describedby="s-country-desc"><span class="tog-sl"></span></label>
+      <span id="s-country-desc" class="sr-only" data-i18n="settings.show_country_desc">Toggles the country or region name beneath the city name</span>
+    </div>
+    <div class="tog-row" title="Show or hide the sky colour description label at the bottom of each sky area">
+      <label class="tog-label" for="s-label" data-i18n="settings.show_sky_label">Show sky label</label>
+      <label class="tog"><input type="checkbox" id="s-label" checked aria-describedby="s-label-desc"><span class="tog-sl"></span></label>
+      <span id="s-label-desc" class="sr-only" data-i18n="settings.show_sky_label_desc">Toggles the sky condition label (e.g. Clear Sky, Twilight, Overcast)</span>
+    </div>
+    <div class="tog-row" title="Show or hide the 24-hour work/rest colour bar at the bottom of each card">
+      <label class="tog-label" for="s-hourly" data-i18n="settings.show_hourly">Show hourly bar</label>
+      <label class="tog"><input type="checkbox" id="s-hourly" checked aria-describedby="s-hourly-desc"><span class="tog-sl"></span></label>
+      <span id="s-hourly-desc" class="sr-only" data-i18n="settings.show_hourly_desc">Toggles the 24-hour bar showing work hours (green), marginal (orange), and rest periods (red)</span>
+    </div>
+    <div class="tog-row" title="Compact mode — shows time and timezone only">
+      <label class="tog-label" for="s-compact" data-i18n="settings.compact">Compact mode</label>
+      <label class="tog"><input type="checkbox" id="s-compact" aria-describedby="s-compact-desc"><span class="tog-sl"></span></label>
+      <span id="s-compact-desc" class="sr-only" data-i18n="settings.compact_desc">Shows time and timezone only — hides weather, hourly bar, and work indicator</span>
+    </div>
+    <div class="tog-row" title="Show or hide the green/orange/red work status indicator">
+      <label class="tog-label" for="s-work" data-i18n="settings.show_work">Show work indicator</label>
+      <label class="tog"><input type="checkbox" id="s-work" checked aria-describedby="s-work-desc"><span class="tog-sl"></span></label>
+      <span id="s-work-desc" class="sr-only" data-i18n="settings.show_work_desc">Toggles the dot and label showing whether it is currently work hours, off-shift, or a rest day</span>
+    </div>
+    <div class="tog-row" title="Show or hide temperature, humidity, rain probability and weather description (Earth cities only; requires network)">
+      <label class="tog-label" for="s-weather" data-i18n="settings.show_weather">Show weather details</label>
+      <label class="tog"><input type="checkbox" id="s-weather" checked aria-describedby="s-weather-desc"><span class="tog-sl"></span></label>
+      <span id="s-weather-desc" class="sr-only" data-i18n="settings.show_weather_desc">Toggles weather data for Earth cities: temperature, humidity, rain probability, and conditions. Requires internet access to Open-Meteo API.</span>
+    </div>
+    <div class="tog-row" title="Show or hide sunrise/sunset times and moon phase illumination (Earth cities; requires network)">
+      <label class="tog-label" for="s-sunmoon" data-i18n="settings.show_sunmoon">Show sunrise, sunset &amp; moon</label>
+      <label class="tog"><input type="checkbox" id="s-sunmoon" checked aria-describedby="s-sunmoon-desc"><span class="tog-sl"></span></label>
+      <span id="s-sunmoon-desc" class="sr-only" data-i18n="settings.show_sunmoon_desc">Toggles sunrise and sunset times and the moon phase percentage for Earth cities.</span>
+    </div>
+    <div class="tog-row" title="One-way signal propagation delay to planets and Earth cities">
+      <label class="tog-label" for="s-ping" data-i18n="settings.show_ping">Show propagation delay</label>
+      <label class="tog"><input type="checkbox" id="s-ping" checked aria-describedby="s-ping-desc"><span class="tog-sl"></span></label>
+      <span id="s-ping-desc" class="sr-only" data-i18n="settings.show_ping_desc">Toggles the one-way signal propagation delay to each planet.</span>
+    </div>
+    <div class="tog-row" title="Disable animations and transitions (useful for motion sensitivity or low-power devices)">
+      <label class="tog-label" for="s-reduce-motion">Reduce motion</label>
+      <label class="tog"><input type="checkbox" id="s-reduce-motion" aria-describedby="s-reduce-motion-desc"><span class="tog-sl"></span></label>
+      <span id="s-reduce-motion-desc" class="sr-only">Disables sky colour transitions and UI animations. Also respects your OS reduced-motion preference automatically.</span>
+    </div>
+  </div>
+
+  <div class="sp-sec">
+    <div class="sp-sec-title" data-i18n="settings.section_layout">Layout</div>
+    <div class="tog-row" title="Switch between vertical columns (default) and horizontal rows. Also auto-switches at 768px window width.">
+      <label class="tog-label" for="s-horiz" data-i18n="settings.horiz_rows">Horizontal rows</label>
+      <label class="tog"><input type="checkbox" id="s-horiz" aria-describedby="s-horiz-desc"><span class="tog-sl"></span></label>
+      <span id="s-horiz-desc" class="sr-only" data-i18n="settings.horiz_rows_desc">Switches the layout between vertical columns and horizontal rows.</span>
+    </div>
+  </div>
+
+  <div class="sp-sec">
+    <div class="sp-sec-title" data-i18n="settings.section_location">Location</div>
+    <button class="sp-btn" id="req-loc-btn"><i class="fa-solid fa-location-crosshairs" aria-hidden="true"></i> <span data-i18n="settings.req_location">Request current location</span></button>
+    <div class="sp-note" id="loc-status" data-i18n="settings.location_not_acquired">Location not yet acquired.</div>
+  </div>
+
+  <div class="sp-sec">
+    <div class="sp-sec-title" data-i18n-html="settings.section_privacy">Data &amp; Privacy</div>
+    <div id="cookie-inline" class="ck-inline" style="display:none">
+      <div class="ck-text" data-i18n-html="settings.cookie_prompt">Save your cities &amp; settings between visits using a cookie?</div>
+      <div class="ck-btns">
+        <button class="ck-btn" id="ck-no" data-i18n="settings.cookie_decline">Decline</button>
+        <button class="ck-btn acc" id="ck-yes" data-i18n="settings.cookie_accept">Accept</button>
+      </div>
+    </div>
+    <div class="sp-note" style="margin-bottom:.5rem"><span data-i18n="settings.cookies_label">Cookies:</span> <span id="ck-status" data-i18n="settings.cookie_not_set">not set</span></div>
+    <button class="sp-btn" id="clear-btn" data-i18n="settings.clear_data">Clear all saved data</button>
+  </div>
+
+  <div class="sp-sec">
+    <div class="sp-sec-title sp-advanced-toggle" id="adv-toggle">
+      <span data-i18n="settings.section_advanced">Advanced</span> <i class="fa-solid fa-chevron-right adv-arrow" aria-hidden="true"></i>
+    </div>
+    <div class="sp-advanced-body" id="adv-body">
+
+      <div class="sp-adv-group-title">Non-Earth position</div>
+      <p class="sp-note" style="margin-top:0;margin-bottom:0.3rem;" data-i18n="settings.manual_location_note">For non-Earth positions, enter location JSON:</p>
+      <textarea id="manual-location-json" rows="3" class="sp-input"
+        style="width:100%;font-family:monospace;font-size:0.68rem;resize:vertical;margin-top:0.25rem;"
+        placeholder='{"body":"mars","lat":18.4,"lon":-77.5,"zone":"AMT-5","label":"Hellas Base"}'
+        data-i18n-attr="placeholder:settings.manual_location_placeholder"
+        aria-label="Manual location JSON"></textarea>
+      <div style="display:flex;gap:0.4rem;margin-top:0.25rem;">
+        <button class="sp-btn" id="manual-location-apply" data-i18n="settings.manual_location_apply">Apply</button>
+        <button class="sp-btn" id="manual-location-clear" data-i18n="settings.manual_location_clear">Clear</button>
+      </div>
+      <div id="manual-location-status" class="sp-note" style="margin-top:0.2rem;"></div>
+
+      <div class="sp-adv-group-title">JSON Config</div>
+      <button class="sp-btn" id="cfg-export-btn" data-i18n="settings.copy_config">Copy current config JSON</button>
+      <button class="sp-btn" id="cfg-custom-sys-btn" data-i18n="settings.custom_system">Custom solar system…</button>
+      <textarea id="cfg-import-txt" rows="4" placeholder='Paste config JSON or custom system JSON here…' data-i18n-placeholder="settings.config_placeholder"
+        style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);
+               border-radius:7px;color:white;font-size:0.72rem;padding:.4rem .5rem;
+               resize:vertical;outline:none;font-family:monospace;margin-top:.35rem;"></textarea>
+      <button class="sp-btn" id="cfg-import-btn" style="margin-top:.25rem" data-i18n="settings.apply_config">Apply imported config</button>
+      <div id="cfg-status" class="sp-note" style="margin-top:.2rem"></div>
+
+      <div class="sp-adv-group-title" data-i18n="settings.hdtn_section">DTN Signal API</div>
+      <input type="url" id="hdtn-api-url" class="sp-input"
+        placeholder="Lambda URL (leave blank to disable)"
+        data-i18n-attr="placeholder:settings.hdtn_url_placeholder">
+      <p class="sp-note" data-i18n="settings.hdtn_note">Leave blank to disable. No request is made if empty.</p>
+      <button class="sp-btn" id="hdtn-test-btn" data-i18n="settings.hdtn_test">Test connection</button>
+
+      <div class="sp-adv-group-title" data-i18n="settings.llm_section">AI Assistant API</div>
+      <input type="url" id="llm-api-url" class="sp-input"
+        placeholder="Lambda URL (leave blank to disable)"
+        data-i18n-attr="placeholder:settings.llm_url_placeholder">
+      <p class="sp-note" data-i18n="settings.llm_note">Provides plain-language recommendations after Best Windows. Leave blank to disable.</p>
+      <button class="sp-btn" id="llm-test-btn" data-i18n="settings.llm_test">Test connection</button>
+
+      <div class="sp-adv-group-title" data-i18n="settings.weather_section">Weather API</div>
+      <input type="url" id="weather-api-url" class="sp-input"
+        placeholder="Open-Meteo URL (leave blank to disable)"
+        data-i18n-attr="placeholder:settings.weather_url_placeholder">
+      <p class="sp-note" data-i18n="settings.weather_note">Leave blank to disable weather data. Default: open-meteo.com</p>
+      <button class="sp-btn" id="weather-test-btn" data-i18n="settings.weather_test">Test connection</button>
+
+    </div>
+  </div>
+
+  <div class="sp-sec">
+    <button class="sp-btn" id="sp-about-btn"><i class="fa-solid fa-circle-info" aria-hidden="true"></i> <span data-i18n="settings.about_tour">About &amp; Tour</span></button>
+    <a class="sp-btn" href="https://github.com/interplanet/interplanet" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:.4rem;text-decoration:none;margin-top:.3rem;"><i class="fa-brands fa-github" aria-hidden="true"></i> View on GitHub</a>
+  </div>
+
+  <div class="sp-sec" style="border-top:1px solid rgba(255,255,255,0.07);padding-top:.6rem;margin-top:.2rem">
+    <div class="sp-note" id="sp-lib-version" style="font-family:monospace;font-size:0.7rem;opacity:.45"></div>
+  </div>
+</div>
+
+<!-- Share toast -->
+<div id="share-toast" style="
+  position:fixed;bottom:70px;left:50%;transform:translateX(-50%) translateY(20px);
+  background:#12121f;border:1px solid rgba(255,255,255,0.12);border-radius:10px;
+  padding:.6rem 1rem;font-size:.8rem;color:white;z-index:1200;
+  opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;white-space:nowrap;
+" id="share-toast" aria-live="polite" aria-atomic="true" role="status"></div>
+
+<!-- Welcome-back banner (returning visitors) -->
+<div id="welcome-back" class="wb-off" role="status" aria-live="polite">
+  <span id="wb-msg">Welcome back</span>
+  <button id="wb-close" aria-label="Dismiss"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+</div>
+
+<!-- cookie-bar kept for legacy JS refs but hidden via CSS -->
+<div id="cookie-bar"></div>
+
+<!-- Welcome splash modal -->
+<div id="splash-modal" class="off" role="dialog" aria-modal="true" data-i18n-aria="splash.modal_aria" aria-label="Welcome to InterPlanet">
+  <div id="splash-box">
+    <h2 data-i18n="splash.title">InterPlanet</h2>
+    <p class="splash-sub" data-i18n="splash.subtitle">
+      Time across the solar system — in real time.
+    </p>
+    <ul class="splash-bullets">
+      <li data-i18n="splash.bullet1">Local time and sky colour for any city or planet</li>
+      <li data-i18n="splash.bullet2">Work-hour indicators and meeting scheduler for Earth and Mars</li>
+      <li data-i18n="splash.bullet3">Live signal propagation delays across the solar system</li>
+    </ul>
+    <div class="splash-btns">
+      <button class="splash-btn-ghost" id="splash-skip"  data-i18n="splash.skip">Start from scratch</button>
+      <button class="splash-btn-primary" id="splash-demo" data-i18n="splash.demo">Load demo cities</button>
+    </div>
+    <div class="splash-tour-link">
+      <a href="#" id="splash-tour" data-i18n="splash.tour">Take a tour</a>
+    </div>
+  </div>
+</div>
+
+<!-- Custom confirm modal -->
+<div id="modal-confirm" role="alertdialog" aria-modal="true"
+     aria-labelledby="mc-title" aria-describedby="mc-text" style="display:none">
+  <div id="mc-box">
+    <div id="mc-title" class="mc-title" data-i18n="settings.clear_confirm_title">Clear all data?</div>
+    <div id="mc-text"  class="mc-text"  data-i18n="settings.clear_confirm_text">This permanently removes all cities and settings.</div>
+    <div class="mc-actions">
+      <button id="mc-cancel" class="cc-btn cc-btn-cancel" data-i18n="city.confirm_cancel">Cancel</button>
+      <button id="mc-ok"     class="cc-btn cc-btn-destructive" data-i18n="settings.clear_confirm_ok">Clear everything</button>
+    </div>
+  </div>
+</div>
+
+<!-- Tour: dark overlay (click to cancel), spotlight ring, info popup, cancel tip -->
+<div id="tour-overlay" role="presentation" aria-hidden="true"></div>
+<div id="tour-spotlight" aria-hidden="true"></div>
+<div id="tour-popup" role="dialog" aria-modal="true" aria-label="Feature tour" aria-labelledby="tp-title">
+  <div class="tp-title" id="tp-title"></div>
+  <div class="tp-text"  id="tp-text"></div>
+  <div class="tp-footer">
+    <span class="tp-count" id="tp-count"></span>
+    <button class="tp-btn tp-btn-prev" id="tp-prev"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i> <span data-i18n="tour.prev">Back</span></button>
+    <button class="tp-btn tp-btn-next" id="tp-next"><span data-i18n="tour.next">Next</span> <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></button>
+  </div>
+</div>
+<div id="tour-cancel-tip" data-i18n="tour.cancel_tip">Reopen tour via Settings</div>
+
+<script src="i18n.js?v=1.0.0"></script>
+<script src="planet-time.js?v=1.0.0"></script>
+<script src="sky.js?v=1.0.0"></script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Dev / server-side (never commit)
+db-config.php
+db-config.*.php
+*.env
+.env*
+
+# Source favicon (compiled versions are committed)
+favicon-new.png
+favicon.png
