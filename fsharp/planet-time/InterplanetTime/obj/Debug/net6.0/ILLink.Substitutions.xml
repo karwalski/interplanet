@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<linker>
+  <assembly fullname="InterplanetTime">
+    <resource name="FSharpSignatureData.InterplanetTime" action="remove"></resource>
+    <resource name="FSharpSignatureCompressedData.InterplanetTime" action="remove"></resource>
+    <resource name="FSharpSignatureDataB.InterplanetTime" action="remove"></resource>
+    <resource name="FSharpSignatureCompressedDataB.InterplanetTime" action="remove"></resource>
+    <resource name="FSharpOptimizationData.InterplanetTime" action="remove"></resource>
+    <resource name="FSharpOptimizationCompressedData.InterplanetTime" action="remove"></resource>
+    <resource name="FSharpOptimizationDataB.InterplanetTime" action="remove"></resource>
+    <resource name="FSharpOptimizationCompressedDataB.InterplanetTime" action="remove"></resource>
+    <resource name="FSharpOptimizationInfo.InterplanetTime" action="remove"></resource>
+    <resource name="FSharpSignatureInfo.InterplanetTime" action="remove"></resource>
+  </assembly>
+</linker>

@@ -1,0 +1,15 @@
+/Users/matthew.watt/claude/interplanet-github/csharp/ltx/obj/Debug/net8.0/InterplanetLTX.GeneratedMSBuildEditorConfig.editorconfig
+/Users/matthew.watt/claude/interplanet-github/csharp/ltx/obj/Debug/net8.0/InterplanetLTX.AssemblyInfoInputs.cache
+/Users/matthew.watt/claude/interplanet-github/csharp/ltx/obj/Debug/net8.0/InterplanetLTX.AssemblyInfo.cs
+/Users/matthew.watt/claude/interplanet-github/csharp/ltx/obj/Debug/net8.0/InterplanetLTX.csproj.CoreCompileInputs.cache
+/Users/matthew.watt/claude/interplanet-github/csharp/ltx/obj/Debug/net8.0/InterplanetLTX.sourcelink.json
+/Users/matthew.watt/claude/interplanet-github/csharp/ltx/bin/Debug/net8.0/interplanet_ltx
+/Users/matthew.watt/claude/interplanet-github/csharp/ltx/bin/Debug/net8.0/interplanet_ltx.deps.json
+/Users/matthew.watt/claude/interplanet-github/csharp/ltx/bin/Debug/net8.0/interplanet_ltx.runtimeconfig.json
+/Users/matthew.watt/claude/interplanet-github/csharp/ltx/bin/Debug/net8.0/interplanet_ltx.dll
+/Users/matthew.watt/claude/interplanet-github/csharp/ltx/bin/Debug/net8.0/interplanet_ltx.pdb
+/Users/matthew.watt/claude/interplanet-github/csharp/ltx/obj/Debug/net8.0/interplanet_ltx.dll
+/Users/matthew.watt/claude/interplanet-github/csharp/ltx/obj/Debug/net8.0/refint/interplanet_ltx.dll
+/Users/matthew.watt/claude/interplanet-github/csharp/ltx/obj/Debug/net8.0/interplanet_ltx.pdb
+/Users/matthew.watt/claude/interplanet-github/csharp/ltx/obj/Debug/net8.0/InterplanetLTX.genruntimeconfig.cache
+/Users/matthew.watt/claude/interplanet-github/csharp/ltx/obj/Debug/net8.0/ref/interplanet_ltx.dll

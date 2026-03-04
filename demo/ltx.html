@@ -1,0 +1,2571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="x-dns-prefetch-control" content="on">
+<title>LTX Meeting — InterPlanet</title>
+<!-- DNS prefetch for external domains -->
+<link rel="dns-prefetch" href="//cdnjs.cloudflare.com">
+<link rel="dns-prefetch" href="//fonts.googleapis.com">
+<!-- Preconnect for domains used in the critical path -->
+<link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+<!-- Preload critical local assets -->
+<link rel="preload" href="planet-time.js?v=1.1.0" as="script">
+<link rel="icon" type="image/x-icon" href="assets/favicon.ico">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16x16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
+<meta name="theme-color" content="#060614">
+<meta name="description" content="LTX — Light-Time eXchange. Structured deterministic meeting protocol for interplanetary sessions with high signal propagation delay.">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
+      media="print" onload="this.media='all'" crossorigin="anonymous"
+      referrerpolicy="no-referrer">
+<noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"></noscript>
+<script src="assets/i18n.js?v=1.1.0"></script>
+<script src="planet-time.js?v=1.1.0"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#060614;--surface:rgba(255,255,255,.04);--border:rgba(255,255,255,.09);
+  --text:rgba(255,255,255,.92);--text-muted:rgba(255,255,255,.60);
+  --accent:#3563c8;--accent-h:#4472d8;
+  --tx:#3a8de8;--rx:#4caf50;--caucus:#9c27b0;
+  --buffer:#607d8b;--merge:#ff9800;--confirm:#00bcd4;
+}
+html.light-mode{--bg:#f5f6fa;--surface:rgba(0,0,0,.04);--border:rgba(0,0,0,.09);--text:rgba(0,0,0,.87);--text-muted:rgba(0,0,0,.65)}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;min-height:100vh;padding-bottom:4rem}
+a{color:inherit}
+
+/* Layout */
+.wrap{max-width:680px;margin:0 auto;padding:1.5rem 1rem}
+
+/* Top bar */
+.topbar{display:flex;align-items:center;gap:.75rem;margin-bottom:1.5rem;flex-wrap:wrap}
+.back-link{color:var(--text-muted);text-decoration:none;font-size:.82rem;display:flex;align-items:center;gap:.3rem;transition:color .15s}
+.back-link:hover{color:var(--text)}
+.wordmark{font-size:1.05rem;font-weight:700;letter-spacing:-.01em}
+.wordmark i{margin-right:.35rem}
+.ltx-badge{font-size:.64rem;font-weight:700;background:rgba(0,188,212,.15);color:#00bcd4;border:1px solid rgba(0,188,212,.25);border-radius:4px;padding:.1rem .35rem;letter-spacing:.05em}
+
+/* Cards */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1.25rem;margin-bottom:1rem}
+.card-title{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:1rem}
+
+/* Form */
+.frow{margin-bottom:.9rem}.frow:last-child{margin-bottom:0}
+label.fl{display:block;font-size:.7rem;font-weight:600;color:var(--text-muted);margin-bottom:.3rem;text-transform:uppercase;letter-spacing:.04em}
+.frow-2{display:grid;grid-template-columns:1fr 1fr;gap:.75rem}
+.inp{width:100%;background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:.85rem;padding:.5rem .65rem;outline:none;transition:border-color .15s}
+.inp:focus{border-color:rgba(91,141,239,.6)}
+html.light-mode .inp{background:rgba(0,0,0,.05)}
+.inp-sel{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='rgba(255,255,255,.4)'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right .6rem center;padding-right:1.8rem}
+html.light-mode .inp-sel{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='rgba(0,0,0,.4)'/%3E%3C/svg%3E")}
+.hint{font-size:.67rem;color:var(--text-muted);margin-top:.25rem}
+
+/* Mode buttons */
+.mode-btns{display:flex;gap:.4rem;flex-wrap:wrap}
+.mode-btn{background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:.74rem;font-weight:600;padding:.3rem .7rem;cursor:pointer;transition:background .15s,border-color .15s;letter-spacing:.03em}
+.mode-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.mode-btn:hover:not(.active){background:rgba(255,255,255,.1)}
+
+/* Node list */
+.node-row{display:flex;align-items:center;gap:.4rem;margin-bottom:.35rem;background:rgba(255,255,255,.03);border-radius:8px;padding:.5rem .65rem;border:1px solid transparent;flex-wrap:wrap}
+.node-row:hover{border-color:var(--border)}
+.node-row.host-row{background:rgba(53,99,200,.06);border-color:rgba(53,99,200,.2)}
+.node-badge{font-size:.58rem;font-weight:700;letter-spacing:.06em;padding:.1rem .35rem;border-radius:4px;white-space:nowrap;flex-shrink:0;text-transform:uppercase}
+.node-badge.host{background:rgba(53,99,200,.2);color:#5b8def;border:1px solid rgba(53,99,200,.3)}
+.node-badge.participant{background:rgba(255,255,255,.07);color:var(--text-muted);border:1px solid var(--border)}
+.node-name-inp{flex:1;min-width:80px;background:transparent;border:none;color:var(--text);font-size:.84rem;font-weight:600;outline:none;padding:.1rem 0}
+.node-delay-inp{width:64px;text-align:center;background:rgba(255,255,255,.07);border:1px solid var(--border);border-radius:5px;color:var(--text);font-size:.78rem;padding:.25rem .3rem;outline:none;flex-shrink:0}
+.node-delay-lbl{font-size:.67rem;color:var(--text-muted);white-space:nowrap;flex-shrink:0}
+.node-loc-sel{background:transparent;border:none;color:var(--text-muted);font-size:.72rem;cursor:pointer;outline:none;padding:0;flex-shrink:0;max-width:90px}
+.node-rm{background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:.75rem;padding:.1rem .25rem;border-radius:4px;transition:color .15s;line-height:1;flex-shrink:0;margin-left:auto}
+.node-rm:hover{color:#e57373}
+html.light-mode .node-name-inp{color:var(--text)}
+html.light-mode .node-delay-inp{background:rgba(0,0,0,.06)}
+
+/* Segment builder */
+.seg-hdr{display:flex;align-items:center;gap:.6rem;margin-bottom:.75rem}
+.seg-total{font-size:.72rem;color:var(--text-muted);margin-left:auto}
+.reset-btn{font-size:.68rem;background:none;border:1px solid var(--border);border-radius:6px;color:var(--text-muted);padding:.2rem .45rem;cursor:pointer;transition:color .15s,border-color .15s;white-space:nowrap}
+.reset-btn:hover{color:var(--text);border-color:rgba(255,255,255,.2)}
+.seg-row{display:grid;grid-template-columns:1fr 56px 42px 24px;gap:.4rem;align-items:center;margin-bottom:.35rem;background:rgba(255,255,255,.03);border-radius:8px;padding:.45rem .65rem;border:1px solid transparent;transition:border-color .15s}
+.seg-row:hover{border-color:var(--border)}
+.seg-left{display:flex;align-items:center;gap:.35rem}
+.seg-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.seg-sel{background:transparent;border:none;color:var(--text);font-size:.8rem;font-weight:600;outline:none;cursor:pointer;padding:0;width:100%}
+.seg-q{width:100%;text-align:center;background:rgba(255,255,255,.07);border:1px solid var(--border);border-radius:5px;color:var(--text);font-size:.78rem;padding:.2rem .3rem;outline:none}
+.seg-dur{font-size:.7rem;color:var(--text-muted);text-align:right}
+.seg-rm{background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:.75rem;padding:.1rem .2rem;border-radius:4px;transition:color .15s;line-height:1}
+.seg-rm:hover{color:#e57373}
+.add-seg{width:100%;background:rgba(255,255,255,.03);border:1px dashed var(--border);border-radius:8px;color:var(--text-muted);font-size:.78rem;padding:.5rem;cursor:pointer;transition:color .15s,border-color .15s;margin-top:.25rem}
+.add-seg:hover{color:var(--text);border-color:rgba(255,255,255,.2)}
+
+/* Actions */
+.actions{display:flex;gap:.55rem;flex-wrap:wrap;margin-top:.5rem}
+.btn-p{background:var(--accent);color:#fff;border:none;border-radius:9px;font-size:.85rem;font-weight:700;padding:.6rem 1.25rem;cursor:pointer;display:flex;align-items:center;gap:.4rem;transition:background .15s}
+.btn-p:hover{background:var(--accent-h)}
+.btn-s{background:rgba(255,255,255,.07);color:var(--text);border:1px solid var(--border);border-radius:9px;font-size:.8rem;font-weight:600;padding:.55rem .9rem;cursor:pointer;display:flex;align-items:center;gap:.35rem;transition:background .15s}
+.btn-s:hover{background:rgba(255,255,255,.12)}
+
+/* Share panel */
+.share-panel{margin-top:.6rem;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1rem;animation:fadeIn .15s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+.share-panel-title{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:.3rem}
+.share-panel-hint{font-size:.67rem;color:var(--text-muted);margin-bottom:.75rem}
+.share-node-row{display:flex;align-items:center;gap:.5rem;margin-bottom:.4rem;padding:.35rem .5rem;border-radius:7px;background:rgba(255,255,255,.03)}
+.share-node-name{flex:1;font-size:.8rem;font-weight:600}
+.share-node-role{font-size:.6rem;color:var(--text-muted);letter-spacing:.04em;text-transform:uppercase;flex-shrink:0}
+.share-copy-btn{background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:.72rem;font-weight:600;padding:.2rem .5rem;cursor:pointer;flex-shrink:0;transition:background .15s;white-space:nowrap}
+.share-copy-btn:hover{background:rgba(255,255,255,.15)}
+.share-copy-btn.success{color:#4caf50;border-color:#4caf50}
+.share-divider{height:1px;background:var(--border);margin:.5rem 0}
+.share-neutral-row{display:flex;align-items:center;gap:.5rem;padding:.25rem .5rem}
+.share-neutral-lbl{flex:1;font-size:.73rem;color:var(--text-muted)}
+
+/* ── RUNNER ──────────────────────────────────── */
+.runner-topbar{display:flex;align-items:center;gap:.75rem;margin-bottom:.75rem;flex-wrap:wrap}
+.r-title{flex:1;font-weight:700;font-size:1rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.r-clock{font-size:.75rem;font-family:monospace;color:var(--text-muted);flex-shrink:0}
+.mode-pill{font-size:.63rem;font-weight:700;letter-spacing:.05em;padding:.12rem .42rem;border-radius:5px;background:rgba(0,188,212,.12);color:#00bcd4;border:1px solid rgba(0,188,212,.22);white-space:nowrap}
+
+/* Viewer perspective pill */
+.viewer-pill{font-size:.67rem;font-weight:600;padding:.2rem .55rem;border-radius:20px;background:rgba(255,152,0,.12);color:#ff9800;border:1px solid rgba(255,152,0,.25);letter-spacing:.02em;margin-bottom:.75rem;display:inline-block}
+
+/* Node perspective switcher */
+.viewer-select-wrap{display:flex;align-items:center;gap:.5rem;padding:.28rem .8rem;font-size:.72rem;background:rgba(255,255,255,.03);border-bottom:1px solid rgba(255,255,255,.07);margin-bottom:.5rem}
+.viewer-select-label{color:rgba(255,255,255,.45);white-space:nowrap}
+.viewer-select{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);border-radius:5px;color:white;font-size:.72rem;padding:.18rem .4rem;outline:none;cursor:pointer;font-family:inherit}
+.viewer-select option{background:#0d0d1c;color:white}
+
+/* Segment banner */
+.banner{border-radius:16px;padding:2rem 1.5rem 1.75rem;margin-bottom:1rem;text-align:center;transition:background .5s,border-color .5s;border:1px solid transparent}
+.banner-type{font-size:2.2rem;font-weight:900;letter-spacing:.06em;margin-bottom:.3rem;transition:color .5s}
+.banner-nodes{font-size:.88rem;font-weight:600;opacity:.85;margin-bottom:.2rem}
+.banner-desc{font-size:.73rem;opacity:.55}
+.banner-arrival{font-size:.72rem;color:var(--text-muted);margin-top:.4rem;font-family:monospace;letter-spacing:.02em}
+
+/* Productive-idle tips (BUFFER segment) */
+.buffer-idle-tips{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:10px;padding:.8rem 1rem;margin-bottom:1rem;font-size:.75rem;color:var(--text-muted);line-height:1.6}
+.buffer-idle-tips strong{display:block;font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:.45rem}
+.buffer-idle-tips ul{list-style:none;padding:0;margin:0}
+.buffer-idle-tips ul li::before{content:"•";margin-right:.45rem;opacity:.5}
+html.light-mode .buffer-idle-tips{background:rgba(0,0,0,.03)}
+
+/* Timer */
+.timer-wrap{text-align:center;margin-bottom:.75rem}
+.timer-pre{font-size:.9rem;font-weight:700;color:var(--text-muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:.2rem}
+.timer-count{font-size:4.5rem;font-weight:900;font-family:'Courier New',monospace;letter-spacing:-.02em;line-height:1;transition:color .5s}
+.timer-label{font-size:.7rem;color:var(--text-muted);margin-top:.25rem;text-transform:uppercase;letter-spacing:.07em}
+
+/* Progress */
+.prog-wrap{background:rgba(255,255,255,.08);border-radius:4px;height:6px;overflow:hidden;margin-bottom:.4rem}
+.prog-bar{height:100%;border-radius:4px;transition:width .8s linear,background .5s}
+.prog-labels{display:flex;justify-content:space-between;font-size:.68rem;color:var(--text-muted);margin-bottom:1rem}
+
+/* Plan lock */
+.plan-lock{display:flex;align-items:center;gap:.4rem;font-size:.67rem;color:#4caf50;font-family:monospace;margin:.5rem 0 .75rem;padding:.4rem .7rem;background:rgba(76,175,80,.07);border:1px solid rgba(76,175,80,.18);border-radius:8px;word-break:break-all}
+
+/* Timeline */
+.tl-row{display:flex;align-items:center;gap:.55rem;padding:.4rem .55rem;border-radius:8px;font-size:.77rem;transition:background .2s}
+.tl-row.current{background:rgba(255,255,255,.08);font-weight:700}
+.tl-row.done{opacity:.4}
+.tl-badge{font-size:.63rem;font-weight:700;letter-spacing:.05em;padding:.12rem .38rem;border-radius:4px;color:#fff;min-width:100px;text-align:center;flex-shrink:0}
+.tl-time{font-family:monospace;font-size:.73rem;color:var(--text-muted);flex-shrink:0}
+.tl-nodes{flex:1;font-size:.73rem;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tl-dur{font-size:.68rem;color:var(--text-muted);flex-shrink:0}
+
+/* Toast */
+.toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%) translateY(10px);background:#12121f;border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:.5rem 1rem;font-size:.8rem;color:#fff;z-index:999;opacity:0;transition:opacity .2s,transform .2s;pointer-events:none;white-space:nowrap}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+@media(max-width:480px){.frow-2{grid-template-columns:1fr}.timer-count{font-size:3rem}.node-loc-sel{display:none}.share-panel-hint{display:none}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{transition-duration:.01ms!important;animation-duration:.01ms!important}}
+/* ── Session history (Story 46.1) ───────────────────────────────────────── */
+.history-row { display:flex; align-items:center; gap:.5rem; padding:.4rem .2rem; border-bottom:1px solid rgba(255,255,255,.06); font-size:.8rem; }
+.history-row:last-child { border-bottom:none; }
+.history-row-info { flex:1; }
+.history-row-title { font-weight:600; color:var(--text-primary); }
+.history-row-meta { color:var(--text-muted); font-size:.73rem; }
+/* ── Node time info (runner screen, Story 36.1) ─────────────────────── */
+.r-nodes-section{margin-bottom:1rem}
+.r-nodes-section .card-title{margin-bottom:.6rem}
+.r-node-row{display:flex;align-items:flex-start;gap:.55rem;padding:.45rem .6rem;border-radius:8px;background:rgba(255,255,255,.03);border:1px solid transparent;margin-bottom:.3rem}
+.r-node-row:last-child{margin-bottom:0}
+.r-node-name{font-size:.8rem;font-weight:600;white-space:nowrap;min-width:90px;flex-shrink:0}
+.node-time-info{display:flex;flex-direction:column;gap:.15rem;flex:1;min-width:0}
+.node-local-time{font-size:.78rem;font-family:monospace;color:var(--text)}
+.node-rest-status{font-size:.67rem;color:var(--text-muted)}
+.node-light-delay{font-size:.67rem;color:var(--text-muted)}
+
+/* ── DTN status indicator (runner screen, Story 36.1) ───────────────── */
+.dtn-indicator{font-size:.67rem;font-weight:600;padding:.15rem .45rem;border-radius:5px;letter-spacing:.03em;white-space:nowrap;flex-shrink:0;background:rgba(255,255,255,.05);border:1px solid var(--border);color:var(--text-muted)}
+.dtn-indicator.dtn-ok{background:rgba(76,175,80,.12);color:#4caf50;border-color:rgba(76,175,80,.25)}
+.dtn-indicator.dtn-degraded{background:rgba(255,152,0,.12);color:#ff9800;border-color:rgba(255,152,0,.25)}
+.dtn-indicator.dtn-blackout{background:rgba(244,67,54,.12);color:#f44336;border-color:rgba(244,67,54,.25)}
+/* ── Multi-party node list and delay matrix (Story 39.1) ────────────── */
+.r-multi-nodes-section{margin-top:1rem}
+.r-multi-node-row{display:flex;align-items:center;gap:.5rem;padding:.35rem .5rem;border-radius:6px;font-size:.78rem;margin-bottom:.2rem;background:rgba(255,255,255,.02)}
+.r-multi-node-badge{font-size:.63rem;font-weight:700;padding:.1rem .3rem;border-radius:4px;color:#fff;min-width:56px;text-align:center;flex-shrink:0}
+.r-multi-node-name{flex:1;font-weight:500}
+.r-multi-node-delay{font-size:.68rem;color:var(--text-muted);flex-shrink:0}
+.delay-matrix-table{width:100%;border-collapse:collapse;font-size:.72rem;margin-top:.4rem}
+.delay-matrix-table th{color:var(--text-muted);font-weight:500;text-align:left;padding:.2rem .35rem;border-bottom:1px solid var(--border)}
+.delay-matrix-table td{padding:.2rem .35rem;border-bottom:1px solid rgba(255,255,255,.04)}
+.delay-matrix-table tr:last-child td{border-bottom:none}
+.delay-self{color:var(--text-muted);font-style:italic}
+/* ── Skip navigation link ─────────────────────────────────────────────── */
+.skip-link{position:absolute;left:-9999px;top:0;z-index:9999;padding:.5rem 1rem;background:#0d0d1c;color:#fff;text-decoration:none;border-radius:0 0 6px 0;border:2px solid rgba(91,141,239,0.9)}
+.skip-link:focus{left:0}
+/* ── Screen-reader only ───────────────────────────────────────────────── */
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border-width:0}
+/* ── QR code section (Story 48.1) ────────────────────────────────────── */
+.qr-item{display:flex;flex-direction:column;align-items:center;gap:.4rem;padding:.5rem;flex-shrink:0}
+.qr-item canvas,.qr-item img,.qr-item svg{border-radius:4px;background:#fff;padding:4px;display:block}
+.qr-label{font-size:.72rem;color:var(--text-muted);text-align:center;max-width:120px;line-height:1.3}
+.qr-download{font-size:.7rem;cursor:pointer;background:rgba(255,255,255,.07);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:.15rem .4rem;transition:background .15s}
+.qr-download:hover{background:rgba(255,255,255,.14)}
+#share-qr-list{display:flex;flex-wrap:wrap;gap:.25rem;justify-content:center}
+/* Templates (Story 51.1) */
+#template-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:.55rem}
+.tpl-card{background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:10px;padding:.65rem .8rem;cursor:pointer;transition:border-color .15s,background .15s}
+.tpl-card:hover{background:rgba(255,255,255,.07);border-color:rgba(91,141,239,.4)}
+.tpl-card.selected{border-color:var(--accent);background:rgba(53,99,200,.08)}
+.tpl-name{font-size:.78rem;font-weight:700;color:var(--text);margin-bottom:.2rem}
+.tpl-desc{font-size:.66rem;color:var(--text-muted);line-height:1.4}
+html.light-mode .tpl-card{background:rgba(0,0,0,.03)}
+html.light-mode .tpl-card:hover{background:rgba(0,0,0,.06)}
+html.light-mode .tpl-card.selected{background:rgba(53,99,200,.06)}
+</style>
+</head>
+<body>
+
+<a href="#main-content" class="skip-link">Skip to main content</a>
+<div id="main-content" tabindex="-1" style="position:absolute;top:0"></div>
+
+<div id="ltx-toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+
+<!-- ═══════════════════════════════════════════════
+     SETUP SCREEN
+═══════════════════════════════════════════════ -->
+<div id="setup-screen" class="wrap" hidden>
+  <div class="topbar">
+    <a href="index.html" class="back-link" id="back-link-setup" aria-label="Back to InterPlanet">
+      <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> InterPlanet
+    </a>
+    <span class="wordmark"><i class="fa-solid fa-satellite-dish" aria-hidden="true"></i> <span id="setup-heading">LTX Meeting</span></span>
+    <span class="ltx-badge">v1.1</span>
+  </div>
+  <p id="setup-intro" style="font-size:.8rem;color:var(--text-muted);margin-bottom:1.25rem;line-height:1.55">
+    <strong>Light-Time eXchange</strong> — a deterministic structured meeting protocol designed for
+    interplanetary sessions where signal propagation delay prevents real-time interaction.
+    All nodes run this page independently and stay in sync without a live connection.
+  </p>
+
+  <!-- Recent Sessions history (Story 46.1) -->
+  <div class="card" id="history-card" hidden>
+    <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
+      <span id="history-title">Recent Sessions</span>
+      <button class="btn-s" id="history-clear" style="font-size:.7rem;padding:.2rem .5rem">Clear All</button>
+    </div>
+    <div id="history-list"></div>
+  </div>
+
+  <!-- Templates (Story 51.1) -->
+  <div class="card" id="templates-card">
+    <div class="card-title" id="templates-card-title">Load Template</div>
+    <div id="template-grid"></div>
+  </div>
+
+  <!-- Session config -->
+  <div class="card">
+    <div class="card-title" id="setup-session-title">Session Details</div>
+    <div class="frow">
+      <label class="fl" for="f-title" id="lbl-session-title">Session Title</label>
+      <input id="f-title" type="text" class="inp" value="LTX Plenary" placeholder="Session title">
+    </div>
+    <div class="frow">
+      <label class="fl" for="f-start" id="lbl-start">Start Time <small id="lbl-start-note" style="opacity:.6;text-transform:none;letter-spacing:0">(your local time — stored as UTC)</small></label>
+      <input id="f-start" type="datetime-local" class="inp" aria-label="Meeting start time">
+    </div>
+    <div class="frow frow-2">
+      <div>
+        <label class="fl" for="f-quantum" id="lbl-quantum">Scheduling Quantum</label>
+        <select id="f-quantum" class="inp inp-sel" aria-label="Quantum duration">
+          <option value="5" selected>5 minutes</option>
+          <option value="10">10 minutes</option>
+          <option value="15">15 minutes</option>
+          <option value="20">20 minutes</option>
+        </select>
+      </div>
+      <div>
+        <label class="fl" id="lbl-mode">Session Mode</label>
+        <div class="mode-btns" role="radiogroup" aria-label="LTX operational mode">
+          <button class="mode-btn" data-mode="LTX-LIVE" role="radio" aria-checked="false"
+                  title="Both nodes active simultaneously">LIVE</button>
+          <button class="mode-btn" data-mode="LTX-RELAY" role="radio" aria-checked="false"
+                  title="Via DTN store-and-forward relay">RELAY</button>
+          <button class="mode-btn active" data-mode="LTX-ASYNC" role="radio" aria-checked="true"
+                  title="No simultaneous presence required">ASYNC</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Nodes -->
+  <div class="card">
+    <div class="card-title" id="setup-nodes-title">Participating Nodes</div>
+    <p class="hint" id="setup-nodes-hint" style="margin-bottom:.8rem;line-height:1.5">
+      The <strong>host</strong> node provides the reference clock (UTC). All signal delays are
+      one-way from host. Add one node per participating location.
+    </p>
+    <div id="node-list" role="list" aria-label="Participating nodes"></div>
+    <button class="add-seg" id="node-add">
+      <i class="fa-solid fa-plus" aria-hidden="true"></i> <span id="btn-add-node">Add node</span>
+    </button>
+    <p class="hint" id="setup-delay-hint" style="margin-top:.5rem">
+      Typical one-way delays: Earth→Mars 180–1350 s · Earth→Moon ~1.3 s · Earth→Jupiter 2640–2880 s
+    </p>
+  </div>
+
+  <!-- Segment builder -->
+  <div class="card">
+    <div class="seg-hdr">
+      <div class="card-title" style="margin-bottom:0" id="setup-segs-title">Segment Plan</div>
+      <span class="seg-total" id="seg-total" aria-live="polite">—</span>
+      <button class="reset-btn" id="seg-reset" aria-label="Reset segments to default">↺ Reset</button>
+    </div>
+    <div id="seg-list" role="list" aria-label="Meeting segments"></div>
+    <button class="add-seg" id="seg-add">
+      <i class="fa-solid fa-plus" aria-hidden="true"></i> <span id="btn-add-seg">Add segment</span>
+    </button>
+  </div>
+
+  <!-- Participating nodes live status (Story 36.1) -->
+  <div class="card r-nodes-section" id="r-nodes-section">
+    <div class="card-title">Participating Nodes</div>
+    <div id="r-node-time-list"></div>
+  </div>
+
+  <div class="actions">
+    <button class="btn-p" id="setup-start">
+      <i class="fa-solid fa-play" aria-hidden="true"></i> <span id="btn-start-meeting">Start Meeting</span>
+    </button>
+    <button class="btn-s" id="setup-share">
+      <i class="fa-solid fa-link" aria-hidden="true"></i> <span id="btn-share">Share Links</span>
+    </button>
+    <button class="btn-s" id="setup-ics">
+      <i class="fa-solid fa-calendar-arrow-down" aria-hidden="true"></i> <span id="btn-setup-ics">Export .ics</span>
+    </button>
+  </div>
+
+  <!-- Per-node share panel (shown on Share click) -->
+  <div id="share-panel" class="share-panel" hidden>
+    <div class="share-panel-title" id="share-panel-title">Share meeting links</div>
+    <div class="share-panel-hint" id="share-panel-hint">Each link shows the session from that node's perspective</div>
+    <div id="share-node-rows"></div>
+    <div class="share-divider"></div>
+    <div class="share-neutral-row">
+      <span class="share-neutral-lbl" id="share-neutral-lbl">General link (no perspective)</span>
+      <button class="share-copy-btn" id="share-copy-neutral" data-node="">Copy</button>
+    </div>
+    <div id="share-qr-section" style="margin-top:1rem">
+      <div class="card-title" style="font-size:.85rem;margin-bottom:.5rem">QR Codes</div>
+      <div id="share-qr-list"></div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════
+     RUNNER SCREEN
+═══════════════════════════════════════════════ -->
+<div id="runner-screen" class="wrap" hidden>
+  <div class="runner-topbar">
+    <a href="index.html" class="back-link" id="back-link-runner" aria-label="Back to InterPlanet">
+      <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
+    </a>
+    <span class="r-title" id="r-title">LTX Plenary</span>
+    <span class="mode-pill" id="r-mode">LTX-LIVE</span>
+    <span class="r-clock" id="r-clock" aria-live="off">—</span>
+    <span class="dtn-indicator" id="r-dtn-indicator" aria-live="polite" aria-label="DTN status">DTN</span>
+  </div>
+
+  <!-- Viewer perspective indicator -->
+  <div id="r-viewer" class="viewer-pill" hidden></div>
+
+  <!-- Node perspective switcher -->
+  <div id="r-viewer-wrap" class="viewer-select-wrap" hidden>
+    <label for="r-node-select" class="viewer-select-label">View as:</label>
+    <select id="r-node-select" class="viewer-select" aria-label="Switch node perspective"></select>
+  </div>
+
+  <!-- Segment banner -->
+  <div class="banner" id="r-banner" role="status" aria-live="polite" aria-atomic="true">
+    <div class="banner-type" id="r-seg-type">—</div>
+    <div class="banner-nodes" id="r-seg-nodes">—</div>
+    <div class="banner-desc" id="r-seg-desc">—</div>
+    <div class="banner-arrival" id="r-seg-arrival" hidden></div>
+  </div>
+
+  <!-- Productive-idle tips (shown only during BUFFER segments) -->
+  <div class="buffer-idle-tips" id="r-buffer-idle-tips" hidden>
+    <strong>While you wait for propagation delay:</strong>
+    <ul>
+      <li>Review the received TX window content</li>
+      <li>Prepare your response for the next TX window</li>
+      <li>Update local session notes</li>
+      <li>Check delay estimates for the next session window</li>
+    </ul>
+  </div>
+
+  <!-- Countdown -->
+  <div class="timer-wrap">
+    <div class="timer-pre" id="r-pre-label" hidden>Starting in</div>
+    <div class="timer-count" id="r-countdown" aria-live="off">—</div>
+    <div class="timer-label" id="r-timer-lbl">remaining in segment</div>
+  </div>
+
+  <!-- Progress bar -->
+  <div class="prog-wrap" role="progressbar" id="r-prog-wrap"
+       aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Overall session progress">
+    <div class="prog-bar" id="r-prog-inner" style="width:0%"></div>
+  </div>
+  <div class="prog-labels">
+    <span id="r-elapsed">—</span>
+    <span id="r-next">—</span>
+  </div>
+
+  <!-- Plan lock -->
+  <div class="plan-lock" aria-label="Plan lock status">
+    <i class="fa-solid fa-lock" aria-hidden="true"></i>
+    <span id="r-plan-locked-lbl">PLAN LOCKED</span> &nbsp;·&nbsp;
+    <span id="r-planid" style="opacity:.6">—</span>
+  </div>
+
+  <!-- Timeline -->
+  <div class="card">
+    <div class="card-title" id="runner-session-plan-title">Session Plan</div>
+    <div id="r-timeline" aria-label="Session timeline"></div>
+  </div>
+
+  <!-- Multi-party nodes (shown when 3+ nodes, Story 39.1) -->
+  <div class="card r-multi-nodes-section" id="r-multi-nodes-section" hidden>
+    <div class="card-title" id="r-multi-nodes-title">Session Nodes</div>
+    <div id="r-multi-node-list"></div>
+  </div>
+
+  <!-- Signal delay matrix (shown when 3+ nodes, Story 39.1) -->
+  <div class="card" id="r-delay-matrix-section" hidden>
+    <div class="card-title" id="r-delay-matrix-title">Signal Delays</div>
+    <div id="r-delay-matrix"></div>
+  </div>
+
+  <div class="actions">
+    <button class="btn-s" id="runner-edit">
+      <i class="fa-solid fa-pen" aria-hidden="true"></i> <span id="btn-runner-edit">Edit</span>
+    </button>
+    <button class="btn-s" id="runner-copy">
+      <i class="fa-solid fa-link" aria-hidden="true"></i> <span id="btn-runner-copy">Copy Link</span>
+    </button>
+    <button class="btn-s" id="runner-ics">
+      <i class="fa-solid fa-calendar-arrow-down" aria-hidden="true"></i> <span id="btn-runner-ics">Export .ics</span>
+    </button>
+  </div>
+</div>
+
+
+<script>
+// ════════════════════════════════════════════════════════════════════════════
+// LTX MEETING RUNNER  (Story 12.1 / 12.2 / B7 / 21.1 / 21.2)
+// Light-Time eXchange — LTX v1.1 / InterPlanet
+// Config schema v2: nodes[] replaces txName/rxName/delay (v1 auto-upgraded)
+// Sprint 13: i18n, perspective-aware labels, per-node share links
+// ════════════════════════════════════════════════════════════════════════════
+
+// ════════════════════════════════════════════════════════════════════════════
+// MINIMAL QR CODE SVG GENERATOR (Story 48.1)
+// Supports byte mode, QR versions 1-10 (handles URLs up to ~100 chars)
+// Produces an SVG string with black/white modules.
+// Based on the ISO/IEC 18004 QR standard.
+// ════════════════════════════════════════════════════════════════════════════
+(function(root) {
+  'use strict';
+
+  // ── Galois Field GF(256) tables ──────────────────────────────────────────
+  var EXP = new Uint8Array(256);
+  var LOG = new Uint8Array(256);
+  (function() {
+    var x = 1;
+    for (var i = 0; i < 255; i++) {
+      EXP[i] = x;
+      LOG[x] = i;
+      x <<= 1;
+      if (x & 0x100) x ^= 0x11d;
+    }
+    EXP[255] = EXP[0];
+  })();
+
+  function gfMul(a, b) {
+    if (a === 0 || b === 0) return 0;
+    return EXP[(LOG[a] + LOG[b]) % 255];
+  }
+
+  // ── Reed-Solomon error correction ────────────────────────────────────────
+  function rsGeneratorPoly(degree) {
+    var p = [1];
+    for (var i = 0; i < degree; i++) {
+      var q = [1, EXP[i]];
+      var r = new Array(p.length + q.length - 1).fill(0);
+      for (var a = 0; a < p.length; a++)
+        for (var b = 0; b < q.length; b++)
+          r[a + b] ^= gfMul(p[a], q[b]);
+      p = r;
+    }
+    return p;
+  }
+
+  function rsEncode(data, ecCount) {
+    var gen = rsGeneratorPoly(ecCount);
+    var msg = data.slice();
+    for (var i = 0; i < ecCount; i++) msg.push(0);
+    for (var i = 0; i < data.length; i++) {
+      var coef = msg[i];
+      if (coef !== 0) {
+        for (var j = 0; j < gen.length; j++) {
+          msg[i + j] ^= gfMul(gen[j], coef);
+        }
+      }
+    }
+    return msg.slice(data.length);
+  }
+
+  // ── QR version/capacity tables ───────────────────────────────────────────
+  // Format: [version, totalCodewords, dataCodewords, ecCodewords, alignmentPatternPositions[]]
+  // Error correction level M
+  var VER_INFO = [
+  // v   total  data  ec  align
+    [1,   26,   19,   7,  []],
+    [2,   44,   34,  10,  [6,18]],
+    [3,   70,   55,  15,  [6,22]],
+    [4,  100,   80,  20,  [6,26]],
+    [5,  134,  108,  26,  [6,30]],
+    [6,  172,  136,  36,  [6,34]],
+    [7,  196,  156,  40,  [6,22,38]],
+    [8,  242,  194,  48,  [6,24,42]],
+    [9,  292,  232,  60,  [6,26,46]],
+    [10, 346,  274,  72,  [6,28,50]],
+    [11, 404,  324,  80,  [6,30,54]],
+    [12, 466,  370,  96,  [6,32,58]],
+    [13, 532,  428, 104,  [6,34,62]],
+    [14, 581,  461, 120,  [6,26,46,66]],
+    [15, 655,  523, 132,  [6,26,48,70]],
+    [16, 733,  589, 144,  [6,26,50,74]],
+    [17, 815,  647, 168,  [6,30,54,78]],
+    [18, 901,  721, 180,  [6,30,56,82]],
+    [19, 991,  795, 196,  [6,30,58,86]],
+    [20,1085,  861, 224,  [6,34,62,90]],
+  ];
+
+  // Format info for mask 0, error correction level M (binary)
+  // Pre-computed: EC level M = 00, mask 000 → format bits with BCH = 101010000010010
+  var FORMAT_INFO_MASKS = [
+    0b101010000010010,
+    0b101000100100101,
+    0b101111001111100,
+    0b101101101001011,
+    0b100010111111001,
+    0b100000011001110,
+    0b100111110010111,
+    0b100101010100000,
+  ];
+
+  // ── Bit stream builder ───────────────────────────────────────────────────
+  function BitStream() {
+    this.bits = [];
+  }
+  BitStream.prototype.push = function(val, len) {
+    for (var i = len - 1; i >= 0; i--)
+      this.bits.push((val >> i) & 1);
+  };
+  BitStream.prototype.toBytes = function() {
+    while (this.bits.length % 8) this.bits.push(0);
+    var bytes = [];
+    for (var i = 0; i < this.bits.length; i += 8) {
+      var b = 0;
+      for (var j = 0; j < 8; j++) b = (b << 1) | (this.bits[i + j] || 0);
+      bytes.push(b);
+    }
+    return bytes;
+  };
+
+  // ── Encode data ──────────────────────────────────────────────────────────
+  function encodeData(text) {
+    // Convert to UTF-8 bytes
+    var bytes = [];
+    for (var i = 0; i < text.length; i++) {
+      var c = text.charCodeAt(i);
+      if (c < 0x80) {
+        bytes.push(c);
+      } else if (c < 0x800) {
+        bytes.push(0xC0 | (c >> 6));
+        bytes.push(0x80 | (c & 0x3F));
+      } else {
+        bytes.push(0xE0 | (c >> 12));
+        bytes.push(0x80 | ((c >> 6) & 0x3F));
+        bytes.push(0x80 | (c & 0x3F));
+      }
+    }
+
+    // Find minimum version that fits
+    var ver = null;
+    for (var v = 0; v < VER_INFO.length; v++) {
+      var info = VER_INFO[v];
+      // byte mode capacity check: 4 mode bits + 8 char-count bits + 8*bytes bits
+      var bitsNeeded = 4 + 8 + bytes.length * 8;
+      if (Math.ceil(bitsNeeded / 8) <= info[2]) { ver = info; break; }
+    }
+    if (!ver) return null; // too long
+
+    var bs = new BitStream();
+    // Mode indicator: byte mode = 0100
+    bs.push(0b0100, 4);
+    // Character count
+    bs.push(bytes.length, ver[0] <= 9 ? 8 : 16);
+    // Data
+    for (var i = 0; i < bytes.length; i++) bs.push(bytes[i], 8);
+    // Terminator
+    bs.push(0, 4);
+
+    // Pad to data capacity
+    var dataBytes = bs.toBytes();
+    var cap = ver[2];
+    var pads = [0xEC, 0x11];
+    while (dataBytes.length < cap) dataBytes.push(pads[(dataBytes.length - bytes.length) % 2 < 0 ? 0 : (dataBytes.length % 2)]);
+    dataBytes = dataBytes.slice(0, cap);
+
+    // RS error correction
+    var ec = rsEncode(dataBytes, ver[3]);
+    var all = dataBytes.concat(ec);
+
+    return { version: ver[0], size: ver[0] * 4 + 17, data: all, alignPos: ver[4] };
+  }
+
+  // ── Module matrix ─────────────────────────────────────────────────────────
+  function makeMatrix(size) {
+    var m = [];
+    for (var i = 0; i < size; i++) {
+      m.push(new Uint8Array(size));
+    }
+    return m;
+  }
+
+  // Values: 0=white 1=black, high bit = functional (reserved)
+  var FUNC = 0x80;
+
+  function setModule(mat, r, c, dark) {
+    mat[r][c] = (dark ? 1 : 0) | FUNC;
+  }
+
+  function placeFinderPattern(mat, row, col) {
+    for (var dr = -1; dr <= 7; dr++) {
+      for (var dc = -1; dc <= 7; dc++) {
+        var r = row + dr, c = col + dc;
+        if (r < 0 || c < 0 || r >= mat.length || c >= mat.length) continue;
+        var dark = (dr >= 0 && dr <= 6 && (dc === 0 || dc === 6))
+                || (dc >= 0 && dc <= 6 && (dr === 0 || dr === 6))
+                || (dr >= 2 && dr <= 4 && dc >= 2 && dc <= 4);
+        setModule(mat, r, c, dark);
+      }
+    }
+  }
+
+  function placeAlignmentPattern(mat, row, col) {
+    for (var dr = -2; dr <= 2; dr++) {
+      for (var dc = -2; dc <= 2; dc++) {
+        var dark = (dr === -2 || dr === 2 || dc === -2 || dc === 2 || (dr === 0 && dc === 0));
+        setModule(mat, row + dr, col + dc, dark);
+      }
+    }
+  }
+
+  function placeFormatInfo(mat, mask) {
+    var bits = FORMAT_INFO_MASKS[mask];
+    var size = mat.length;
+    // Around top-left finder
+    var order = [0,1,2,3,4,5,7,8,14,13,12,11,10,9,8];
+    var cols =  [8,8,8,8,8,8,8,8,7, 5, 4, 3, 2, 1,0];
+    var rows =  [0,1,2,3,4,5,7,8,8, 8, 8, 8, 8, 8,8];
+    for (var i = 0; i < 15; i++) {
+      var dark = (bits >> (14 - i)) & 1;
+      setModule(mat, rows[i], cols[i], dark);
+    }
+    // Top-right and bottom-left
+    for (var i = 0; i < 7; i++) {
+      var dark = (bits >> i) & 1;
+      setModule(mat, size - 1 - i, 8, dark);
+    }
+    for (var i = 7; i < 15; i++) {
+      var dark = (bits >> i) & 1;
+      setModule(mat, 8, size - 15 + i, dark);
+    }
+    // Dark module
+    setModule(mat, size - 8, 8, true);
+  }
+
+  // Pre-computed version info bits (18 bits each) for versions 7-20
+  // Generated via BCH(18,6) with poly x^12+x^11+x^10+x^9+x^8+x^5+x^2+1 = 0x1F25
+  var VER_BITS = {
+    7:  0x07C94, 8:  0x085BC, 9:  0x09A99, 10: 0x0A4D3, 11: 0x0BBF6,
+    12: 0x0C762, 13: 0x0D847, 14: 0x0E60D, 15: 0x0F928, 16: 0x10B78,
+    17: 0x1145D, 18: 0x12A17, 19: 0x13532, 20: 0x149A6,
+  };
+
+  function placeVersionInfo(mat, version) {
+    var bits = VER_BITS[version];
+    if (!bits) return;
+    var size = mat.length;
+    for (var i = 0; i < 18; i++) {
+      var dark = (bits >> i) & 1;
+      var row = Math.floor(i / 3);
+      var col = i % 3;
+      // Top-right block
+      setModule(mat, row, size - 11 + col, dark);
+      // Bottom-left block
+      setModule(mat, size - 11 + col, row, dark);
+    }
+  }
+
+  function buildMatrix(enc) {
+    var size = enc.size;
+    var mat = makeMatrix(size);
+
+    // Finder patterns
+    placeFinderPattern(mat, 0, 0);
+    placeFinderPattern(mat, 0, size - 7);
+    placeFinderPattern(mat, size - 7, 0);
+
+    // Timing patterns
+    for (var i = 8; i < size - 8; i++) {
+      setModule(mat, 6, i, i % 2 === 0);
+      setModule(mat, i, 6, i % 2 === 0);
+    }
+
+    // Alignment patterns
+    var ap = enc.alignPos;
+    for (var ai = 0; ai < ap.length; ai++) {
+      for (var aj = 0; aj < ap.length; aj++) {
+        var r = ap[ai], c = ap[aj];
+        // Skip if overlaps finder
+        if ((r <= 10 && c <= 10) || (r <= 10 && c >= size - 11) || (r >= size - 11 && c <= 10)) continue;
+        placeAlignmentPattern(mat, r, c);
+      }
+    }
+
+    // Version info for v7+ (required by QR spec)
+    if (enc.version >= 7) placeVersionInfo(mat, enc.version);
+
+    // Format info (mask 0 for now)
+    placeFormatInfo(mat, 0);
+
+    // Place data bits using zigzag pattern
+    var bits = [];
+    for (var b = 0; b < enc.data.length; b++) {
+      for (var bi = 7; bi >= 0; bi--) bits.push((enc.data[b] >> bi) & 1);
+    }
+
+    var bitIdx = 0;
+    var up = true;
+    for (var col = size - 1; col > 0; col -= 2) {
+      if (col === 6) col = 5; // skip timing column
+      for (var row = 0; row < size; row++) {
+        var r = up ? size - 1 - row : row;
+        for (var dc = 0; dc < 2; dc++) {
+          var c = col - dc;
+          if (!(mat[r][c] & FUNC)) {
+            var bit = bitIdx < bits.length ? bits[bitIdx++] : 0;
+            // Apply mask pattern 0: (row + col) % 2 === 0
+            if ((r + c) % 2 === 0) bit ^= 1;
+            mat[r][c] = bit;
+          }
+        }
+      }
+      up = !up;
+    }
+
+    return mat;
+  }
+
+  // ── SVG renderer ─────────────────────────────────────────────────────────
+  function matToSVG(mat, cellSize) {
+    cellSize = cellSize || 6;
+    var size = mat.length;
+    var px = size * cellSize;
+    var rects = '';
+    for (var r = 0; r < size; r++) {
+      for (var c = 0; c < size; c++) {
+        if ((mat[r][c] & 1) === 1) {
+          rects += '<rect x="' + (c * cellSize) + '" y="' + (r * cellSize) + '" width="' + cellSize + '" height="' + cellSize + '"/>';
+        }
+      }
+    }
+    return '<svg xmlns="http://www.w3.org/2000/svg" width="' + px + '" height="' + px + '" viewBox="0 0 ' + px + ' ' + px + '" shape-rendering="crispEdges"><rect width="' + px + '" height="' + px + '" fill="#fff"/><g fill="#000">' + rects + '</g></svg>';
+  }
+
+  // ── Public API ────────────────────────────────────────────────────────────
+  root.LtxQR = {
+    makeSVG: function(text, cellSize) {
+      try {
+        var enc = encodeData(text);
+        if (!enc) return null;
+        var mat = buildMatrix(enc);
+        return matToSVG(mat, cellSize || 5);
+      } catch(e) {
+        return null;
+      }
+    }
+  };
+})(window);
+
+// ── QR Share rendering (Story 48.1) ──────────────────────────────────────────
+
+function renderShareQR(cfg) {
+  var list = document.getElementById('share-qr-list');
+  if (!list) return;
+  list.innerHTML = '';
+
+  var nodes = cfg.nodes || [];
+  nodes.forEach(function(node) {
+    var url = location.origin + buildUrl(cfg, node.id);
+    var isHost = node.role === 'HOST';
+    var roleLabel = isHost ? 'Host' : 'Participant';
+
+    var item = document.createElement('div');
+    item.className = 'qr-item';
+
+    var svg = window.LtxQR ? window.LtxQR.makeSVG(url, 5) : null;
+
+    if (svg) {
+      var img = document.createElement('img');
+      img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+      img.width = img.height = 130;
+      img.alt = 'QR code for ' + node.name;
+      item.appendChild(img);
+
+      var lbl = document.createElement('div');
+      lbl.className = 'qr-label';
+      lbl.textContent = node.name + '\n' + roleLabel;
+      item.appendChild(lbl);
+
+      var dl = document.createElement('button');
+      dl.className = 'qr-download';
+      dl.textContent = getT('ltx.qr.download');
+      dl.setAttribute('aria-label', getT('ltx.qr.download') + ' QR code for ' + node.name);
+      dl.addEventListener('click', (function(svgStr, name) {
+        return function() {
+          var blob = new Blob([svgStr], { type: 'image/svg+xml' });
+          var a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = 'ltx-qr-' + name.replace(/\s+/g, '-').toLowerCase() + '.svg';
+          a.click();
+          URL.revokeObjectURL(a.href);
+        };
+      })(svg, node.name));
+      item.appendChild(dl);
+    } else {
+      // Fallback: show URL text with copy button
+      var lbl = document.createElement('div');
+      lbl.className = 'qr-label';
+      lbl.textContent = node.name + ' (' + roleLabel + ')';
+      item.appendChild(lbl);
+
+      var hint = document.createElement('div');
+      hint.style.cssText = 'font-size:.68rem;color:var(--text-muted);margin:.2rem 0;word-break:break-all;max-width:200px;text-align:center';
+      hint.textContent = url;
+      item.appendChild(hint);
+    }
+
+    list.appendChild(item);
+  });
+}
+
+// ── i18n helper ──────────────────────────────────────────────────────────────
+
+function getT(key, vars) {
+  if (window.I18N) return window.I18N.t(key, vars);
+  // Minimal inline English fallback (if i18n.js somehow unavailable)
+  const FB = {
+    'ltx.banner.plan_confirm':   'PLAN VERIFICATION',
+    'ltx.banner.tx.host':        'BROADCASTING',
+    'ltx.banner.rx.host':        'AWAITING RESPONSE',
+    'ltx.banner.tx.participant': 'HOST BROADCASTING',
+    'ltx.banner.tx.async':       'BROADCASTING',
+    'ltx.banner.rx.participant': 'YOUR TURN TO RESPOND',
+    'ltx.banner.caucus':         'LOCAL DISCUSSION',
+    'ltx.banner.buffer':         'TIMING BUFFER',
+    'ltx.banner.merge':          'REINTEGRATING',
+    'ltx.banner.waiting':        'STANDING BY',
+    'ltx.banner.complete':       'SESSION COMPLETE',
+    'ltx.desc.tx.host':          'You are presenting — all participant nodes are receiving',
+    'ltx.desc.tx.participant':   '{host} is presenting — listen and take notes',
+    'ltx.desc.tx.async':         'All nodes are broadcasting simultaneously — your recording arrives at remote nodes after signal delay',
+    'ltx.desc.rx.host':          'Participant nodes are transmitting their responses to you',
+    'ltx.desc.rx.participant':   'Transmit your response to {host} now',
+    'ltx.desc.plan_confirm':     'All nodes verify they hold an identical plan before the session begins',
+    'ltx.desc.caucus':           'Independent local discussion — no transmission in progress',
+    'ltx.desc.buffer':           'Reserved window to absorb signal drift and propagation variance',
+    'ltx.desc.merge':            'Consolidate branch outputs and decisions into the plenary record',
+    'ltx.desc.waiting':          'Session has not started yet',
+    'ltx.desc.complete':         'All segments concluded',
+    'ltx.nodes.tx.host':         '{host} → {participants}',
+    'ltx.nodes.tx.async.host':         'You ↔ {participants}',
+    'ltx.nodes.tx.async.participant':  'You ↔ {host}',
+    'ltx.nodes.rx.host':         '{participants} → {host}',
+    'ltx.nodes.caucus.multi':    'All nodes (local)',
+    'ltx.nodes.caucus.single':   '{host} & {participants} (local)',
+    'ltx.nodes.plan_confirm':    'All nodes — plan verification',
+    'ltx.nodes.tx.participant':  '{host} → You',
+    'ltx.nodes.rx.participant':  'You → {host}',
+    'ltx.seg.plan_confirm':      'Plan Confirmation',
+    'ltx.seg.tx':                'Host Broadcasts',
+    'ltx.seg.rx':                'Participants Respond',
+    'ltx.seg.caucus':            'Local Discussion',
+    'ltx.seg.buffer':            'Timing Buffer',
+    'ltx.seg.merge':             'Reintegrate',
+    'ltx.setup.ref_delay':       'Reference (0 s delay)',
+    'ltx.setup.one_way':         's one-way',
+    'ltx.setup.host_badge':      'HOST',
+    'ltx.setup.node_badge':      'NODE',
+    'ltx.runner.plan_locked':    'PLAN LOCKED',
+    'ltx.runner.starting_in':    'Starting in',
+    'ltx.runner.until_start':    'until session start',
+    'ltx.runner.remaining':      'remaining in segment',
+    'ltx.runner.elapsed':        '{n} min elapsed',
+    'ltx.runner.complete_lbl':   'session complete',
+    'ltx.runner.next_seg':       'Next: {name} ({dur} min)',
+    'ltx.runner.last_seg':       'Last segment',
+    'ltx.runner.edit':           'Edit',
+    'ltx.runner.copy':           'Copy Link',
+    'ltx.runner.ics':            'Export .ics',
+    'ltx.viewing.host':          'Viewing as {name} — Host',
+    'ltx.viewing.participant':   'Viewing as {name} — Participant',
+    'ltx.share.title':           'Share meeting links',
+    'ltx.share.hint':            "Each link shows the session from that node's perspective",
+    'ltx.share.neutral':         'General link (no perspective)',
+    'ltx.share.copied':          'Copied!',
+    'ltx.share.failed':          'Copy failed',
+    'ltx.toast.link_copied':     'Link copied!',
+    'ltx.toast.copy_failed':     'Copy failed — try manually',
+    'ltx.history.title':         'Recent Sessions',
+    'ltx.history.clear':         'Clear All',
+    'ltx.history.untitled':      'Untitled Session',
+    'ltx.history.load':          'Load',
+    'ltx.template.title':        'Load Template',
+    'ltx.node.host_view':        'Host view',
+    'ltx.node.host_badge':       'HOST',
+    'ltx.node.node_badge':       'NODE',
+    'ltx.node.reference':        'Reference node (0 s delay)',
+    'ltx.node.one_way':          '{sec} s one-way',
+    'ltx.node.loading':          'Loading...',
+    'ltx.qr.download':           'Download',
+    'ltx.dtn.operational':       'DTN Operational',
+    'ltx.dtn.degraded':          'DTN Degraded',
+    'ltx.dtn.blackout':          'DTN Blackout',
+    'ltx.dtn.label':             'DTN',
+    'ltx.runner.starts_at':      'Starts: {time}',
+    'ltx.mode.live':             'LIVE',
+    'ltx.mode.relay':            'RELAY',
+    'ltx.mode.async':            'ASYNC',
+  };
+  let str = FB[key] || key;
+  if (vars) str = str.replace(/\{(\w+)\}/g, (_, k) => (vars[k] != null ? vars[k] : `{${k}}`));
+  return str;
+}
+
+// ── Segment meta (internal tokens + i18n key references) ────────────────────
+
+const SEG_TYPES = ['PLAN_CONFIRM','TX','RX','CAUCUS','BUFFER','MERGE'];
+
+// bannerKey / descKey / nodesKey: keyed by 'host' and 'participant' perspectives
+// uiLabelKey: used in the builder <select> options
+const SEG_META = {
+  PLAN_CONFIRM: {
+    color:      '#00bcd4',
+    uiLabelKey: 'ltx.seg.plan_confirm',
+    bannerKey:  { host: 'ltx.banner.plan_confirm', participant: 'ltx.banner.plan_confirm' },
+    descKey:    { host: 'ltx.desc.plan_confirm',   participant: 'ltx.desc.plan_confirm' },
+    nodesKey:   { host: 'ltx.nodes.plan_confirm',  participant: 'ltx.nodes.plan_confirm' },
+  },
+  TX: {
+    color:      '#3a8de8',
+    uiLabelKey: 'ltx.seg.tx',
+    bannerKey:  { host: 'ltx.banner.tx.host',  participant: 'ltx.banner.tx.participant' },
+    descKey:    { host: 'ltx.desc.tx.host',    participant: 'ltx.desc.tx.participant' },
+    nodesKey:   { host: 'ltx.nodes.tx.host',   participant: 'ltx.nodes.tx.participant' },
+  },
+  RX: {
+    color:      '#4caf50',
+    uiLabelKey: 'ltx.seg.rx',
+    bannerKey:  { host: 'ltx.banner.rx.host',  participant: 'ltx.banner.rx.participant' },
+    descKey:    { host: 'ltx.desc.rx.host',    participant: 'ltx.desc.rx.participant' },
+    nodesKey:   { host: 'ltx.nodes.rx.host',   participant: 'ltx.nodes.rx.participant' },
+  },
+  CAUCUS: {
+    color:      '#9c27b0',
+    uiLabelKey: 'ltx.seg.caucus',
+    bannerKey:  { host: 'ltx.banner.caucus', participant: 'ltx.banner.caucus' },
+    descKey:    { host: 'ltx.desc.caucus',   participant: 'ltx.desc.caucus' },
+    nodesKey:   { host: 'ltx.nodes.caucus.multi', participant: 'ltx.nodes.caucus.multi' },
+  },
+  BUFFER: {
+    color:      '#607d8b',
+    uiLabelKey: 'ltx.seg.buffer',
+    bannerKey:  { host: 'ltx.banner.buffer', participant: 'ltx.banner.buffer' },
+    descKey:    { host: 'ltx.desc.buffer',   participant: 'ltx.desc.buffer' },
+    nodesKey:   { host: 'ltx.nodes.plan_confirm', participant: 'ltx.nodes.plan_confirm' },
+  },
+  MERGE: {
+    color:      '#ff9800',
+    uiLabelKey: 'ltx.seg.merge',
+    bannerKey:  { host: 'ltx.banner.merge', participant: 'ltx.banner.merge' },
+    descKey:    { host: 'ltx.desc.merge',   participant: 'ltx.desc.merge' },
+    nodesKey:   { host: 'ltx.nodes.plan_confirm', participant: 'ltx.nodes.plan_confirm' },
+  },
+};
+
+const DEFAULT_SEGS = [
+  { type:'PLAN_CONFIRM', q:2 },
+  { type:'TX',           q:3 },
+  { type:'RX',           q:3 },
+  { type:'CAUCUS',       q:2 },
+  { type:'TX',           q:3 },
+  { type:'RX',           q:3 },
+  { type:'MERGE',        q:2 },
+  { type:'BUFFER',       q:1 },
+];
+
+const DEFAULT_NODES = [
+  { id:'N0', name:'Earth HQ',    role:'HOST',        delay:0,   location:'earth' },
+  { id:'N1', name:'Mars Hab-01', role:'PARTICIPANT',  delay:900, location:'mars'  },
+];
+
+const TEMPLATES = [
+  {
+    id: 'earth-mars-standard',
+    name: 'Earth\u2013Mars Standard',
+    desc: '2-party session, ~900 s delay \u00b7 TX/RX/Caucus pattern',
+    cfg: {
+      v:2, title:'Earth\u2013Mars Standard', quantum:5, mode:'LTX-LIVE',
+      nodes:[
+        {id:'N0',name:'Earth HQ',role:'HOST',delay:0,location:'earth'},
+        {id:'N1',name:'Mars Hab-01',role:'PARTICIPANT',delay:900,location:'mars'},
+      ],
+      segments:[
+        {type:'PLAN_CONFIRM',q:2},{type:'TX',q:3},{type:'RX',q:3},
+        {type:'CAUCUS',q:2},{type:'TX',q:3},{type:'RX',q:3},{type:'MERGE',q:2},{type:'BUFFER',q:1},
+      ],
+    },
+  },
+  {
+    id: 'earth-jupiter',
+    name: 'Earth\u2013Jupiter Consultation',
+    desc: '2-party, ~2700 s delay \u00b7 TX-heavy, long buffers',
+    cfg: {
+      v:2, title:'Earth\u2013Jupiter Consultation', quantum:10, mode:'LTX-LIVE',
+      nodes:[
+        {id:'N0',name:'Earth HQ',role:'HOST',delay:0,location:'earth'},
+        {id:'N1',name:'Jupiter Station',role:'PARTICIPANT',delay:2700,location:'other'},
+      ],
+      segments:[
+        {type:'PLAN_CONFIRM',q:2},{type:'TX',q:5},{type:'BUFFER',q:2},
+        {type:'RX',q:5},{type:'CAUCUS',q:3},{type:'MERGE',q:2},
+      ],
+    },
+  },
+  {
+    id: 'earth-saturn',
+    name: 'Earth\u2013Saturn Deep Space',
+    desc: '2-party, ~4800 s delay \u00b7 Async-friendly, long RX windows',
+    cfg: {
+      v:2, title:'Earth\u2013Saturn Deep Space', quantum:15, mode:'LTX-ASYNC',
+      nodes:[
+        {id:'N0',name:'Earth HQ',role:'HOST',delay:0,location:'earth'},
+        {id:'N1',name:'Saturn Probe',role:'PARTICIPANT',delay:4800,location:'other'},
+      ],
+      segments:[
+        {type:'PLAN_CONFIRM',q:1},{type:'TX',q:4},{type:'BUFFER',q:4},
+        {type:'RX',q:4},{type:'BUFFER',q:4},{type:'MERGE',q:1},
+      ],
+    },
+  },
+  {
+    id: 'three-party',
+    name: '3-Party Conference',
+    desc: 'Earth + Mars + Moon \u00b7 Multi-node with caucus',
+    cfg: {
+      v:2, title:'3-Party Conference', quantum:5, mode:'LTX-LIVE',
+      nodes:[
+        {id:'N0',name:'Earth HQ',role:'HOST',delay:0,location:'earth'},
+        {id:'N1',name:'Mars Colony',role:'PARTICIPANT',delay:900,location:'mars'},
+        {id:'N2',name:'Lunar Base',role:'PARTICIPANT',delay:2,location:'moon'},
+      ],
+      segments:[
+        {type:'PLAN_CONFIRM',q:2},{type:'TX',q:3},{type:'RX',q:2},
+        {type:'CAUCUS',q:3},{type:'TX',q:2},{type:'RX',q:2},{type:'MERGE',q:2},
+      ],
+    },
+  },
+  {
+    id: 'short-sync',
+    name: 'Short Sync (15 min)',
+    desc: 'Quick Earth\u2013Mars check-in \u00b7 Minimal structure',
+    cfg: {
+      v:2, title:'Short Sync', quantum:5, mode:'LTX-LIVE',
+      nodes:[
+        {id:'N0',name:'Earth HQ',role:'HOST',delay:0,location:'earth'},
+        {id:'N1',name:'Mars Hab-01',role:'PARTICIPANT',delay:900,location:'mars'},
+      ],
+      segments:[
+        {type:'PLAN_CONFIRM',q:1},{type:'TX',q:1},{type:'RX',q:1},{type:'BUFFER',q:1},
+      ],
+    },
+  },
+  {
+    id: 'emergency-contact',
+    name: 'Emergency Contact',
+    desc: 'Rapid response \u00b7 Short quanta, RELAY mode',
+    cfg: {
+      v:2, title:'Emergency Contact', quantum:5, mode:'LTX-RELAY',
+      nodes:[
+        {id:'N0',name:'Earth Mission Control',role:'HOST',delay:0,location:'earth'},
+        {id:'N1',name:'Mars Emergency',role:'PARTICIPANT',delay:600,location:'mars'},
+      ],
+      segments:[
+        {type:'PLAN_CONFIRM',q:1},{type:'TX',q:2},{type:'RX',q:2},
+        {type:'TX',q:2},{type:'RX',q:2},{type:'BUFFER',q:1},
+      ],
+    },
+  },
+  {
+    id: 'science-review',
+    name: 'Science Review (TX-heavy)',
+    desc: 'Earth presents to Mars \u00b7 Extended TX segments',
+    cfg: {
+      v:2, title:'Science Review', quantum:10, mode:'LTX-LIVE',
+      nodes:[
+        {id:'N0',name:'Earth Science Team',role:'HOST',delay:0,location:'earth'},
+        {id:'N1',name:'Mars Field Team',role:'PARTICIPANT',delay:900,location:'mars'},
+      ],
+      segments:[
+        {type:'PLAN_CONFIRM',q:1},{type:'TX',q:6},{type:'BUFFER',q:2},
+        {type:'RX',q:3},{type:'CAUCUS',q:2},{type:'TX',q:4},{type:'MERGE',q:2},
+      ],
+    },
+  },
+  {
+    id: 'open-forum',
+    name: 'Open Forum',
+    desc: 'OPEN segment structure \u00b7 All-hands discussion',
+    cfg: {
+      v:2, title:'Open Forum', quantum:5, mode:'LTX-LIVE',
+      nodes:[
+        {id:'N0',name:'Earth HQ',role:'HOST',delay:0,location:'earth'},
+        {id:'N1',name:'Mars Colony',role:'PARTICIPANT',delay:900,location:'mars'},
+      ],
+      segments:[
+        {type:'PLAN_CONFIRM',q:2},{type:'TX',q:2},{type:'RX',q:2},
+        {type:'CAUCUS',q:4},{type:'MERGE',q:2},
+      ],
+    },
+  },
+];
+
+function renderTemplateGrid() {
+  const grid = document.getElementById('template-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  TEMPLATES.forEach(tpl => {
+    const card = document.createElement('div');
+    card.className = 'tpl-card';
+    card.dataset.tplId = tpl.id;
+    card.setAttribute('role','button');
+    card.setAttribute('tabindex','0');
+    card.setAttribute('aria-label','Load template: ' + tpl.name);
+    card.innerHTML = `<div class="tpl-name">${tpl.name}</div><div class="tpl-desc">${tpl.desc}</div>`;
+    card.addEventListener('click', () => loadTemplate(tpl.id));
+    card.addEventListener('keydown', e => { if (e.key==='Enter'||e.key===' '){e.preventDefault();loadTemplate(tpl.id);} });
+    grid.appendChild(card);
+  });
+}
+
+function loadTemplate(id) {
+  const tpl = TEMPLATES.find(t => t.id === id);
+  if (!tpl) return;
+  // Mark selected
+  document.querySelectorAll('.tpl-card').forEach(c => c.classList.toggle('selected', c.dataset.tplId === id));
+  // Set start time to 1 hour from now
+  const soon = new Date(Date.now() + 3600000);
+  const cfg = Object.assign({}, tpl.cfg, {
+    start: soon.getUTCFullYear()+'-'+pad(soon.getUTCMonth()+1)+'-'+pad(soon.getUTCDate())+
+           'T'+pad(soon.getUTCHours())+':'+pad(soon.getUTCMinutes())+':00Z'
+  });
+  populateForm(cfg);
+  document.getElementById('f-title').focus();
+  // Expose for testing
+  window._lastLoadedTemplate = id;
+}
+window.loadTemplate = loadTemplate;
+
+const NODE_LOCATIONS = [
+  { v:'earth',      k:'ltx.loc.earth'      },
+  { v:'mars',       k:'ltx.loc.mars'       },
+  { v:'moon',       k:'ltx.loc.moon'       },
+  { v:'spacecraft', k:'ltx.loc.spacecraft' },
+  { v:'other',      k:'ltx.loc.other'      },
+];
+
+let _cfg          = null;   // current session config
+let _ticker       = null;   // setInterval handle
+let _viewerNodeId = null;   // null = host/neutral; 'N1' etc = participant view
+let _sharePanelOpen = false;
+
+// ── Utilities ────────────────────────────────────────────────────────────────
+
+function _b64enc(str) {
+  return btoa(unescape(encodeURIComponent(str)))
+    .replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+}
+function _b64dec(b64) {
+  try { return decodeURIComponent(escape(atob(b64.replace(/-/g,'+').replace(/_/g,'/')))); }
+  catch(_){ return null; }
+}
+
+function fmtHMS(sec) {
+  if (sec < 0) sec = 0;
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = Math.floor(sec % 60);
+  if (h > 0) return `${pad(h)}:${pad(m)}:${pad(s)}`;
+  return `${pad(m)}:${pad(s)}`;
+}
+function pad(n){ return String(n).padStart(2,'0'); }
+function fmtUTC(dt){ return dt.toISOString().slice(11,19) + ' UTC'; }
+
+function showToast(msg) {
+  const el = document.getElementById('ltx-toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2400);
+}
+
+// ── Perspective helpers ───────────────────────────────────────────────────────
+
+// Returns 'host' | 'participant' based on viewer node
+function viewerPerspective(cfg) {
+  if (!_viewerNodeId) return 'host';
+  const node = (cfg.nodes || []).find(n => n.id === _viewerNodeId);
+  if (!node || node.role === 'HOST' || _viewerNodeId === 'N0') return 'host';
+  return 'participant';
+}
+
+// Returns the name of the viewer's node (for the perspective pill)
+function viewerNodeName(cfg) {
+  if (!_viewerNodeId) return null;
+  const node = (cfg.nodes || []).find(n => n.id === _viewerNodeId);
+  return node ? node.name : null;
+}
+
+// Human-readable banner label for a segment given perspective
+function getBannerLabel(type, perspective, cfg) {
+  // In LTX-ASYNC mode, TX is simultaneous for all nodes — each node is broadcasting
+  if (type === 'TX' && cfg && cfg.mode === 'LTX-ASYNC') {
+    return getT('ltx.banner.tx.async');
+  }
+  const meta = SEG_META[type] || SEG_META.BUFFER;
+  return getT(meta.bannerKey[perspective] || meta.bannerKey.host);
+}
+
+// Human-readable description for a segment given perspective and node names
+function getBannerDesc(type, perspective, cfg) {
+  const meta  = SEG_META[type] || SEG_META.BUFFER;
+  const nodes = cfg.nodes || [];
+  const host  = nodes[0]?.name || 'Host';
+  const parts = nodes.slice(1).map(n => n.name).join(', ') || 'Participants';
+  if (type === 'TX' && cfg && cfg.mode === 'LTX-ASYNC') {
+    return getT('ltx.desc.tx.async', { host, participants: parts });
+  }
+  return getT(meta.descKey[perspective] || meta.descKey.host, { host, participants: parts });
+}
+
+// Directional flow label for timeline / banner-nodes line
+function getNodesLabel(type, perspective, cfg) {
+  const meta  = SEG_META[type] || SEG_META.BUFFER;
+  const nodes = cfg.nodes || [];
+  const host  = nodes[0]?.name || cfg.txName || 'Host';
+  const parts = nodes.slice(1).map(n => n.name).join(', ') || cfg.rxName || 'Remote';
+
+  if (type === 'CAUCUS') {
+    const key = nodes.length > 2 ? 'ltx.nodes.caucus.multi' : 'ltx.nodes.caucus.single';
+    return getT(key, { host, participants: parts });
+  }
+
+  if (type === 'TX' && cfg && cfg.mode === 'LTX-ASYNC') {
+    const key = perspective === 'participant' ? 'ltx.nodes.tx.async.participant' : 'ltx.nodes.tx.async.host';
+    return getT(key, { host, participants: parts });
+  }
+
+  const key = meta.nodesKey[perspective] || meta.nodesKey.host;
+  return getT(key, { host, participants: parts });
+}
+
+// ── Config helpers ────────────────────────────────────────────────────────────
+
+function upgradeConfig(cfg) {
+  if (cfg.v >= 2 && Array.isArray(cfg.nodes) && cfg.nodes.length) return cfg;
+  const remoteLoc = (cfg.rxName || '').toLowerCase().includes('mars') ? 'mars'
+    : (cfg.rxName || '').toLowerCase().includes('moon') ? 'moon' : 'earth';
+  return {
+    ...cfg,
+    v: 2,
+    nodes: [
+      { id:'N0', name: cfg.txName || 'Earth HQ',   role:'HOST',        delay:0,              location:'earth'     },
+      { id:'N1', name: cfg.rxName || 'Mars Hab-01', role:'PARTICIPANT', delay: cfg.delay || 0, location: remoteLoc },
+    ],
+  };
+}
+
+function getCfgNodes() {
+  const nodes = [];
+  document.querySelectorAll('#node-list .node-row').forEach((row, idx) => {
+    const name  = row.querySelector('.node-name-inp').value.trim() || (idx === 0 ? 'Earth HQ' : 'Remote Node');
+    const role  = idx === 0 ? 'HOST' : 'PARTICIPANT';
+    const delay = idx === 0 ? 0 : (parseInt(row.querySelector('.node-delay-inp')?.value) || 0);
+    const location = row.querySelector('.node-loc-sel')?.value || 'earth';
+    nodes.push({ id:`N${idx}`, name, role, delay, location });
+  });
+  return nodes.length ? nodes : DEFAULT_NODES.slice();
+}
+
+// ── Segment computation ───────────────────────────────────────────────────────
+
+function computeSegs(cfg) {
+  const qMs = cfg.quantum * 60 * 1000;
+  let t = new Date(cfg.start).getTime();
+  return cfg.segments.map(s => {
+    const durMs = s.q * qMs;
+    const seg = { type:s.type, q:s.q, start:new Date(t), end:new Date(t+durMs), durMin:s.q*cfg.quantum };
+    t += durMs;
+    return seg;
+  });
+}
+
+function totalMin(cfg){ return cfg.segments.reduce((a,s) => a + s.q * cfg.quantum, 0); }
+
+// ── Plan ID ───────────────────────────────────────────────────────────────────
+
+function makePlanId(cfg) {
+  const date = new Date(cfg.start).toISOString().slice(0,10).replace(/-/g,'');
+  const nodes = cfg.nodes || [];
+  const hostStr  = (nodes[0]?.name || cfg.txName || 'HOST').replace(/\s+/g,'').toUpperCase().slice(0,8);
+  const nodeStr  = nodes.length > 1
+    ? nodes.slice(1).map(n => n.name.replace(/\s+/g,'').toUpperCase().slice(0,4)).join('-').slice(0,16)
+    : (cfg.rxName || 'RX').replace(/\s+/g,'').toUpperCase().slice(0,8);
+  const raw = JSON.stringify(cfg);
+  let h = 0;
+  for (let i = 0; i < raw.length; i++) h = (Math.imul(31, h) + raw.charCodeAt(i)) >>> 0;
+  return `LTX-${date}-${hostStr}-${nodeStr}-v2-${h.toString(16).padStart(8,'0')}`;
+}
+
+// ── URL encoding (preserves ?node= param) ────────────────────────────────────
+
+function encodeHash(cfg) { return '#l=' + _b64enc(JSON.stringify(cfg)); }
+
+// Full URL with optional ?node= param preserved
+function buildUrl(cfg, nodeId) {
+  const hash   = '#l=' + _b64enc(JSON.stringify(cfg));
+  const nParam = nodeId != null ? `?node=${encodeURIComponent(nodeId)}` : '';
+  return location.pathname + nParam + hash;
+}
+
+function readHash() {
+  const m = location.hash.match(/^#l=([A-Za-z0-9_\-]+)$/);
+  if (!m) return null;
+  const json = _b64dec(m[1]);
+  if (!json) return null;
+  try { return JSON.parse(json); } catch(_){ return null; }
+}
+
+// ── Node list UI ──────────────────────────────────────────────────────────────
+
+function makeNodeRow(node, idx) {
+  const isHost = (idx === 0) || (node.role === 'HOST');
+  const row = document.createElement('div');
+  row.className = `node-row${isHost ? ' host-row' : ''}`;
+  row.setAttribute('role','listitem');
+
+  const badge = document.createElement('span');
+  badge.className = `node-badge ${isHost ? 'host' : 'participant'}`;
+  badge.textContent = getT(isHost ? 'ltx.setup.host_badge' : 'ltx.setup.node_badge');
+  badge.title = isHost
+    ? 'Reference clock — all times relative to this node'
+    : 'Participant node — receives and transmits to host';
+
+  const nameInp = document.createElement('input');
+  nameInp.type = 'text';
+  nameInp.className = 'node-name-inp';
+  nameInp.value = node.name || (isHost ? 'Earth HQ' : 'Remote Node');
+  nameInp.placeholder = isHost ? 'Host location name' : 'Node name';
+  nameInp.setAttribute('aria-label', isHost ? 'Host node name' : 'Participant node name');
+
+  row.appendChild(badge);
+  row.appendChild(nameInp);
+
+  if (isHost) {
+    const lbl = document.createElement('span');
+    lbl.className = 'node-delay-lbl';
+    lbl.textContent = getT('ltx.setup.ref_delay');
+    row.appendChild(lbl);
+    return row;
+  }
+
+  // Participant — delay input + location + remove
+  const delayInp = document.createElement('input');
+  delayInp.type = 'number';
+  delayInp.className = 'node-delay-inp';
+  delayInp.value = String(node.delay || 0);
+  delayInp.min = 0; delayInp.max = 86400; delayInp.step = 1;
+  delayInp.setAttribute('aria-label', 'One-way signal delay from host (seconds)');
+
+  const delayLbl = document.createElement('span');
+  delayLbl.className = 'node-delay-lbl';
+  delayLbl.textContent = getT('ltx.setup.one_way');
+
+  const locSel = document.createElement('select');
+  locSel.className = 'node-loc-sel';
+  locSel.setAttribute('aria-label', 'Node location type');
+  NODE_LOCATIONS.forEach(opt => {
+    const o = document.createElement('option');
+    o.value = opt.v;
+    o.textContent = getT(opt.k);
+    if (opt.v === (node.location || 'earth')) o.selected = true;
+    locSel.appendChild(o);
+  });
+
+  const rm = document.createElement('button');
+  rm.className = 'node-rm';
+  rm.setAttribute('aria-label', `Remove node ${node.name}`);
+  rm.innerHTML = '<i class="fa-solid fa-xmark" aria-hidden="true"></i>';
+  rm.addEventListener('click', () => row.remove());
+
+  row.appendChild(delayInp);
+  row.appendChild(delayLbl);
+  row.appendChild(locSel);
+  row.appendChild(rm);
+  return row;
+}
+
+function initDefaultNodes() {
+  const nl = document.getElementById('node-list');
+  nl.innerHTML = '';
+  DEFAULT_NODES.forEach((n, i) => nl.appendChild(makeNodeRow(n, i)));
+}
+
+// ── Build config from form ────────────────────────────────────────────────────
+
+function cfgFromForm() {
+  const startVal = document.getElementById('f-start').value;
+  if (!startVal) { alert('Please set a start time.'); return null; }
+  const startISO = startVal.length === 16 ? startVal + ':00Z' : startVal;
+  const segs = [];
+  document.querySelectorAll('.seg-row').forEach(row => {
+    const type = row.querySelector('.seg-sel').value;
+    const q    = Math.max(1, parseInt(row.querySelector('.seg-q').value) || 1);
+    segs.push({ type, q });
+  });
+  if (!segs.length) { alert('Add at least one segment.'); return null; }
+  return {
+    v:        2,
+    title:    document.getElementById('f-title').value.trim() || 'LTX Meeting',
+    start:    startISO,
+    quantum:  parseInt(document.getElementById('f-quantum').value),
+    mode:     document.querySelector('.mode-btn.active')?.dataset.mode || 'LTX-LIVE',
+    nodes:    getCfgNodes(),
+    segments: segs,
+  };
+}
+
+// ── Populate form from config ─────────────────────────────────────────────────
+
+function populateForm(cfg) {
+  if (!cfg) return;
+  const c = upgradeConfig(cfg);
+  document.getElementById('f-title').value   = c.title   || '';
+  document.getElementById('f-quantum').value = String(c.quantum || 5);
+  if (c.start) {
+    const d = new Date(c.start);
+    document.getElementById('f-start').value =
+      d.getUTCFullYear() + '-' + pad(d.getUTCMonth()+1) + '-' + pad(d.getUTCDate()) +
+      'T' + pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes());
+  }
+  document.querySelectorAll('.mode-btn').forEach(b => {
+    const on = b.dataset.mode === (c.mode || 'LTX-LIVE');
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-checked', on ? 'true' : 'false');
+  });
+  const nl = document.getElementById('node-list');
+  nl.innerHTML = '';
+  (c.nodes || DEFAULT_NODES).forEach((n, i) => nl.appendChild(makeNodeRow(n, i)));
+  if (c.segments?.length) renderSegList(c.segments);
+}
+
+// ── Segment list UI ───────────────────────────────────────────────────────────
+
+function renderSegList(segs) {
+  const list = document.getElementById('seg-list');
+  list.innerHTML = '';
+  segs.forEach(s => list.appendChild(makeSegRow(s.type, s.q)));
+  updateTotals();
+}
+
+function makeSegRow(type, q) {
+  const row = document.createElement('div');
+  row.className = 'seg-row';
+  row.setAttribute('role','listitem');
+
+  const meta = SEG_META[type] || SEG_META.BUFFER;
+
+  const dot = document.createElement('span');
+  dot.className = 'seg-dot';
+  dot.style.background = meta.color;
+  dot.setAttribute('aria-hidden','true');
+
+  const sel = document.createElement('select');
+  sel.className = 'seg-sel';
+  sel.setAttribute('aria-label','Segment type');
+  SEG_TYPES.forEach(t => {
+    const m = SEG_META[t] || SEG_META.BUFFER;
+    const o = document.createElement('option');
+    o.value = t;
+    o.textContent = getT(m.uiLabelKey);
+    if (t === type) o.selected = true;
+    sel.appendChild(o);
+  });
+  sel.addEventListener('change', () => {
+    dot.style.background = (SEG_META[sel.value]||SEG_META.BUFFER).color;
+    updateTotals();
+  });
+
+  const left = document.createElement('div');
+  left.className = 'seg-left';
+  left.appendChild(dot);
+  left.appendChild(sel);
+
+  const qInput = document.createElement('input');
+  qInput.type = 'number'; qInput.min = 1; qInput.max = 20;
+  qInput.className = 'seg-q inp'; qInput.value = String(q);
+  qInput.setAttribute('aria-label','Number of quanta');
+  qInput.addEventListener('input', updateTotals);
+
+  const durLabel = document.createElement('span');
+  durLabel.className = 'seg-dur';
+
+  const rm = document.createElement('button');
+  rm.className = 'seg-rm';
+  rm.setAttribute('aria-label', getT('ltx.setup.reset_segs'));
+  rm.innerHTML = '<i class="fa-solid fa-xmark" aria-hidden="true"></i>';
+  rm.addEventListener('click', () => { row.remove(); updateTotals(); });
+
+  row.appendChild(left);
+  row.appendChild(qInput);
+  row.appendChild(durLabel);
+  row.appendChild(rm);
+  return row;
+}
+
+function updateTotals() {
+  const quantum = parseInt(document.getElementById('f-quantum').value) || 5;
+  let total = 0;
+  document.querySelectorAll('.seg-row').forEach(row => {
+    const q   = parseInt(row.querySelector('.seg-q').value) || 1;
+    const dur = row.querySelector('.seg-dur');
+    if (dur) dur.textContent = (q * quantum) + 'm';
+    total += q * quantum;
+  });
+  const el = document.getElementById('seg-total');
+  if (el) el.textContent = total >= 60
+    ? `${Math.floor(total/60)}h ${total%60}m total`
+    : `${total} min total`;
+}
+
+// ── Share panel ───────────────────────────────────────────────────────────────
+
+function openSharePanel(cfg) {
+  const panel = document.getElementById('share-panel');
+  if (_sharePanelOpen) { panel.hidden = true; _sharePanelOpen = false; return; }
+
+  // Update static text (in case language changed)
+  document.getElementById('share-panel-title').textContent = getT('ltx.share.title');
+  document.getElementById('share-panel-hint').textContent  = getT('ltx.share.hint');
+  document.getElementById('share-neutral-lbl').textContent = getT('ltx.share.neutral');
+  const neutralBtn = document.getElementById('share-copy-neutral');
+  neutralBtn.textContent = getT('ltx.share.copied') === 'Copied!' ? 'Copy' : 'Copy'; // Reset label
+
+  // Build per-node rows
+  const container = document.getElementById('share-node-rows');
+  container.innerHTML = '';
+  (cfg.nodes || []).forEach(node => {
+    const isHost = node.role === 'HOST';
+    const row = document.createElement('div');
+    row.className = 'share-node-row';
+
+    const name = document.createElement('span');
+    name.className = 'share-node-name';
+    name.textContent = node.name;
+
+    const role = document.createElement('span');
+    role.className = 'share-node-role';
+    role.textContent = getT(isHost ? 'ltx.setup.host_badge' : 'ltx.setup.node_badge');
+
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'share-copy-btn';
+    copyBtn.textContent = 'Copy';
+    copyBtn.setAttribute('aria-label', getT('ltx.share.copy_aria', { name: node.name }));
+    copyBtn.addEventListener('click', () => copyNodeLink(cfg, node.id, copyBtn));
+
+    row.appendChild(name);
+    row.appendChild(role);
+    row.appendChild(copyBtn);
+    container.appendChild(row);
+  });
+
+  // Neutral copy button
+  neutralBtn.onclick = () => copyNodeLink(cfg, null, neutralBtn);
+
+  // QR codes (Story 48.1)
+  renderShareQR(cfg);
+
+  panel.hidden = false;
+  _sharePanelOpen = true;
+}
+
+function copyNodeLink(cfg, nodeId, btn) {
+  const url = location.origin + buildUrl(cfg, nodeId);
+  navigator.clipboard.writeText(url).then(() => {
+    const prev = btn.textContent;
+    btn.textContent = getT('ltx.share.copied');
+    btn.classList.add('success');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('success'); }, 1800);
+  }).catch(() => {
+    showToast(getT('ltx.toast.copy_failed'));
+  });
+}
+
+// ── Session history (Story 46.1) ─────────────────────────────────────────────
+
+function renderHistory() {
+  try {
+    const hist = JSON.parse(localStorage.getItem('ltx_history') || '[]');
+    const card = document.getElementById('history-card');
+    const list = document.getElementById('history-list');
+    if (!card || !list) return;
+    if (!hist.length) {
+      card.hidden = true;
+      list.innerHTML = '';
+      return;
+    }
+    card.hidden = false;
+    const shown = hist.slice(0, 5);
+    list.innerHTML = '';
+    shown.forEach(entry => {
+      const cfg = entry.cfg || {};
+      const savedAt = entry.savedAt ? new Date(entry.savedAt) : new Date();
+      const dateStr = savedAt.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+      const nodeCount = (cfg.nodes || []).length;
+      const mins = cfg.segments
+        ? cfg.segments.reduce((a, s) => a + s.q * (cfg.quantum || 5), 0)
+        : 0;
+
+      const row = document.createElement('div');
+      row.className = 'history-row';
+
+      const info = document.createElement('div');
+      info.className = 'history-row-info';
+
+      const titleEl = document.createElement('div');
+      titleEl.className = 'history-row-title';
+      titleEl.textContent = cfg.title || getT('ltx.history.untitled');
+
+      const metaEl = document.createElement('div');
+      metaEl.className = 'history-row-meta';
+      metaEl.textContent = `${dateStr} · ${nodeCount} node${nodeCount !== 1 ? 's' : ''} · ${mins} min`;
+
+      info.appendChild(titleEl);
+      info.appendChild(metaEl);
+
+      const loadBtn = document.createElement('button');
+      loadBtn.className = 'btn-s history-load-btn';
+      loadBtn.style.fontSize = '.7rem';
+      loadBtn.style.padding = '.2rem .5rem';
+      loadBtn.textContent = getT('ltx.history.load');
+      loadBtn.addEventListener('click', () => {
+        populateForm(cfg);
+        const setupScreen = document.getElementById('setup-screen');
+        if (setupScreen) setupScreen.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+
+      row.appendChild(info);
+      row.appendChild(loadBtn);
+      list.appendChild(row);
+    });
+  } catch(_) {}
+}
+
+function saveToHistory(cfg) {
+  try {
+    const hist = JSON.parse(localStorage.getItem('ltx_history') || '[]');
+    const entry = { cfg, savedAt: new Date().toISOString(), id: makePlanId(cfg) };
+    // Remove duplicates with same planId
+    const filtered = hist.filter(e => e.id !== entry.id);
+    filtered.unshift(entry);
+    localStorage.setItem('ltx_history', JSON.stringify(filtered.slice(0, 10)));
+    renderHistory();
+  } catch(_) {}
+}
+
+// ── Runner ────────────────────────────────────────────────────────────────────
+
+function populateViewerSelect(cfg) {
+  const wrap  = document.getElementById('r-viewer-wrap');
+  const sel   = document.getElementById('r-node-select');
+  const nodes = cfg.nodes || [];
+  if (nodes.length < 2) { wrap.hidden = true; return; }
+  sel.innerHTML = '<option value="">' + getT('ltx.node.host_view') + '</option>';
+  nodes.forEach(n => {
+    const opt = document.createElement('option');
+    opt.value = n.id;
+    const roleLabel = n.role === 'HOST' ? getT('ltx.node.host_badge') : getT('ltx.node.node_badge');
+    opt.textContent = `${n.name || n.id} (${roleLabel})`;
+    if (n.id === _viewerNodeId) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  sel.value = _viewerNodeId || '';
+  wrap.hidden = false;
+}
+
+function startRunner(cfg) {
+  const c = upgradeConfig(cfg);
+  _cfg = c;
+  // Save to history (Story 46.1)
+  saveToHistory(c);
+  // Preserve ?node param when updating URL
+  history.replaceState(null, '', buildUrl(c, _viewerNodeId));
+  document.getElementById('setup-screen').hidden = true;
+  document.getElementById('runner-screen').hidden = false;
+  document.getElementById('r-title').textContent  = c.title;
+  document.getElementById('r-mode').textContent   = c.mode;
+  document.getElementById('r-planid').textContent = makePlanId(c);
+  document.getElementById('r-plan-locked-lbl').textContent = getT('ltx.runner.plan_locked');
+  document.getElementById('runner-session-plan-title').textContent = getT('ltx.runner.session_plan');
+
+  // Viewer perspective pill
+  const perspective = viewerPerspective(c);
+  const viewerName  = viewerNodeName(c);
+  const viewerEl    = document.getElementById('r-viewer');
+  if (viewerName) {
+    const key = perspective === 'host' ? 'ltx.viewing.host' : 'ltx.viewing.participant';
+    viewerEl.textContent = getT(key, { name: viewerName });
+    viewerEl.hidden = false;
+  } else {
+    viewerEl.hidden = true;
+  }
+
+  // Runner button labels
+  document.getElementById('btn-runner-edit').textContent = getT('ltx.runner.edit');
+  document.getElementById('btn-runner-copy').textContent = getT('ltx.runner.copy');
+  document.getElementById('btn-runner-ics').textContent  = getT('ltx.runner.ics');
+
+  renderTimeline(c);
+  // Multi-party: show node list and delay matrix for 3+ nodes (Story 39.1)
+  _renderMultiPartyInfo(c);
+
+    if (_ticker) clearInterval(_ticker);
+  _ticker = setInterval(() => tick(c), 1000);
+  tick(c);
+
+  // Live node time + DTN status (Story 36.1)
+  renderNodeTimeList(c);
+  updateNodeTimes(c);
+  updateDtnStatus();
+  if (_nodeTimeTicker) clearInterval(_nodeTimeTicker);
+  _nodeTimeTicker = setInterval(() => {
+    updateNodeTimes(c);
+    updateDtnStatus();
+  }, 10000);
+
+  populateViewerSelect(c);
+}
+
+// ── Multi-party helpers (Story 39.1) ─────────────────────────────────────────
+function _getMultiTlNodes(segType, segIdx, cfg) {
+  const nodes = cfg.nodes || [];
+  if (nodes.length <= 2) return getNodesLabel(segType, viewerPerspective(cfg), cfg);
+  let speakerIdx = 0;
+  for (let i = 0; i <= segIdx && i < cfg.segments.length; i++) {
+    const tpl = cfg.segments[i];
+    if (i === segIdx) {
+      if (tpl.type === "TX" || tpl.type === "SPEAK") {
+        return nodes[speakerIdx % nodes.length].name + " → All";
+      }
+      if (tpl.type === "RX" || tpl.type === "RELAY") {
+        return nodes[speakerIdx % nodes.length].name + " responds";
+      }
+      return getNodesLabel(tpl.type, viewerPerspective(cfg), cfg);
+    }
+    if (tpl.type === "TX" || tpl.type === "SPEAK") speakerIdx++;
+  }
+  return getNodesLabel(segType, viewerPerspective(cfg), cfg);
+}
+
+
+/**
+ * Get the speaker node name for a segment in a multi-party plan.
+ * Returns null for 2-node plans (use existing perspective logic).
+ */
+function getMultiSegSpeakerName(segType, segIdx, cfg) {
+  const nodes = cfg.nodes || [];
+  if (nodes.length <= 2) return null;
+  // Re-compute speakerIdx by counting TX/SPEAK up to this segment index
+  let speakerIdx = 0;
+  for (let i = 0; i <= segIdx; i++) {
+    const tpl = cfg.segments[i];
+    if (!tpl) break;
+    if (tpl.type === 'TX' || tpl.type === 'SPEAK') {
+      if (i < segIdx) speakerIdx++;
+      else return nodes[speakerIdx % nodes.length].name; // current TX speaker
+    }
+    if (tpl.type === 'RX' || tpl.type === 'RELAY') {
+      if (i === segIdx) return nodes[speakerIdx % nodes.length].name; // receiver
+    }
+  }
+  // Shared segments (CAUCUS, BUFFER, PLAN_CONFIRM, MERGE etc)
+  return null;
+}
+
+/**
+ * Render an HTML table showing pairwise signal delays.
+ * @param {object} cfg  LTX plan config
+ * @returns {string} HTML string for the delay table
+ */
+function renderDelayMatrix(cfg) {
+  const nodes = cfg.nodes || [];
+  if (nodes.length < 3) return '';
+
+  // Build matrix data
+  const rows = [];
+  for (let i = 0; i < nodes.length; i++) {
+    for (let j = 0; j < nodes.length; j++) {
+      if (i === j) continue;
+      const from = nodes[i];
+      const to   = nodes[j];
+      let delaySeconds;
+      if (from.delay === 0 || i === 0) {
+        delaySeconds = to.delay || 0;
+      } else if (to.delay === 0 || j === 0) {
+        delaySeconds = from.delay || 0;
+      } else {
+        delaySeconds = (from.delay || 0) + (to.delay || 0);
+      }
+      rows.push({ from: from.name, to: to.name, delaySec: delaySeconds });
+    }
+  }
+
+  const fmtDelay = s => {
+    if (s === 0) return '0 s';
+    if (s < 120) return s + ' s';
+    return (s / 60).toFixed(1) + ' min';
+  };
+
+  let html = '<table class="delay-matrix-table" aria-label="Signal delay matrix"><thead><tr>' +
+    '<th>From</th><th>To</th><th>One-way delay</th></tr></thead><tbody>';
+  rows.forEach(r => {
+    html += '<tr><td>' + r.from + '</td><td>' + r.to + '</td><td>' + fmtDelay(r.delaySec) + '</td></tr>';
+  });
+  html += '</tbody></table>';
+  return html;
+}
+
+
+function _renderMultiPartyInfo(cfg) {
+  var nodes = cfg.nodes || [];
+  var isMulti = nodes.length >= 3;
+  var nodesSec = document.getElementById('r-multi-nodes-section');
+  var matrixSec = document.getElementById('r-delay-matrix-section');
+  if (nodesSec) nodesSec.hidden = !isMulti;
+  if (matrixSec) matrixSec.hidden = !isMulti;
+  if (!isMulti) return;
+  var nodeList = document.getElementById('r-multi-node-list');
+  if (nodeList) {
+    nodeList.innerHTML = '';
+    var colors = ['#3563c8','#3a8de8','#4caf50','#ff9800','#9c27b0','#00bcd4'];
+    nodes.forEach(function(node, i) {
+      var row = document.createElement('div');
+      row.className = 'r-multi-node-row';
+      var badge = document.createElement('span');
+      badge.className = 'r-multi-node-badge';
+      badge.style.background = colors[i % colors.length];
+      badge.textContent = node.role === 'HOST' ? getT('ltx.node.host_badge') : getT('ltx.node.node_badge');
+      var name = document.createElement('span');
+      name.className = 'r-multi-node-name';
+      name.textContent = node.name;
+      var delay = document.createElement('span');
+      delay.className = 'r-multi-node-delay';
+      delay.textContent = i === 0 ? getT('ltx.node.reference') : getT('ltx.node.one_way', { sec: node.delay || 0 });
+      row.appendChild(badge); row.appendChild(name); row.appendChild(delay);
+      nodeList.appendChild(row);
+    });
+  }
+  var matrixEl = document.getElementById('r-delay-matrix');
+  if (matrixEl) matrixEl.innerHTML = renderDelayMatrix(cfg);
+}
+
+function renderTimeline(cfg) {
+  const segs = computeSegs(cfg);
+  const tl   = document.getElementById('r-timeline');
+  const perspective = viewerPerspective(cfg);
+  tl.innerHTML = '';
+  segs.forEach((seg, idx) => {
+    const meta = SEG_META[seg.type] || SEG_META.BUFFER;
+    const row  = document.createElement('div');
+    row.className = 'tl-row';
+    row.id = 'tl-' + idx;
+    // Timeline always shows the short banner label from viewer's perspective
+    const label = getBannerLabel(seg.type, perspective, cfg);
+    row.innerHTML =
+      `<span class="tl-badge" style="background:${meta.color}">${label}</span>` +
+      `<span class="tl-time">${fmtUTC(seg.start)}</span>` +
+      `<span class="tl-nodes">${(cfg.nodes||[]).length>2?_getMultiTlNodes(seg.type,idx,cfg):getNodesLabel(seg.type,perspective,cfg)}</span>` +
+      `<span class="tl-dur">${seg.durMin}m</span>`;
+    tl.appendChild(row);
+  });
+}
+
+function tick(cfg) {
+  const now        = Date.now();
+  const segs       = computeSegs(cfg);
+  const startMs    = new Date(cfg.start).getTime();
+  const endMs      = segs[segs.length - 1].end.getTime();
+  const totalMs    = endMs - startMs;
+  const nodes      = cfg.nodes || [];
+  const hostName   = nodes[0]?.name || cfg.txName || 'Host';
+  const partStr    = nodes.slice(1).map(n => n.name).join(', ') || cfg.rxName || 'Remote';
+  const perspective = viewerPerspective(cfg);
+
+  // UTC clock
+  const nowDt = new Date(now);
+  document.getElementById('r-clock').textContent =
+    pad(nowDt.getUTCHours())+':'+pad(nowDt.getUTCMinutes())+':'+pad(nowDt.getUTCSeconds())+' UTC';
+
+  // Pre-start
+  if (now < startMs) {
+    const remainSec = Math.ceil((startMs - now) / 1000);
+    setBanner('#0d0d1c', 'rgba(255,255,255,.09)',
+      getT('ltx.banner.waiting'), 'var(--text-muted)',
+      `${hostName} ↔ ${partStr}`,
+      getT('ltx.desc.waiting'));
+    const preLbl = document.getElementById('r-pre-label');
+    preLbl.hidden = false;
+    preLbl.textContent = getT('ltx.runner.starting_in');
+    document.getElementById('r-countdown').textContent = fmtHMS(remainSec);
+    document.getElementById('r-countdown').style.color = 'var(--text-muted)';
+    document.getElementById('r-timer-lbl').textContent = getT('ltx.runner.until_start');
+    setProgress(0, 'var(--text-muted)');
+    document.getElementById('r-elapsed').textContent = '—';
+    document.getElementById('r-next').textContent = getT('ltx.runner.starts_at', { time: fmtUTC(new Date(startMs)) });
+    highlightTl(-1);
+    const _ae = document.getElementById('r-seg-arrival');
+    const _be = document.getElementById('r-buffer-idle-tips');
+    if (_ae) _ae.hidden = true;
+    if (_be) _be.hidden = true;
+    return;
+  }
+  document.getElementById('r-pre-label').hidden = true;
+
+  // Session complete
+  if (now >= endMs) {
+    setBanner('rgba(76,175,80,.1)', 'rgba(76,175,80,.25)',
+      getT('ltx.banner.complete'), '#4caf50',
+      cfg.title,
+      getT('ltx.desc.complete') + ' — ' + fmtUTC(new Date(endMs)));
+    document.getElementById('r-countdown').textContent = '00:00';
+    document.getElementById('r-countdown').style.color = '#4caf50';
+    document.getElementById('r-timer-lbl').textContent = getT('ltx.runner.complete_lbl');
+    setProgress(100, '#4caf50');
+    document.getElementById('r-elapsed').textContent = (totalMs/60000).toFixed(0) + ' min';
+    document.getElementById('r-next').textContent = '—';
+    highlightTl(segs.length);
+    const _ae2 = document.getElementById('r-seg-arrival');
+    const _be2 = document.getElementById('r-buffer-idle-tips');
+    if (_ae2) _ae2.hidden = true;
+    if (_be2) _be2.hidden = true;
+    clearInterval(_ticker);
+    return;
+  }
+
+  // Find current segment
+  const curIdx = segs.findIndex(s => now >= s.start.getTime() && now < s.end.getTime());
+  if (curIdx === -1) return;
+  const cur  = segs[curIdx];
+  const meta = SEG_META[cur.type] || SEG_META.BUFFER;
+
+  // Perspective-aware banner
+  setBanner(meta.color + '1a', meta.color + '44',
+    getBannerLabel(cur.type, perspective, cfg), meta.color,
+    getNodesLabel(cur.type, perspective, cfg),
+    getBannerDesc(cur.type, perspective, cfg));
+
+  // Arrival-time line for TX / RX segments (Story 25.8)
+  const arrivalEl = document.getElementById('r-seg-arrival');
+  const bufferEl  = document.getElementById('r-buffer-idle-tips');
+  if (arrivalEl) {
+    const delayMs = (nodes[1]?.delay || 0) * 1000;
+    if ((cur.type === 'TX' || cur.type === 'RX') && delayMs > 0) {
+      const arrivalMs  = cur.start.getTime() + delayMs;
+      const arrivalDt  = new Date(arrivalMs);
+      const arrivalStr = pad(arrivalDt.getUTCHours()) + ':' + pad(arrivalDt.getUTCMinutes()) + ' UTC';
+      const prefix     = cur.type === 'TX' ? 'Your message arrives at' : 'Response arrives at';
+      arrivalEl.textContent = prefix + ' ' + arrivalStr;
+      arrivalEl.hidden = false;
+    } else {
+      arrivalEl.hidden = true;
+    }
+  }
+
+  // Productive-idle tips: show only when BUFFER is the active segment (Story 25.8)
+  if (bufferEl) {
+    bufferEl.hidden = cur.type !== 'BUFFER';
+  }
+
+  // Timer
+  const segSec = Math.ceil((cur.end.getTime() - now) / 1000);
+  document.getElementById('r-countdown').textContent = fmtHMS(segSec);
+  document.getElementById('r-countdown').style.color = meta.color;
+  document.getElementById('r-timer-lbl').textContent = getT('ltx.runner.remaining');
+
+  // Progress
+  const pct = Math.min(100, Math.round((now - startMs) / totalMs * 100));
+  setProgress(pct, meta.color);
+  document.getElementById('r-elapsed').textContent =
+    getT('ltx.runner.elapsed', { n: Math.floor((now - startMs) / 60000) });
+
+  // Next preview
+  const next     = segs[curIdx + 1];
+  const nextMeta = next ? (SEG_META[next.type] || SEG_META.BUFFER) : null;
+  document.getElementById('r-next').textContent = next
+    ? getT('ltx.runner.next_seg', { name: getT(nextMeta.uiLabelKey), dur: next.durMin })
+    : getT('ltx.runner.last_seg');
+
+  highlightTl(curIdx);
+}
+
+function setBanner(bg, border, type, typeColor, nodes, desc) {
+  const b = document.getElementById('r-banner');
+  b.style.background   = bg;
+  b.style.borderColor  = border;
+  document.getElementById('r-seg-type').textContent  = type;
+  document.getElementById('r-seg-type').style.color  = typeColor;
+  document.getElementById('r-seg-nodes').textContent = nodes;
+  document.getElementById('r-seg-desc').textContent  = desc;
+}
+
+function setProgress(pct, color) {
+  const inner = document.getElementById('r-prog-inner');
+  inner.style.width      = pct + '%';
+  inner.style.background = color;
+  document.getElementById('r-prog-wrap').setAttribute('aria-valuenow', pct);
+}
+
+function highlightTl(curIdx) {
+  document.querySelectorAll('.tl-row').forEach((row, idx) => {
+    row.classList.toggle('current', idx === curIdx);
+    row.classList.toggle('done',    idx < curIdx);
+    if (idx === curIdx) row.scrollIntoView({ block:'nearest', behavior:'smooth' });
+  });
+}
+
+
+// ── Live planet time + DTN status (Story 36.1) ──────────────────────────────
+
+let _nodeTimeTicker = null;
+
+/**
+ * Render the per-node live time info in the runner nodes section.
+ * Uses PlanetTime if available; falls back to showing just the delay in seconds.
+ */
+function renderNodeTimeList(cfg) {
+  const container = document.getElementById('r-node-time-list');
+  if (!container) return;
+  const nodes = cfg.nodes || [];
+  container.innerHTML = '';
+  nodes.forEach(node => {
+    const row = document.createElement('div');
+    row.className = 'r-node-row';
+    row.dataset.nodeId = node.id;
+
+    const nameSp = document.createElement('span');
+    nameSp.className = 'r-node-name';
+    nameSp.textContent = node.name || node.id;
+
+    const info = document.createElement('div');
+    info.className = 'node-time-info';
+    info.setAttribute('aria-live', 'off');
+
+    const timeSp = document.createElement('span');
+    timeSp.className = 'node-local-time';
+    timeSp.textContent = getT('ltx.node.loading');
+
+    const restSp = document.createElement('span');
+    restSp.className = 'node-rest-status';
+
+    const delaySp = document.createElement('span');
+    delaySp.className = 'node-light-delay';
+
+    info.appendChild(timeSp);
+    info.appendChild(restSp);
+    info.appendChild(delaySp);
+    row.appendChild(nameSp);
+    row.appendChild(info);
+    container.appendChild(row);
+  });
+}
+
+/**
+ * Update per-node time data. Called every 10 seconds.
+ */
+function updateNodeTimes(cfg) {
+  const nodes = cfg.nodes || [];
+  const now   = new Date();
+  const PT    = window.PlanetTime;
+
+  // Map location key → planet key for PlanetTime
+  const locToPlanet = {
+    earth: 'earth', mars: 'mars', moon: 'moon',
+    mercury: 'mercury', venus: 'venus', jupiter: 'jupiter',
+    saturn: 'saturn', uranus: 'uranus', neptune: 'neptune',
+  };
+
+  nodes.forEach(node => {
+    const row = document.querySelector(`.r-node-row[data-node-id="${node.id}"]`);
+    if (!row) return;
+
+    const timeSp  = row.querySelector('.node-local-time');
+    const restSp  = row.querySelector('.node-rest-status');
+    const delaySp = row.querySelector('.node-light-delay');
+
+    const loc = (node.location || 'earth').toLowerCase();
+
+    // Light delay display — from node delay field (seconds) or live calculation
+    const delaySec = node.delay || 0;
+    if (delaySec > 0) {
+      let delayStr;
+      if (PT && typeof PT.formatLightTime === 'function') {
+        delayStr = PT.formatLightTime(delaySec);
+      } else {
+        const dm = Math.floor(delaySec / 60);
+        const ds = Math.round(delaySec % 60);
+        delayStr = dm > 0 ? `${dm} min ${ds} sec` : `${ds} sec`;
+      }
+      delaySp.textContent = `One-way delay: ${delayStr}`;
+    } else {
+      delaySp.textContent = 'Reference node (0 s delay)';
+    }
+
+    // Planet local time + work status
+    if (!PT || typeof PT.getPlanetTime !== 'function') {
+      // No planet-time library — show UTC offset approximation
+      const utcMs = now.getTime() + delaySec * 1000;
+      const d = new Date(utcMs);
+      const hh = String(d.getUTCHours()).padStart(2, '0');
+      const mm = String(d.getUTCMinutes()).padStart(2, '0');
+      const ss = String(d.getUTCSeconds()).padStart(2, '0');
+      timeSp.textContent = `${hh}:${mm}:${ss} UTC (approx)`;
+      restSp.textContent = '';
+      return;
+    }
+
+    const planetKey = locToPlanet[loc] || 'earth';
+
+    try {
+      const pt = PT.getPlanetTime(planetKey, now, 0);
+      // Format local time string
+      timeSp.textContent = pt.timeStringFull
+        ? `${pt.timeStringFull} local`
+        : `${String(pt.hour).padStart(2,'0')}:${String(pt.minute).padStart(2,'0')}:${String(pt.second).padStart(2,'0')} local`;
+
+      // Day/sol number
+      const dayLabel = planetKey === 'mars' ? 'Sol' : 'Day';
+      const dayNum   = pt.dayNumber !== undefined ? pt.dayNumber : '?';
+
+      // Work status
+      let workLabel;
+      if (pt.isWorkHour)   workLabel = 'Work hours';
+      else if (pt.isWorkPeriod) workLabel = 'Off-shift';
+      else                 workLabel = 'Rest period';
+
+      restSp.textContent = `${dayLabel} ${dayNum} · ${workLabel}`;
+    } catch (e) {
+      timeSp.textContent = 'Time unavailable';
+      restSp.textContent = '';
+    }
+  });
+}
+
+/**
+ * Update the DTN status indicator in the runner topbar.
+ * Reads from window._ltxDtnStatus if set, otherwise polls with a best-effort fetch.
+ * Gracefully degrades to 'Unknown' if no data.
+ */
+function updateDtnStatus() {
+  const el = document.getElementById('r-dtn-indicator');
+  if (!el) return;
+
+  // Check if sky.js or another source set DTN state
+  let status = null;
+  try {
+    if (window.STATE && window.STATE._svcState && window.STATE._svcState.dtn) {
+      const s = window.STATE._svcState.dtn;
+      status = s.ok ? 'ok' : 'degraded';
+    } else if (window._ltxDtnStatus) {
+      status = window._ltxDtnStatus;
+    }
+  } catch(_) {}
+
+  if (status === 'ok') {
+    el.textContent = getT('ltx.dtn.operational');
+    el.className   = 'dtn-indicator dtn-ok';
+  } else if (status === 'degraded') {
+    el.textContent = getT('ltx.dtn.degraded');
+    el.className   = 'dtn-indicator dtn-degraded';
+  } else if (status === 'blackout') {
+    el.textContent = getT('ltx.dtn.blackout');
+    el.className   = 'dtn-indicator dtn-blackout';
+  } else {
+    el.textContent = getT('ltx.dtn.label');
+    el.className   = 'dtn-indicator';
+  }
+}
+
+// ── ICS Export (Story 12.2) ───────────────────────────────────────────────────
+
+function generateLtxICS(cfg) {
+  const c     = upgradeConfig(cfg);
+  const segs  = computeSegs(c);
+  const start = new Date(c.start);
+  const end   = segs[segs.length - 1].end;
+  const planId = makePlanId(c);
+  const nodes  = c.nodes || [];
+  const host   = nodes[0] || { name:'Earth HQ', role:'HOST', delay:0, location:'earth' };
+  const participants = nodes.slice(1);
+  const fmtDT  = dt => dt.toISOString().replace(/[-:.]/g,'').slice(0,15) + 'Z';
+  const segTpl = c.segments.map(s => s.type).join(',');
+
+  const toId = name => name.replace(/\s+/g,'-').toUpperCase();
+
+  const nodeLines  = nodes.map(n => `LTX-NODE:ID=${toId(n.name)};ROLE=${n.role}`);
+  const delayLines = participants.map(n => {
+    const d = n.delay || 0;
+    return `LTX-DELAY;NODEID=${toId(n.name)}:ONEWAY-MIN=${d};ONEWAY-MAX=${d+120};ONEWAY-ASSUMED=${d}`;
+  });
+  const localTimeLines = nodes
+    .filter(n => n.location === 'mars')
+    .map(n => `LTX-LOCALTIME:NODE=${toId(n.name)};SCHEME=LMST;PARAMS=LONGITUDE:0E`);
+
+  const hostName   = host.name;
+  const partNames  = participants.map(p => p.name).join(', ') || 'remote nodes';
+  const delayDesc  = participants.length
+    ? participants.map(p => `${p.name}: ${Math.round((p.delay||0)/60)} min one-way`).join(' · ')
+    : 'no participant delay configured';
+
+  return [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//InterPlanet//LTX v1.1//EN',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    'BEGIN:VEVENT',
+    `UID:${planId}@interplanet.live`,
+    `DTSTAMP:${fmtDT(new Date())}`,
+    `DTSTART:${fmtDT(start)}`,
+    `DTEND:${fmtDT(end)}`,
+    `SUMMARY:${c.title}`,
+    `DESCRIPTION:LTX session — ${hostName} with ${partNames}\\n` +
+      `Signal delays: ${delayDesc}\\n` +
+      `Mode: ${c.mode} · Segment plan: ${segTpl}\\n` +
+      `Generated by InterPlanet (https://interplanet.live)`,
+    `LTX:1`,
+    `LTX-PLANID:${planId}`,
+    `LTX-QUANTUM:PT${c.quantum}M`,
+    `LTX-SEGMENT-TEMPLATE:${segTpl}`,
+    `LTX-MODE:${c.mode}`,
+    ...nodeLines,
+    ...delayLines,
+    `LTX-READINESS:CHECK=PT10M;REQUIRED=TRUE;FALLBACK=LTX-RELAY`,
+    ...localTimeLines,
+    'END:VEVENT',
+    'END:VCALENDAR',
+  ].join('\r\n');
+}
+
+function downloadLtxICS(cfg) {
+  const ics  = generateLtxICS(cfg);
+  const blob = new Blob([ics], { type:'text/calendar;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `ltx-${new Date(cfg.start).toISOString().slice(0,10)}.ics`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── Apply i18n to static HTML ─────────────────────────────────────────────────
+
+function applyLtxI18n() {
+  if (!window.I18N) return;
+
+  // Detect language from localStorage (same key as main app)
+  const lang = I18N.detectLanguage();
+  I18N.setLocale(lang);
+
+  // Static text elements
+  const txt = {
+    'setup-heading':            'ltx.page.heading',
+    'setup-session-title':      'ltx.setup.session',
+    'lbl-session-title':        'ltx.setup.session_title',
+    'lbl-start':                'ltx.setup.start',
+    'lbl-start-note':           'ltx.setup.start_note',
+    'lbl-quantum':              'ltx.setup.quantum',
+    'lbl-mode':                 'ltx.setup.mode',
+    'setup-nodes-title':        'ltx.setup.nodes',
+    'setup-nodes-hint':         'ltx.setup.nodes_hint',
+    'btn-add-node':             'ltx.setup.add_node',
+    'setup-delay-hint':         'ltx.setup.delay_hint',
+    'setup-segs-title':         'ltx.setup.segments',
+    'btn-add-seg':              'ltx.setup.add_seg',
+    'btn-start-meeting':        'ltx.setup.start_btn',
+    'btn-share':                'ltx.setup.share_btn',
+    'btn-setup-ics':            'ltx.setup.ics_btn',
+    'runner-session-plan-title':'ltx.runner.session_plan',
+    'r-plan-locked-lbl':        'ltx.runner.plan_locked',
+    'r-timer-lbl':              'ltx.runner.remaining',
+    'btn-runner-edit':          'ltx.runner.edit',
+    'btn-runner-copy':          'ltx.runner.copy',
+    'btn-runner-ics':           'ltx.runner.ics',
+    'history-title':            'ltx.history.title',
+    'history-clear':            'ltx.history.clear',
+    'templates-card-title':     'ltx.template.title',
+  };
+  Object.entries(txt).forEach(([id, key]) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = I18N.t(key);
+  });
+
+  // Mode button labels
+  document.querySelectorAll('.mode-btn').forEach(btn => {
+    const mode = btn.dataset.mode || '';
+    if (mode.includes('LIVE'))  btn.textContent = I18N.t('ltx.mode.live');
+    if (mode.includes('RELAY')) btn.textContent = I18N.t('ltx.mode.relay');
+    if (mode.includes('ASYNC')) btn.textContent = I18N.t('ltx.mode.async');
+  });
+
+  // Aria labels on back links
+  document.getElementById('back-link-setup')?.setAttribute('aria-label', 'Back to InterPlanet');
+  document.getElementById('back-link-runner')?.setAttribute('aria-label', 'Back to InterPlanet');
+
+  // Update quantum option labels
+  const quantumSel = document.getElementById('f-quantum');
+  if (quantumSel) {
+    quantumSel.querySelectorAll('option').forEach(o => {
+      const key = `ltx.quantum.${o.value}`;
+      const str = I18N.t(key);
+      if (str !== key) o.textContent = str;
+    });
+  }
+
+  // Page title
+  document.title = I18N.t('ltx.page.title');
+}
+
+// ── Event wiring ──────────────────────────────────────────────────────────────
+
+document.getElementById('seg-reset').addEventListener('click', () => {
+  renderSegList(DEFAULT_SEGS);
+});
+
+document.getElementById('seg-add').addEventListener('click', () => {
+  document.getElementById('seg-list').appendChild(makeSegRow('BUFFER', 1));
+  updateTotals();
+});
+
+document.getElementById('node-add').addEventListener('click', () => {
+  const nl  = document.getElementById('node-list');
+  const idx = nl.querySelectorAll('.node-row').length;
+  nl.appendChild(makeNodeRow(
+    { id:`N${idx}`, name:'', role:'PARTICIPANT', delay:0, location:'earth' }, idx
+  ));
+});
+
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.mode-btn').forEach(b => {
+      b.classList.remove('active');
+      b.setAttribute('aria-checked','false');
+    });
+    btn.classList.add('active');
+    btn.setAttribute('aria-checked','true');
+  });
+});
+
+document.getElementById('f-quantum').addEventListener('change', updateTotals);
+
+document.getElementById('setup-start').addEventListener('click', () => {
+  const cfg = cfgFromForm();
+  if (cfg) startRunner(cfg);
+});
+
+document.getElementById('setup-share').addEventListener('click', () => {
+  const cfg = cfgFromForm();
+  if (!cfg) return;
+  // Update URL hash so links are valid
+  history.replaceState(null, '', buildUrl(cfg, _viewerNodeId));
+  openSharePanel(cfg);
+});
+
+document.getElementById('setup-ics').addEventListener('click', () => {
+  const cfg = cfgFromForm(); if (cfg) downloadLtxICS(cfg);
+});
+
+document.getElementById('runner-edit').addEventListener('click', () => {
+  if (_ticker) { clearInterval(_ticker); _ticker = null; }
+  if (_nodeTimeTicker) { clearInterval(_nodeTimeTicker); _nodeTimeTicker = null; }
+  document.getElementById('runner-screen').hidden = true;
+  document.getElementById('setup-screen').hidden  = false;
+  if (_cfg) populateForm(_cfg);
+});
+
+document.getElementById('runner-copy').addEventListener('click', () => {
+  const url = location.origin + buildUrl(_cfg || {}, _viewerNodeId);
+  navigator.clipboard.writeText(url)
+    .then(() => showToast(getT('ltx.toast.link_copied')))
+    .catch(() => showToast(getT('ltx.toast.copy_failed')));
+});
+
+document.getElementById('r-node-select').addEventListener('change', function() {
+  _viewerNodeId = this.value || null;
+  if (!_cfg) return;
+  const perspective = viewerPerspective(_cfg);
+  const viewerName  = viewerNodeName(_cfg);
+  const viewerEl    = document.getElementById('r-viewer');
+  if (viewerName) {
+    const key = perspective === 'host' ? 'ltx.viewing.host' : 'ltx.viewing.participant';
+    viewerEl.textContent = getT(key, { name: viewerName });
+    viewerEl.hidden = false;
+  } else {
+    viewerEl.hidden = true;
+  }
+  updateNodeTimes(_cfg);
+});
+
+document.getElementById('runner-ics').addEventListener('click', () => {
+  if (_cfg) downloadLtxICS(_cfg);
+});
+
+document.getElementById('history-clear').addEventListener('click', () => {
+  localStorage.removeItem('ltx_history');
+  renderHistory();
+});
+
+// ── Initialise ────────────────────────────────────────────────────────────────
+
+(function init() {
+  // Read viewer node from URL search params (?node=N1)
+  const params    = new URLSearchParams(location.search);
+  const nodeParam = params.get('node');
+  if (nodeParam) _viewerNodeId = nodeParam;
+
+  // Apply i18n translations
+  applyLtxI18n();
+
+  // Default start time: 1 hour from now, rounded to nearest 5 min
+  const soon = new Date(Date.now() + 3600 * 1000);
+  soon.setMinutes(Math.ceil(soon.getMinutes() / 5) * 5, 0, 0);
+  document.getElementById('f-start').value =
+    soon.getFullYear() + '-' + pad(soon.getMonth()+1) + '-' + pad(soon.getDate()) +
+    'T' + pad(soon.getHours()) + ':' + pad(soon.getMinutes());
+
+  initDefaultNodes();
+  renderTemplateGrid();
+  renderSegList(DEFAULT_SEGS);
+
+  // Render session history card (Story 46.1)
+  renderHistory();
+
+  // Inherit light-mode from main app
+  try {
+    const s = JSON.parse(localStorage.getItem('sky_settings') || '{}');
+    if (s.lightMode) document.documentElement.classList.add('light-mode');
+  } catch(_) {}
+
+  // Load from URL hash
+  const raw = readHash();
+  if (raw && raw.segments?.length) {
+    const cfg = upgradeConfig(raw);
+    _cfg = cfg;
+    populateForm(cfg);
+    // Auto-launch runner if meeting is current or future (5 min grace after end)
+    const endMs = computeSegs(cfg).slice(-1)[0]?.end?.getTime() || 0;
+    if (Date.now() < endMs + 5 * 60 * 1000) {
+      startRunner(cfg);
+      return;
+    }
+  }
+
+  // ?demo=multi: load a 3-node demo (Story 39.1)
+  var demoParam = params.get('demo');
+  if (demoParam === 'multi') {
+    var soon3 = new Date(Date.now() + 3600 * 1000);
+    soon3.setMinutes(Math.ceil(soon3.getMinutes() / 5) * 5, 0, 0);
+    var multiCfg = {
+      v:       2,
+      title:   'Multi-Party LTX Demo',
+      start:   soon3.toISOString(),
+      quantum: 5,
+      mode:    'LTX-LIVE',
+      nodes: [
+        { id: 'N0', name: 'Earth HQ',       role: 'HOST',        delay: 0,    location: 'earth' },
+        { id: 'N1', name: 'Mars Base',       role: 'PARTICIPANT', delay: 1240, location: 'mars'  },
+        { id: 'N2', name: 'Jupiter Station', role: 'PARTICIPANT', delay: 3240, location: 'other' },
+      ],
+      segments: [
+        { type: 'PLAN_CONFIRM', q: 2 },
+        { type: 'TX',           q: 3 },
+        { type: 'RX',           q: 3 },
+        { type: 'TX',           q: 3 },
+        { type: 'RX',           q: 3 },
+        { type: 'TX',           q: 3 },
+        { type: 'RX',           q: 3 },
+        { type: 'CAUCUS',       q: 2 },
+        { type: 'MERGE',        q: 2 },
+        { type: 'BUFFER',       q: 1 },
+      ],
+    };
+    populateForm(multiCfg);
+    document.getElementById('setup-screen').hidden = false;
+    return;
+  }
+
+  document.getElementById('setup-screen').hidden = false;
+})();
+</script>
+
+</body>
+</html>

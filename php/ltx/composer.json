@@ -1,0 +1,21 @@
+{
+  "name": "interplanet/ltx",
+  "description": "PHP LTX (Light-Time eXchange) library — port of ltx-sdk.js",
+  "version": "1.0.0",
+  "type": "library",
+  "license": "MIT",
+  "require": {
+    "php": ">=8.1"
+  },
+  "autoload": {
+    "psr-4": {
+      "InterplanetLTX\\": "src/InterplanetLTX/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "InterplanetLTX\\Tests\\": "tests/"
+    }
+  },
+  "minimum-stability": "stable"
+}

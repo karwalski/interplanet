@@ -1,0 +1,10 @@
+/Users/matthew.watt/claude/interplanet-github/fsharp/planet-time/InterplanetTime/bin/Debug/net6.0/InterplanetTime.deps.json
+/Users/matthew.watt/claude/interplanet-github/fsharp/planet-time/InterplanetTime/bin/Debug/net6.0/InterplanetTime.dll
+/Users/matthew.watt/claude/interplanet-github/fsharp/planet-time/InterplanetTime/bin/Debug/net6.0/InterplanetTime.pdb
+/Users/matthew.watt/claude/interplanet-github/fsharp/planet-time/InterplanetTime/obj/Debug/net6.0/InterplanetTime.fsproj.AssemblyReference.cache
+/Users/matthew.watt/claude/interplanet-github/fsharp/planet-time/InterplanetTime/obj/Debug/net6.0/InterplanetTime.AssemblyInfoInputs.cache
+/Users/matthew.watt/claude/interplanet-github/fsharp/planet-time/InterplanetTime/obj/Debug/net6.0/InterplanetTime.AssemblyInfo.fs
+/Users/matthew.watt/claude/interplanet-github/fsharp/planet-time/InterplanetTime/obj/Debug/net6.0/InterplanetTime.fsproj.CoreCompileInputs.cache
+/Users/matthew.watt/claude/interplanet-github/fsharp/planet-time/InterplanetTime/obj/Debug/net6.0/InterplanetTime.sourcelink.json
+/Users/matthew.watt/claude/interplanet-github/fsharp/planet-time/InterplanetTime/obj/Debug/net6.0/InterplanetTime.dll
+/Users/matthew.watt/claude/interplanet-github/fsharp/planet-time/InterplanetTime/obj/Debug/net6.0/InterplanetTime.pdb

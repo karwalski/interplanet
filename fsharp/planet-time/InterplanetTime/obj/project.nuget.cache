@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "dgSpecHash": "GV8R3MeiNqU=",
+  "success": true,
+  "projectFilePath": "/Users/matthew.watt/claude/interplanet-github/fsharp/planet-time/InterplanetTime/InterplanetTime.fsproj",
+  "expectedPackageFiles": [
+    "/Users/matthew.watt/.nuget/packages/fsharp.core/10.0.103/fsharp.core.10.0.103.nupkg.sha512",
+    "/Users/matthew.watt/.nuget/packages/microsoft.netcore.app.ref/6.0.36/microsoft.netcore.app.ref.6.0.36.nupkg.sha512",
+    "/Users/matthew.watt/.nuget/packages/microsoft.aspnetcore.app.ref/6.0.36/microsoft.aspnetcore.app.ref.6.0.36.nupkg.sha512"
+  ],
+  "logs": []
+}

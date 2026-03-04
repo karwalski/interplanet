@@ -1,0 +1,12 @@
+Package: interplanet.time
+Version: 0.1.0
+Title: Interplanetary Time Calculations
+Description: Port of planet-time.js to R. Provides orbital mechanics,
+    planet time, Mars time (MTC), work-schedule calculations, and
+    light-speed communication timing for all planets in the solar system.
+    Pure base R, no external package dependencies.
+Author: Interplanet Project
+Maintainer: Interplanet Project <noreply@interplanet.live>
+License: MIT
+Depends: R (>= 4.0)
+Encoding: UTF-8

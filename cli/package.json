@@ -1,0 +1,23 @@
+{
+  "name": "interplanet-time-cli",
+  "version": "0.1.0",
+  "description": "Command-line interface for interplanetary time, light-travel delay, and meeting windows.",
+  "keywords": ["interplanetary", "planet", "time", "mars", "cli", "astronomy"],
+  "author": "InterPlanet contributors",
+  "license": "MIT",
+  "homepage": "https://interplanet.live",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/karwalski/interplanet"
+  },
+  "bin": {
+    "interplanet": "./bin/interplanet.js"
+  },
+  "main": "./bin/interplanet.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node test/cli_test.js"
+  }
+}

@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Interplanetary Distance — InterPlanet</title>
+  <link rel="icon" type="image/x-icon" href="assets/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
+  <meta name="theme-color" content="#060614">
+  <meta name="description" content="Real-time interplanetary distance calculator — AU, km, light-minutes, signal delay">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
+        media="print" onload="this.media='all'" crossorigin="anonymous" referrerpolicy="no-referrer">
+  <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"></noscript>
+  <script src="planet-time.js?v=1.1.0"></script>
+  <script src="assets/i18n.js?v=1.8.4"></script>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg:#060614;--surface:rgba(255,255,255,.04);--border:rgba(255,255,255,.09);
+      --text:rgba(255,255,255,.92);--text-muted:rgba(255,255,255,.60);
+      --accent:#3563c8;--accent-h:#4472d8;
+    }
+    /* Skip link */
+    .skip-link{position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden}
+    .skip-link:focus{position:static;width:auto;height:auto;overflow:visible;padding:.35rem .75rem;background:var(--accent);color:#fff;border-radius:4px;font-size:.8rem;margin:.25rem;display:inline-block}
+    html.light-mode{
+      --bg:#f5f6fa;--surface:rgba(0,0,0,.04);--border:rgba(0,0,0,.09);
+      --text:rgba(0,0,0,.87);--text-muted:rgba(0,0,0,.65)
+    }
+    body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;min-height:100vh;padding-bottom:3rem}
+    .wrap{max-width:680px;margin:0 auto;padding:1.5rem 1rem}
+
+    /* Topbar */
+    .topbar{display:flex;align-items:center;gap:.75rem;margin-bottom:1.5rem;flex-wrap:wrap}
+    .back-link{color:var(--text-muted);text-decoration:none;font-size:.82rem;display:flex;align-items:center;gap:.3rem;transition:color .15s}
+    .back-link:hover{color:var(--text)}
+    .wordmark{font-size:1.05rem;font-weight:700;letter-spacing:-.01em;display:flex;align-items:center;gap:.4rem}
+    .topbar-actions{margin-left:auto;display:flex;gap:.5rem}
+    .icon-btn{background:rgba(255,255,255,.07);border:1px solid var(--border);border-radius:7px;color:var(--text-muted);font-size:.8rem;padding:.3rem .55rem;cursor:pointer;transition:background .15s,color .15s}
+    .icon-btn:hover{background:rgba(255,255,255,.12);color:var(--text)}
+    html.light-mode .icon-btn{background:rgba(0,0,0,.05)}
+
+    /* Selector row */
+    .sel-row{display:flex;align-items:center;gap:.65rem;margin-bottom:1.25rem;flex-wrap:wrap}
+    .planet-sel{flex:1;min-width:120px;background:var(--surface);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:.88rem;font-weight:600;padding:.5rem .7rem;outline:none;cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='rgba(255,255,255,.4)'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right .6rem center;padding-right:1.8rem}
+    html.light-mode .planet-sel{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='rgba(0,0,0,.4)'/%3E%3C/svg%3E")}
+    .swap-icon{font-size:1.1rem;color:var(--text-muted);flex-shrink:0}
+    .date-inp{background:var(--surface);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:.82rem;padding:.5rem .65rem;outline:none;min-width:130px;flex-shrink:0}
+    .date-inp:focus{border-color:rgba(91,141,239,.5)}
+    .now-btn{background:var(--accent);border:none;border-radius:7px;color:#fff;font-size:.75rem;font-weight:700;padding:.45rem .75rem;cursor:pointer;flex-shrink:0;transition:background .15s}
+    .now-btn:hover{background:var(--accent-h)}
+
+    /* Stats */
+    .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:.65rem;margin-bottom:1.25rem}
+    @media(max-width:480px){.stats-grid{grid-template-columns:repeat(2,1fr)}}
+    .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:.8rem .75rem;text-align:center}
+    .stat-val{font-size:1.05rem;font-weight:700;color:var(--text);margin-bottom:.15rem;word-break:break-all}
+    .stat-lbl{font-size:.62rem;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted)}
+
+    /* Connection canvas */
+    .conn-wrap{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:1.25rem}
+    #cnv-conn{display:block;width:100%;height:120px}
+
+    /* Chart */
+    .chart-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1rem;margin-bottom:1.25rem}
+    .chart-title{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:.75rem}
+    #cnv-chart{display:block;width:100%;height:220px}
+
+    /* Footer links */
+    .footer-links{display:flex;gap:1rem;flex-wrap:wrap}
+    .footer-link{color:var(--text-muted);text-decoration:none;font-size:.8rem;display:flex;align-items:center;gap:.3rem;transition:color .15s}
+    .footer-link:hover{color:var(--text)}
+  </style>
+</head>
+<body>
+<a class="skip-link" href="#main-content">Skip to content</a>
+<main id="main-content" tabindex="-1">
+<div class="wrap">
+  <div class="topbar">
+    <a href="index.html" class="back-link" aria-label="Back to InterPlanet">
+      <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> InterPlanet
+    </a>
+    <span class="wordmark">
+      <i class="fa-solid fa-ruler" aria-hidden="true"></i>
+      <span data-i18n="distance.title">Distance Calculator</span>
+    </span>
+    <div class="topbar-actions">
+      <button class="icon-btn" id="btn-theme" aria-label="Toggle theme">
+        <i class="fa-solid fa-circle-half-stroke" aria-hidden="true"></i>
+      </button>
+    </div>
+  </div>
+
+  <!-- Selector row -->
+  <div class="sel-row">
+    <select id="sel-a" class="planet-sel" aria-label="Planet A">
+      <option value="earth" selected>Earth</option>
+      <option value="mars">Mars</option>
+      <option value="venus">Venus</option>
+      <option value="mercury">Mercury</option>
+      <option value="jupiter">Jupiter</option>
+      <option value="saturn">Saturn</option>
+      <option value="uranus">Uranus</option>
+      <option value="neptune">Neptune</option>
+      <option value="moon">Moon</option>
+    </select>
+    <span class="swap-icon" aria-hidden="true">&#8596;</span>
+    <select id="sel-b" class="planet-sel" aria-label="Planet B">
+      <option value="earth">Earth</option>
+      <option value="mars" selected>Mars</option>
+      <option value="venus">Venus</option>
+      <option value="mercury">Mercury</option>
+      <option value="jupiter">Jupiter</option>
+      <option value="saturn">Saturn</option>
+      <option value="uranus">Uranus</option>
+      <option value="neptune">Neptune</option>
+      <option value="moon">Moon</option>
+    </select>
+    <input id="inp-date" type="date" class="date-inp" aria-label="Reference date">
+    <button id="btn-now" class="now-btn" data-i18n="distance.now">Now</button>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-grid" id="stats-grid">
+    <div class="stat-card">
+      <div class="stat-val" id="stat-au">&#8212;</div>
+      <div class="stat-lbl" data-i18n="distance.stat.au">Distance (AU)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-val" id="stat-km">&#8212;</div>
+      <div class="stat-lbl" data-i18n="distance.stat.km">Distance (km)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-val" id="stat-lm">&#8212;</div>
+      <div class="stat-lbl" data-i18n="distance.stat.light">Light Travel</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-val" id="stat-delay">&#8212;</div>
+      <div class="stat-lbl" data-i18n="distance.stat.delay">Signal Delay</div>
+    </div>
+  </div>
+
+  <!-- Connection canvas -->
+  <div class="conn-wrap">
+    <canvas id="cnv-conn" aria-label="Visual connection between selected planets"></canvas>
+  </div>
+
+  <!-- 30-day chart -->
+  <div class="chart-card">
+    <div class="chart-title" data-i18n="distance.chart.title">30-Day Distance Range</div>
+    <canvas id="cnv-chart" aria-label="30-day distance chart"></canvas>
+  </div>
+
+  <!-- Footer links -->
+  <div class="footer-links">
+    <a href="index.html" class="footer-link">
+      <i class="fa-solid fa-globe" aria-hidden="true"></i> InterPlanet
+    </a>
+    <a href="ltx.html" class="footer-link">
+      <i class="fa-solid fa-satellite-dish" aria-hidden="true"></i> <span data-i18n="distance.footer.ltx">LTX Meeting</span>
+    </a>
+  </div>
+</div>
+</main>
+
+<script>
+'use strict';
+
+const PLANET_LABELS = {
+  earth: 'Earth', mars: 'Mars', venus: 'Venus', mercury: 'Mercury',
+  jupiter: 'Jupiter', saturn: 'Saturn', uranus: 'Uranus', neptune: 'Neptune', moon: 'Moon'
+};
+
+const DIST_AU_KM = 149597870.7;
+
+let _liveMode = true;
+let _animFrame = null;
+let _dashOffset = 0;
+
+function getSelectedDate() {
+  const v = document.getElementById('inp-date').value;
+  if (_liveMode || !v) return new Date();
+  return new Date(v + 'T12:00:00Z');
+}
+
+function formatDelay(secs) {
+  const s = Math.round(secs);
+  if (s < 60) return s + 's';
+  const m = Math.floor(s / 60), rem = s % 60;
+  if (m < 60) return m + 'm ' + rem + 's';
+  const h = Math.floor(m / 60), rm = m % 60;
+  return h + 'h ' + rm + 'm ' + (rem > 0 ? rem + 's' : '');
+}
+
+function updateStats() {
+  const a = document.getElementById('sel-a').value;
+  const b = document.getElementById('sel-b').value;
+  const dt = getSelectedDate();
+  const PT = window.PlanetTime;
+  const au = PT.bodyDistance(a, b, dt);
+  const secs = PT.lightTravelSeconds(a, b, dt);
+  const km = au * DIST_AU_KM;
+  const lm = secs / 60;
+  document.getElementById('stat-au').textContent = au.toFixed(3) + ' AU';
+  document.getElementById('stat-km').textContent = (km / 1e6).toFixed(2) + ' M km';
+  document.getElementById('stat-lm').textContent = lm.toFixed(1) + ' light-min';
+  document.getElementById('stat-delay').textContent = formatDelay(secs);
+  drawChart();
+  drawConnection(a, b, au);
+}
+
+function drawChart() {
+  const canvas = document.getElementById('cnv-chart');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.offsetWidth || canvas.width;
+  const H = canvas.height || 220;
+  canvas.width = W;
+  canvas.height = H;
+  ctx.clearRect(0, 0, W, H);
+
+  const a = document.getElementById('sel-a').value;
+  const b = document.getElementById('sel-b').value;
+  const baseDate = getSelectedDate();
+  const PT = window.PlanetTime;
+
+  // Gather 31 points over ±15 days
+  const pts = [];
+  for (let d = -15; d <= 15; d++) {
+    const dt = new Date(baseDate.getTime() + d * 86400000);
+    pts.push({ d, au: PT.bodyDistance(a, b, dt) });
+  }
+
+  const minAu = Math.min.apply(null, pts.map(function(p) { return p.au; }));
+  const maxAu = Math.max.apply(null, pts.map(function(p) { return p.au; }));
+  const pad = { l: 48, r: 16, t: 16, b: 32 };
+  const cW = W - pad.l - pad.r;
+  const cH = H - pad.t - pad.b;
+  const range = maxAu - minAu || 0.01;
+
+  function xFor(d) { return pad.l + ((d + 15) / 30) * cW; }
+  function yFor(au) { return pad.t + cH - ((au - minAu) / range) * cH; }
+
+  // Axis
+  const textCol = getComputedStyle(document.documentElement).getPropertyValue('--text-muted').trim() || 'rgba(255,255,255,.55)';
+  ctx.strokeStyle = textCol;
+  ctx.lineWidth = 0.5;
+  ctx.globalAlpha = 0.3;
+  ctx.beginPath(); ctx.moveTo(pad.l, pad.t); ctx.lineTo(pad.l, pad.t + cH); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(pad.l, pad.t + cH); ctx.lineTo(pad.l + cW, pad.t + cH); ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  // X tick labels every 5 days
+  ctx.fillStyle = textCol;
+  ctx.font = '10px sans-serif';
+  ctx.textAlign = 'center';
+  for (let d = -15; d <= 15; d += 5) {
+    const x = xFor(d);
+    ctx.globalAlpha = 0.4;
+    ctx.strokeStyle = textCol;
+    ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(x, pad.t); ctx.lineTo(x, pad.t + cH); ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.fillText((d > 0 ? '+' : '') + d + 'd', x, pad.t + cH + 18);
+  }
+
+  // Y axis labels (2 ticks)
+  ctx.textAlign = 'right';
+  [minAu, maxAu].forEach(function(au) {
+    const y = yFor(au);
+    ctx.fillText(au.toFixed(2), pad.l - 4, y + 4);
+  });
+
+  // Today line (day 0)
+  ctx.strokeStyle = '#e57373';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([4, 3]);
+  ctx.globalAlpha = 0.7;
+  ctx.beginPath(); ctx.moveTo(xFor(0), pad.t); ctx.lineTo(xFor(0), pad.t + cH); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.globalAlpha = 1;
+
+  // Distance line
+  ctx.strokeStyle = '#3a8de8';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  pts.forEach(function(p, i) {
+    const x = xFor(p.d), y = yFor(p.au);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+
+  // Dots at each point
+  ctx.fillStyle = '#3a8de8';
+  pts.forEach(function(p) {
+    ctx.beginPath();
+    ctx.arc(xFor(p.d), yFor(p.au), 2, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+function drawConnection(a, b, au) {
+  const canvas = document.getElementById('cnv-conn');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.offsetWidth || canvas.width;
+  const H = canvas.height || 120;
+  canvas.width = W;
+  canvas.height = H;
+  ctx.clearRect(0, 0, W, H);
+
+  const r = 22;
+  const yC = H / 2 - 8;
+  const xA = r + 20;
+  const xB = W - r - 20;
+  const textCol = getComputedStyle(document.documentElement).getPropertyValue('--text-muted').trim() || 'rgba(255,255,255,.55)';
+
+  // Connection line (animated dashes)
+  const maxAu = 50; // uranus-ish max for scaling
+  const alpha = Math.max(0.2, Math.min(1, 1 - (au / maxAu)));
+  const lineW = Math.max(0.5, Math.min(2, 2 - (au / maxAu)));
+  ctx.strokeStyle = '#5b8def';
+  ctx.lineWidth = lineW;
+  ctx.globalAlpha = alpha;
+  ctx.setLineDash([6, 6]);
+  ctx.lineDashOffset = -_dashOffset;
+  ctx.beginPath();
+  ctx.moveTo(xA + r, yC);
+  ctx.lineTo(xB - r, yC);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.globalAlpha = 1;
+
+  // Planet A circle (blue)
+  ctx.beginPath();
+  ctx.arc(xA, yC, r, 0, Math.PI * 2);
+  ctx.fillStyle = '#1a3a7a';
+  ctx.fill();
+  ctx.strokeStyle = '#3563c8';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Planet B circle (orange-red)
+  ctx.beginPath();
+  ctx.arc(xB, yC, r, 0, Math.PI * 2);
+  ctx.fillStyle = '#5a1a0a';
+  ctx.fill();
+  ctx.strokeStyle = '#c8501a';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Labels
+  ctx.fillStyle = textCol;
+  ctx.font = 'bold 11px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.globalAlpha = 1;
+  ctx.fillText(PLANET_LABELS[a] || a, xA, yC + r + 16);
+  ctx.fillText(PLANET_LABELS[b] || b, xB, yC + r + 16);
+}
+
+function animate() {
+  _dashOffset = (_dashOffset + 0.3) % 12;
+  const a = document.getElementById('sel-a').value;
+  const b = document.getElementById('sel-b').value;
+  const statText = document.getElementById('stat-au').textContent;
+  const au = parseFloat(statText) || 1;
+  drawConnection(a, b, au);
+  _animFrame = requestAnimationFrame(animate);
+}
+
+function init() {
+  // Set default date to today (UTC)
+  const today = new Date();
+  const todayStr = today.getUTCFullYear() + '-'
+    + String(today.getUTCMonth() + 1).padStart(2, '0') + '-'
+    + String(today.getUTCDate()).padStart(2, '0');
+  document.getElementById('inp-date').value = todayStr;
+
+  document.getElementById('sel-a').addEventListener('change', updateStats);
+  document.getElementById('sel-b').addEventListener('change', updateStats);
+  document.getElementById('inp-date').addEventListener('change', function() {
+    _liveMode = false;
+    updateStats();
+  });
+  document.getElementById('btn-now').addEventListener('click', function() {
+    _liveMode = true;
+    const now = new Date();
+    document.getElementById('inp-date').value =
+      now.getUTCFullYear() + '-'
+      + String(now.getUTCMonth() + 1).padStart(2, '0') + '-'
+      + String(now.getUTCDate()).padStart(2, '0');
+    updateStats();
+  });
+
+  document.getElementById('btn-theme').addEventListener('click', function() {
+    document.documentElement.classList.toggle('light-mode');
+  });
+
+  window.addEventListener('resize', function() { updateStats(); });
+
+  updateStats();
+  animate();
+  setInterval(updateStats, 10000);
+}
+
+// Expose globals for testing
+window._distanceState = {
+  getSelectedDate: getSelectedDate,
+  updateStats: updateStats,
+  formatDelay: formatDelay
+};
+
+window.addEventListener('DOMContentLoaded', function() {
+  // Apply i18n translations if available
+  if (window.I18N) window.I18N.applyTranslations();
+  // Wait for PlanetTime to be available
+  if (window.PlanetTime) {
+    init();
+  } else {
+    const t = setInterval(function() {
+      if (window.PlanetTime) { clearInterval(t); init(); }
+    }, 50);
+  }
+});
+</script>
+</body>
+</html>

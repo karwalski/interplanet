@@ -1,0 +1,31 @@
+{
+  "name": "interplanet-ltx",
+  "version": "1.1.0",
+  "description": "LTX (Light-Time eXchange) SDK — structured interplanetary meeting protocol for all solar system bodies.",
+  "keywords": [
+    "interplanetary", "ltx", "light-time", "meeting", "protocol", "space", "solar-system"
+  ],
+  "author": "InterPlanet contributors",
+  "license": "MIT",
+  "homepage": "https://interplanet.live",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/karwalski/interplanet"
+  },
+  "bugs": {
+    "url": "https://github.com/karwalski/interplanet/issues"
+  },
+  "main": "ltx-sdk.js",
+  "types": "dist/ltx-sdk.d.ts",
+  "files": [
+    "ltx-sdk.js",
+    "dist/",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node -e \"const sdk = require('./ltx-sdk'); console.assert(typeof sdk.createPlan === 'function', 'createPlan ok'); console.assert(typeof sdk.computeSegments === 'function', 'computeSegments ok'); console.assert(typeof sdk.encodeHash === 'function', 'encodeHash ok'); console.log('smoke tests passed');\""
+  },
+  "engines": {
+    "node": ">=14"
+  }
+}

@@ -1,0 +1,24 @@
+[package]
+name = "interplanet-time"
+version = "0.1.0"
+edition = "2021"
+description = "Interplanetary time, orbital mechanics, and meeting scheduler — pure Rust port of planet-time.js"
+keywords = ["interplanetary", "planet", "time", "mars", "astronomy"]
+license = "MIT"
+repository = "https://github.com/karwalski/interplanet"
+homepage = "https://interplanet.live"
+rust-version = "1.70"
+
+[lib]
+name = "interplanet_time"
+path = "src/lib.rs"
+
+[[bin]]
+name = "fixture_check"
+path = "src/bin/fixture_check.rs"
+
+[dependencies]
+# stdlib only — no external runtime dependencies
+
+[dev-dependencies]
+# no external test dependencies

@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Planet Clocks — InterPlanet</title>
+<meta name="description" content="Embeddable multi-planet clock widget">
+<script src="planet-time.js?v=1.8.4"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;width:100%}
+
+/* Theme vars — dark by default, overridden by ?theme=light */
+:root{
+  --bg:#060614;
+  --surface:#0d0d1e;
+  --border:rgba(255,255,255,.1);
+  --text:rgba(255,255,255,.92);
+  --text-muted:rgba(255,255,255,.55);
+  --accent:#3563c8;
+  --work-col:#4caf50;
+  --rest-col:rgba(255,255,255,.70);
+}
+html.light-mode{
+  --bg:#f5f6fa;
+  --surface:#eaedf5;
+  --border:rgba(0,0,0,.1);
+  --text:rgba(0,0,0,.87);
+  --text-muted:rgba(0,0,0,.55);
+  --work-col:#1b5e20;
+  --rest-col:rgba(0,0,0,.65);
+}
+
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  display:flex;
+  align-items:flex-start;
+  justify-content:center;
+  padding:.75rem;
+  min-height:100%;
+}
+
+.widget-row{
+  display:flex;
+  flex-wrap:wrap;
+  gap:.75rem;
+  justify-content:center;
+  align-items:stretch;
+  width:100%;
+}
+
+.clock-card{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:1.1rem 1.25rem;
+  flex:1 1 160px;
+  max-width:260px;
+  min-width:150px;
+}
+
+.card-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  margin-bottom:.5rem;
+}
+.planet-label{
+  font-size:.9rem;
+  font-weight:700;
+  display:flex;
+  align-items:center;
+  gap:.4rem;
+}
+.planet-icon{font-size:1rem;line-height:1}
+.status-pill{
+  font-size:.55rem;
+  font-weight:700;
+  letter-spacing:.07em;
+  padding:.1rem .35rem;
+  border-radius:4px;
+  text-transform:uppercase;
+}
+.status-pill.work{background:rgba(76,175,80,.15);color:var(--work-col);border:1px solid rgba(76,175,80,.25)}
+.status-pill.rest{background:rgba(255,255,255,.05);color:var(--rest-col);border:1px solid var(--border)}
+
+.time-display{
+  font-size:1.9rem;
+  font-weight:700;
+  letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums;
+  color:var(--text);
+  margin-bottom:.2rem;
+  line-height:1;
+}
+
+.time-sub{
+  font-size:.65rem;
+  color:var(--text-muted);
+  margin-bottom:.15rem;
+  line-height:1.4;
+}
+
+.divider{
+  border:none;
+  border-top:1px solid var(--border);
+  margin:.6rem 0;
+}
+
+.lt-row{
+  display:flex;
+  align-items:center;
+  gap:.4rem;
+  font-size:.65rem;
+  color:var(--text-muted);
+}
+.lt-icon{font-size:.75rem;flex-shrink:0}
+.lt-val{color:var(--text);font-weight:600}
+.lt-au{color:rgba(255,255,255,.55);margin-left:.2rem}
+html.light-mode .lt-au{color:rgba(0,0,0,.65)}
+
+/* Compact mode */
+body.compact .time-display{font-size:1.5rem}
+body.compact .lt-row{display:none}
+body.compact .divider{display:none}
+body.compact .time-sub{font-size:.6rem}
+body.compact .clock-card{padding:.7rem .85rem}
+
+/* Nav links */
+.widget-nav{
+  position:fixed;
+  bottom:.6rem;
+  right:.75rem;
+  font-size:.65rem;
+  color:var(--text-muted);
+  display:flex;
+  gap:.6rem;
+}
+.widget-nav a{color:#6b9de8;text-decoration:none}
+.widget-nav a:hover{color:#fff}
+html.light-mode .widget-nav a{color:#3563c8}
+html.light-mode .widget-nav a:hover{color:rgba(0,0,0,.87)}
+
+/* Skip link */
+.skip-link{position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden}
+.skip-link:focus{position:static;width:auto;height:auto;overflow:visible;padding:.35rem .75rem;background:#3563c8;color:#fff;border-radius:4px;font-size:.8rem;margin:.25rem;display:inline-block}
+</style>
+</head>
+<body>
+<a class="skip-link" href="#main-content">Skip to content</a>
+<main id="main-content" tabindex="-1">
+<div class="widget-row" id="widget-row" role="list" aria-label="Planet clocks"></div>
+</main>
+<nav class="widget-nav" aria-label="Clock navigation">
+  <a href="clock.html">← Single clock</a>
+</nav>
+
+<script>
+'use strict';
+
+// ── URL param helpers ────────────────────────────────────────────────────────
+
+function getParam(name, def) {
+  var params = new URLSearchParams(location.search);
+  var v = params.get(name);
+  return v !== null ? v : def;
+}
+
+var PLANETS_PARAM  = getParam('planets', 'earth,mars,moon');
+var THEME_PARAM    = getParam('theme', 'dark');
+var COMPACT_PARAM  = getParam('compact', '0') === '1';
+
+// Apply theme
+if (THEME_PARAM === 'light') {
+  document.documentElement.classList.add('light-mode');
+}
+if (COMPACT_PARAM) {
+  document.body.classList.add('compact');
+}
+
+// ── Planet data ──────────────────────────────────────────────────────────────
+
+var VALID_PLANETS = ['mercury','venus','earth','mars','jupiter','saturn','uranus','neptune','moon'];
+
+var PLANET_NAMES = {
+  mercury:'Mercury', venus:'Venus', earth:'Earth', mars:'Mars',
+  jupiter:'Jupiter', saturn:'Saturn', uranus:'Uranus', neptune:'Neptune', moon:'Moon'
+};
+var PLANET_ICONS = {
+  mercury:'\u263F', venus:'\u2640', earth:'\uD83C\uDF0D', mars:'\u2642',
+  jupiter:'\u2643', saturn:'\u2644', uranus:'\u2645', neptune:'\u2646', moon:'\uD83C\uDF19'
+};
+
+// Parse planets list from URL
+var requestedPlanets = PLANETS_PARAM.split(',')
+  .map(function(p) { return p.trim().toLowerCase(); })
+  .filter(function(p) { return VALID_PLANETS.indexOf(p) !== -1; });
+
+if (requestedPlanets.length === 0) requestedPlanets = ['earth', 'mars', 'moon'];
+
+// ── Utilities ────────────────────────────────────────────────────────────────
+
+function pad2(n) { return String(Math.floor(Math.abs(n))).padStart(2, '0'); }
+
+function formatLT(secs) {
+  var s = Math.round(secs);
+  if (s < 60) return s + 's';
+  var m = Math.floor(s / 60), r = s % 60;
+  if (m < 60) return m + 'm ' + r + 's';
+  var h = Math.floor(m / 60), rm = m % 60;
+  return h + 'h ' + rm + 'm';
+}
+
+// ── Card creation ────────────────────────────────────────────────────────────
+
+function makeCard(planetKey) {
+  var card = document.createElement('div');
+  card.className = 'clock-card';
+  card.setAttribute('role', 'listitem');
+  card.setAttribute('aria-label', (PLANET_NAMES[planetKey] || planetKey) + ' clock');
+  card.dataset.planet = planetKey;
+
+  card.innerHTML =
+    '<div class="card-header">' +
+      '<div class="planet-label">' +
+        '<span class="planet-icon"></span>' +
+        '<span class="planet-name"></span>' +
+      '</div>' +
+      '<span class="status-pill"></span>' +
+    '</div>' +
+    '<div class="time-display">--:--:--</div>' +
+    '<div class="time-sub"></div>' +
+    '<hr class="divider">' +
+    '<div class="lt-row">' +
+      '<span class="lt-icon" aria-hidden="true">&#x2197;</span>' +
+      '<span>Earth</span>' +
+      '<span class="lt-val">&#x2014;</span>' +
+      '<span class="lt-au"></span>' +
+    '</div>';
+
+  return card;
+}
+
+// ── Render ───────────────────────────────────────────────────────────────────
+
+function renderCard(card) {
+  var PT = window.PlanetTime;
+  if (!PT) return;
+
+  var planetKey = card.dataset.planet;
+  var now = new Date();
+  var pt = PT.getPlanetTime(planetKey, now, 0);
+  if (!pt) return;
+
+  // Time
+  var hh = pad2(pt.hour);
+  var mm = pad2(pt.minute);
+  var ss = pad2(pt.second !== undefined ? pt.second : 0);
+  card.querySelector('.time-display').textContent = hh + ':' + mm + ':' + ss;
+
+  // Planet icon + name
+  card.querySelector('.planet-icon').textContent = PLANET_ICONS[planetKey] || '';
+  card.querySelector('.planet-name').textContent = PLANET_NAMES[planetKey] || planetKey;
+
+  // Status pill
+  var pill = card.querySelector('.status-pill');
+  var isWork = pt.isWorkHour !== undefined ? pt.isWorkHour :
+               (pt.is_work_hour !== undefined ? pt.is_work_hour :
+               (pt.isWorkPeriod !== undefined ? pt.isWorkPeriod : false));
+  pill.textContent = isWork ? 'Work' : 'Rest';
+  pill.className   = 'status-pill ' + (isWork ? 'work' : 'rest');
+
+  // Sub-line
+  var sub = card.querySelector('.time-sub');
+  var dayNum = pt.dayNumber !== undefined ? pt.dayNumber : (pt.day_number !== undefined ? pt.day_number : '?');
+  if (planetKey === 'mars' && pt.solInfo != null) {
+    sub.textContent = 'Sol ' + pt.solInfo.solInYear + ' of ' + pt.solInfo.solsPerYear +
+                      ' \u00B7 Day ' + dayNum;
+  } else {
+    sub.textContent = 'UTC+0 \u00B7 Day ' + dayNum;
+  }
+
+  // Light-travel row
+  var ltRow  = card.querySelector('.lt-row');
+  var divider = card.querySelector('.divider');
+  if (planetKey === 'earth' || planetKey === 'moon') {
+    ltRow.style.display = 'none';
+    divider.style.display = 'none';
+  } else {
+    ltRow.style.display = '';
+    divider.style.display = '';
+    var ltSec = PT.lightTravelSeconds(planetKey, 'earth', now);
+    var auDist = PT.bodyDistance(planetKey, 'earth', now);
+    card.querySelector('.lt-val').textContent = formatLT(ltSec);
+    card.querySelector('.lt-au').textContent  = auDist.toFixed(3) + ' AU';
+  }
+}
+
+function renderAll() {
+  var cards = document.querySelectorAll('.clock-card');
+  cards.forEach(function(c) { renderCard(c); });
+}
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+
+function startWidget() {
+  var row = document.getElementById('widget-row');
+  requestedPlanets.forEach(function(p) {
+    row.appendChild(makeCard(p));
+  });
+  renderAll();
+  setInterval(renderAll, 1000);
+}
+
+// Expose for testing
+window._widgetState = {
+  planets: requestedPlanets,
+  theme: THEME_PARAM,
+  compact: COMPACT_PARAM,
+  renderAll: renderAll
+};
+
+if (window.PlanetTime) {
+  startWidget();
+} else {
+  window.addEventListener('load', function() {
+    if (window.PlanetTime) {
+      startWidget();
+    } else {
+      var t = setInterval(function() {
+        if (window.PlanetTime) { clearInterval(t); startWidget(); }
+      }, 50);
+    }
+  });
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Planetary Events — InterPlanet</title>
+  <link rel="icon" type="image/x-icon" href="assets/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
+  <meta name="theme-color" content="#060614">
+  <meta name="description" content="Upcoming planetary conjunctions, oppositions, and Earth-Mars communication windows for the next 12 months.">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/fontawesome.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/solid.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
+  <script src="planet-time.js?v=1.1.0"></script>
+  <script src="assets/i18n.js?v=1.8.4"></script>
+  <style>
+    *,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #060614;
+      --surface: rgba(255,255,255,.04);
+      --border: rgba(255,255,255,.09);
+      --text: rgba(255,255,255,.92);
+      --text-muted: rgba(255,255,255,.55);
+      --card-bg: rgba(255,255,255,.05);
+      --accent: #3563c8;
+      --accent-h: #4472d8;
+      --tag-conjunction: rgba(220,80,60,.18);
+      --tag-conjunction-text: #e87060;
+      --tag-opposition: rgba(60,180,80,.18);
+      --tag-opposition-text: #4caf70;
+      --tag-blackout: rgba(220,80,60,.14);
+      --tag-blackout-text: #e0a060;
+      --tag-window: rgba(60,140,220,.16);
+      --tag-window-text: #5b9de8;
+    }
+    html.light-mode {
+      --bg: #f5f6fa;
+      --surface: rgba(0,0,0,.04);
+      --border: rgba(0,0,0,.09);
+      --text: rgba(0,0,0,.87);
+      --text-muted: rgba(0,0,0,.55);
+      --card-bg: rgba(0,0,0,.04);
+      --tag-conjunction: rgba(200,60,40,.12);
+      --tag-conjunction-text: #a52818;
+      --tag-opposition: rgba(40,160,60,.12);
+      --tag-opposition-text: #1b5e28;
+      --tag-blackout: rgba(200,100,20,.12);
+      --tag-blackout-text: #7a3e08;
+      --tag-window: rgba(40,120,200,.12);
+      --tag-window-text: #1a50a0;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      min-height: 100vh;
+      padding-bottom: 4rem;
+    }
+
+    a { color: inherit; }
+
+    .wrap {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 1.5rem 1rem;
+    }
+
+    /* ── Top bar ─────────────────────────────────────────────────────── */
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      margin-bottom: 1.75rem;
+      flex-wrap: wrap;
+    }
+    .back-link {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: .82rem;
+      display: flex;
+      align-items: center;
+      gap: .3rem;
+      transition: color .15s;
+    }
+    .back-link:hover { color: var(--text); }
+    .wordmark {
+      font-size: 1.05rem;
+      font-weight: 700;
+      letter-spacing: -.01em;
+    }
+    .wordmark i { margin-right: .35rem; }
+
+    /* ── Page header ─────────────────────────────────────────────────── */
+    .page-header {
+      margin-bottom: 1.5rem;
+    }
+    .page-title {
+      font-size: 1.6rem;
+      font-weight: 800;
+      letter-spacing: -.02em;
+      margin-bottom: .3rem;
+    }
+    .page-subtitle {
+      font-size: .9rem;
+      color: var(--text-muted);
+    }
+
+    /* ── Filter bar ──────────────────────────────────────────────────── */
+    .filter-bar {
+      display: flex;
+      gap: .4rem;
+      flex-wrap: wrap;
+      margin-bottom: 1.5rem;
+      align-items: center;
+    }
+    .filter-label {
+      font-size: .72rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      margin-right: .2rem;
+    }
+    .filter-btn {
+      background: rgba(255,255,255,.06);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      color: var(--text);
+      font-size: .78rem;
+      font-weight: 600;
+      padding: .3rem .75rem;
+      cursor: pointer;
+      transition: background .15s, border-color .15s, color .15s;
+      letter-spacing: .02em;
+    }
+    .filter-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .filter-btn:hover:not(.active) {
+      background: rgba(255,255,255,.11);
+    }
+    html.light-mode .filter-btn {
+      background: rgba(0,0,0,.06);
+    }
+    html.light-mode .filter-btn:hover:not(.active) {
+      background: rgba(0,0,0,.1);
+    }
+    /* Restore active state — overrides html.light-mode .filter-btn specificity */
+    html.light-mode .filter-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    /* ── Event cards ─────────────────────────────────────────────────── */
+    #events-list {
+      display: flex;
+      flex-direction: column;
+      gap: .65rem;
+    }
+
+    .event-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem 1.15rem;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: .5rem .85rem;
+      align-items: start;
+    }
+
+    .event-icon {
+      font-size: 1.35rem;
+      line-height: 1;
+      padding-top: .05rem;
+    }
+
+    .event-body { min-width: 0; }
+
+    .event-title {
+      font-size: .92rem;
+      font-weight: 700;
+      margin-bottom: .18rem;
+      line-height: 1.25;
+    }
+
+    .event-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .3rem .65rem;
+      font-size: .74rem;
+      color: var(--text-muted);
+      align-items: center;
+    }
+
+    .event-meta-item {
+      display: flex;
+      align-items: center;
+      gap: .2rem;
+    }
+
+    .event-tag {
+      font-size: .64rem;
+      font-weight: 700;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      padding: .12rem .42rem;
+      border-radius: 4px;
+      white-space: nowrap;
+    }
+    .event-tag.conjunction {
+      background: var(--tag-conjunction);
+      color: var(--tag-conjunction-text);
+    }
+    .event-tag.opposition {
+      background: var(--tag-opposition);
+      color: var(--tag-opposition-text);
+    }
+    .event-tag.blackout {
+      background: var(--tag-blackout);
+      color: var(--tag-blackout-text);
+    }
+    .event-tag.window {
+      background: var(--tag-window);
+      color: var(--tag-window-text);
+    }
+
+    .event-date {
+      font-size: .8rem;
+      color: var(--text-muted);
+      white-space: nowrap;
+      padding-top: .1rem;
+      text-align: right;
+    }
+    .event-date strong {
+      display: block;
+      font-size: .9rem;
+      color: var(--text);
+      font-weight: 700;
+    }
+
+    /* ── Empty state ─────────────────────────────────────────────────── */
+    .empty-state {
+      text-align: center;
+      padding: 3rem 1rem;
+      color: var(--text-muted);
+      font-size: .9rem;
+    }
+
+    /* ── Loading ─────────────────────────────────────────────────────── */
+    .loading {
+      text-align: center;
+      padding: 2.5rem 1rem;
+      color: var(--text-muted);
+      font-size: .88rem;
+    }
+
+    /* ── Stats bar ───────────────────────────────────────────────────── */
+    .stats-bar {
+      font-size: .74rem;
+      color: var(--text-muted);
+      margin-bottom: .9rem;
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      flex-wrap: wrap;
+    }
+    .stats-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      opacity: .4;
+    }
+
+    /* ── Responsive ──────────────────────────────────────────────────── */
+    @media (max-width: 520px) {
+      .event-card {
+        grid-template-columns: auto 1fr;
+      }
+      .event-date {
+        grid-column: 2;
+        text-align: left;
+        padding-top: 0;
+      }
+    }
+
+    /* Skip link */
+    .skip-link{position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden}
+    .skip-link:focus{position:static;width:auto;height:auto;overflow:visible;padding:.35rem .75rem;background:var(--accent);color:#fff;border-radius:4px;font-size:.8rem;margin:.25rem;display:inline-block}
+  </style>
+</head>
+<body>
+<a class="skip-link" href="#main-content">Skip to content</a>
+
+<div class="wrap">
+
+  <!-- Top bar -->
+  <div class="topbar">
+    <a href="index.html" class="back-link" aria-label="Back to InterPlanet">
+      <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> InterPlanet
+    </a>
+  </div>
+
+  <!-- Page header -->
+  <div class="page-header">
+    <h1 class="page-title" data-i18n="events.title">Planetary Events</h1>
+    <p class="page-subtitle" data-i18n="events.subtitle">Upcoming conjunctions, oppositions &amp; communication windows</p>
+  </div>
+
+  <!-- Planet filter -->
+  <div class="filter-bar" role="group" aria-label="Filter by planet pair">
+    <span class="filter-label" data-i18n="events.filter.label">Show:</span>
+    <button class="filter-btn active" data-filter="all" data-i18n="events.filter.all">All planets</button>
+    <button class="filter-btn" data-filter="earth-mars" data-i18n="events.filter.earth_mars">Earth–Mars</button>
+    <button class="filter-btn" data-filter="earth-jupiter" data-i18n="events.filter.earth_jupiter">Earth–Jupiter</button>
+    <button class="filter-btn" data-filter="earth-saturn" data-i18n="events.filter.earth_saturn">Earth–Saturn</button>
+  </div>
+
+  <!-- Events list -->
+  <main id="main-content" tabindex="-1">
+    <div class="loading" id="loading-msg" aria-live="polite" data-i18n="events.loading">Scanning next 12 months…</div>
+    <div class="stats-bar" id="stats-bar" style="display:none;" aria-live="polite"></div>
+    <div id="events-list" aria-label="Upcoming planetary events"></div>
+  </main>
+
+</div><!-- .wrap -->
+
+<script>
+'use strict';
+
+// ── Planet keys (from planet-time.js PLANETS object) ─────────────────────────
+var PT = window.PlanetTime;
+
+var PAIRS = [
+  { id: 'earth-mars',    keyA: 'earth', keyB: 'mars',    labelA: 'Earth', labelB: 'Mars',    // Light-time threshold: ~1340 s (avg Earth-Mars)
+    threshold: 1340 },
+  { id: 'earth-jupiter', keyA: 'earth', keyB: 'jupiter', labelA: 'Earth', labelB: 'Jupiter',
+    threshold: 2640 },
+  { id: 'earth-saturn',  keyA: 'earth', keyB: 'saturn',  labelA: 'Earth', labelB: 'Saturn',
+    threshold: 4800 },
+];
+
+// ── Utility: format a Date to YYYY-MM-DD ──────────────────────────────────────
+function fmtDate(ms) {
+  var d = new Date(ms);
+  var y = d.getUTCFullYear();
+  var m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  var day = String(d.getUTCDate()).padStart(2, '0');
+  return y + '-' + m + '-' + day;
+}
+
+// ── Utility: format a Date for display (e.g. "Mar 15") ───────────────────────
+function fmtDateShort(ms) {
+  var d = new Date(ms);
+  var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return months[d.getUTCMonth()] + ' ' + d.getUTCDate();
+}
+
+// ── Utility: format a Date for display (e.g. "Mar 15, 2026") ─────────────────
+function fmtDateLong(ms) {
+  var d = new Date(ms);
+  var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return months[d.getUTCMonth()] + ' ' + d.getUTCDate() + ', ' + d.getUTCFullYear();
+}
+
+// ── Scan events for a single planet pair ─────────────────────────────────────
+function scanPair(pair, fromMs, toMs) {
+  var events = [];
+  var STEP = 86400000; // 1 day in ms
+
+  // Rolling state for line-of-sight
+  var wasBlocked = null;
+  var blackoutStart = null;
+
+  // Distance samples for opposition detection
+  var prevDist = null;
+  var prevPrevDist = null;
+
+  for (var t = fromMs; t <= toMs; t += STEP) {
+    var date = new Date(t);
+    var los = PT.checkLineOfSight(pair.keyA, pair.keyB, date);
+    var dist = PT.bodyDistance(pair.keyA, pair.keyB, date);
+    var lts = PT.lightTravelSeconds(pair.keyA, pair.keyB, date);
+
+    // ── Conjunction / blackout detection ─────────────────────────────────────
+    if (wasBlocked === null) {
+      wasBlocked = los.blocked;
+      if (los.blocked) blackoutStart = t;
+    } else {
+      if (!wasBlocked && los.blocked) {
+        // Blackout started
+        blackoutStart = t;
+        wasBlocked = true;
+      } else if (wasBlocked && !los.blocked) {
+        // Blackout ended — record conjunction event at midpoint
+        var midMs = blackoutStart + (t - blackoutStart) / 2;
+        var midDate = new Date(midMs);
+        var midDist = PT.bodyDistance(pair.keyA, pair.keyB, midDate);
+        var midLts = PT.lightTravelSeconds(pair.keyA, pair.keyB, midDate);
+        var durationDays = Math.round((t - blackoutStart) / 86400000);
+
+        events.push({
+          type: 'conjunction',
+          pairId: pair.id,
+          planetA: pair.labelA,
+          planetB: pair.labelB,
+          dateMs: midMs,
+          dateStr: fmtDate(midMs),
+          lightTravelS: Math.round(midLts),
+          distanceAU: Math.round(midDist * 1000) / 1000,
+          durationDays: durationDays,
+          label: 'Solar Conjunction: ' + pair.labelA + '\u2013' + pair.labelB,
+          icon: '\uD83D\uDD34', // 🔴
+          tagClass: 'conjunction',
+          tagLabel: 'Solar Conjunction',
+        });
+
+        wasBlocked = false;
+        blackoutStart = null;
+      }
+    }
+
+    // ── Opposition detection (local distance minimum) ─────────────────────────
+    // An opposition occurs when Earth-planet distance is at a local minimum
+    // (planet is on the opposite side of the Sun from Earth's perspective)
+    if (prevPrevDist !== null && prevDist !== null) {
+      // Local minimum: previous sample was less than both neighbors
+      if (prevDist < prevPrevDist && prevDist < dist) {
+        var oppMs = t - STEP; // previous day was the minimum
+        var oppDate = new Date(oppMs);
+        var oppDist = PT.bodyDistance(pair.keyA, pair.keyB, oppDate);
+        var oppLts = PT.lightTravelSeconds(pair.keyA, pair.keyB, oppDate);
+
+        // Only record if planet is fairly close (opposition, not conjunction)
+        // Skip if this is during a blocked period (solar conjunction)
+        var oppLos = PT.checkLineOfSight(pair.keyA, pair.keyB, oppDate);
+        if (!oppLos.blocked) {
+          events.push({
+            type: 'opposition',
+            pairId: pair.id,
+            planetA: pair.labelA,
+            planetB: pair.labelB,
+            dateMs: oppMs,
+            dateStr: fmtDate(oppMs),
+            lightTravelS: Math.round(oppLts),
+            distanceAU: Math.round(oppDist * 1000) / 1000,
+            durationDays: null,
+            label: 'Opposition: ' + pair.labelA + '\u2013' + pair.labelB,
+            icon: '\uD83D\uDFE2', // 🟢
+            tagClass: 'opposition',
+            tagLabel: 'Opposition',
+          });
+        }
+      }
+    }
+
+    prevPrevDist = prevDist;
+    prevDist = dist;
+  }
+
+  // If still in a blackout at end of scan window, close it
+  if (wasBlocked && blackoutStart !== null) {
+    var endMs = toMs;
+    var midMs2 = blackoutStart + (endMs - blackoutStart) / 2;
+    var midDate2 = new Date(midMs2);
+    var midDist2 = PT.bodyDistance(pair.keyA, pair.keyB, midDate2);
+    var midLts2 = PT.lightTravelSeconds(pair.keyA, pair.keyB, midDate2);
+    var dur2 = Math.round((endMs - blackoutStart) / 86400000);
+
+    events.push({
+      type: 'conjunction',
+      pairId: pair.id,
+      planetA: pair.labelA,
+      planetB: pair.labelB,
+      dateMs: midMs2,
+      dateStr: fmtDate(midMs2),
+      lightTravelS: Math.round(midLts2),
+      distanceAU: Math.round(midDist2 * 1000) / 1000,
+      durationDays: dur2,
+      label: 'Solar Conjunction: ' + pair.labelA + '\u2013' + pair.labelB,
+      icon: '\uD83D\uDD34',
+      tagClass: 'conjunction',
+      tagLabel: 'Solar Conjunction',
+    });
+  }
+
+  return events;
+}
+
+// ── Scan all pairs ─────────────────────────────────────────────────────────────
+function scanEvents(fromMs, toMs, pairFilter) {
+  var allEvents = [];
+
+  PAIRS.forEach(function(pair) {
+    if (pairFilter !== 'all' && pair.id !== pairFilter) return;
+    var pairEvents = scanPair(pair, fromMs, toMs);
+    allEvents = allEvents.concat(pairEvents);
+  });
+
+  // Sort chronologically
+  allEvents.sort(function(a, b) { return a.dateMs - b.dateMs; });
+
+  return allEvents;
+}
+
+// ── Format light travel time ───────────────────────────────────────────────────
+function fmtLightTime(seconds) {
+  if (seconds < 60) return Math.round(seconds) + ' sec';
+  if (seconds < 3600) return (seconds / 60).toFixed(1) + ' min';
+  var h = Math.floor(seconds / 3600);
+  var m = Math.round((seconds % 3600) / 60);
+  return h + 'h ' + m + 'm';
+}
+
+// ── Render events ─────────────────────────────────────────────────────────────
+function renderEvents(events) {
+  var list = document.getElementById('events-list');
+  var statsBar = document.getElementById('stats-bar');
+  var loadingMsg = document.getElementById('loading-msg');
+
+  loadingMsg.style.display = 'none';
+
+  if (!events.length) {
+    list.innerHTML = '<div class="empty-state">No events found for the selected filter.</div>';
+    statsBar.style.display = 'none';
+    return;
+  }
+
+  // Stats
+  var conjCount = events.filter(function(e) { return e.type === 'conjunction'; }).length;
+  var oppCount  = events.filter(function(e) { return e.type === 'opposition'; }).length;
+  statsBar.style.display = 'flex';
+  statsBar.innerHTML =
+    '<span>' + events.length + ' events</span>' +
+    '<span class="stats-dot"></span>' +
+    '<span>' + conjCount + ' conjunction' + (conjCount !== 1 ? 's' : '') + '</span>' +
+    '<span class="stats-dot"></span>' +
+    '<span>' + oppCount + ' opposition' + (oppCount !== 1 ? 's' : '') + '</span>';
+
+  // Cards
+  var html = '';
+  events.forEach(function(ev) {
+    var durationHtml = '';
+    if (ev.durationDays !== null && ev.durationDays > 0) {
+      durationHtml = '<span class="event-meta-item"><i class="fa-solid fa-clock" aria-hidden="true"></i> ~' + ev.durationDays + ' day' + (ev.durationDays !== 1 ? 's' : '') + '</span>';
+    }
+
+    html +=
+      '<div class="event-card" data-pair="' + ev.pairId + '" data-type="' + ev.type + '">' +
+        '<div class="event-icon" aria-hidden="true">' + ev.icon + '</div>' +
+        '<div class="event-body">' +
+          '<div class="event-title">' +
+            '<span class="event-tag ' + ev.tagClass + '">' + ev.tagLabel + '</span> ' +
+            ev.planetA + '\u2013' + ev.planetB +
+          '</div>' +
+          '<div class="event-meta">' +
+            '<span class="event-meta-item"><i class="fa-solid fa-signal" aria-hidden="true"></i> ' + fmtLightTime(ev.lightTravelS) + ' signal delay</span>' +
+            '<span class="event-meta-item"><i class="fa-solid fa-ruler" aria-hidden="true"></i> ' + ev.distanceAU.toFixed(3) + ' AU</span>' +
+            durationHtml +
+          '</div>' +
+        '</div>' +
+        '<div class="event-date">' +
+          '<strong>' + fmtDateShort(ev.dateMs) + '</strong>' +
+          fmtDate(ev.dateMs).slice(0, 4) +
+        '</div>' +
+      '</div>';
+  });
+
+  list.innerHTML = html;
+}
+
+// ── Filter state ──────────────────────────────────────────────────────────────
+var currentFilter = 'all';
+
+function getSelectedFilter() {
+  return currentFilter;
+}
+
+function refresh() {
+  var now = Date.now();
+  var toMs = now + 365 * 86400000;
+  var events = scanEvents(now, toMs, currentFilter);
+  renderEvents(events);
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', function() {
+  // Apply i18n translations if available
+  if (window.I18N) window.I18N.applyTranslations();
+
+  // Wire up filter buttons
+  var btns = document.querySelectorAll('.filter-btn');
+  btns.forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      btns.forEach(function(b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      currentFilter = btn.getAttribute('data-filter');
+      document.getElementById('events-list').innerHTML = '';
+      document.getElementById('loading-msg').style.display = '';
+      // Small timeout to allow repaint before synchronous scan
+      setTimeout(refresh, 10);
+    });
+  });
+
+  // Initial scan
+  refresh();
+});
+</script>
+
+</body>
+</html>

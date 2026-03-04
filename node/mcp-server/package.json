@@ -1,0 +1,20 @@
+{
+  "name": "@interplanet/mcp",
+  "version": "0.1.0",
+  "description": "MCP server exposing InterPlanet Time functions as AI tools",
+  "main": "server.js",
+  "bin": {
+    "interplanet-mcp": "server.js"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/test_mcp.js"
+  },
+  "keywords": [
+    "mcp",
+    "interplanet",
+    "space",
+    "planet-time"
+  ],
+  "license": "MIT"
+}

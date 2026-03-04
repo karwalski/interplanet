@@ -1,0 +1,8 @@
+name: interplanet_time
+description: Planet time calculations for Dart — port of planet-time.js
+version: 0.1.0
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+dependencies: {}
+dev_dependencies:
+  test: ^1.24.0

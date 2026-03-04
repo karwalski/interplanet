@@ -1,0 +1,18 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "interplanet-ltx"
+version = "1.0.0"
+description = "LTX (Light-Time eXchange) Python SDK — Python wrapper for the LTX protocol"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []   # stdlib only; interplanet-time is optional
+
+[project.optional-dependencies]
+time = ["interplanet-time>=0.1.0"]
+dev  = ["pytest>=7"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/interplanet_ltx"]

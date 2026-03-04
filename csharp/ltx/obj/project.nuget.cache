@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "dgSpecHash": "0GFPnlEdnRI=",
+  "success": true,
+  "projectFilePath": "/Users/matthew.watt/claude/interplanet-github/csharp/ltx/InterplanetLTX.csproj",
+  "expectedPackageFiles": [
+    "/Users/matthew.watt/.nuget/packages/libsodium/1.0.19/libsodium.1.0.19.nupkg.sha512",
+    "/Users/matthew.watt/.nuget/packages/nsec.cryptography/24.4.0/nsec.cryptography.24.4.0.nupkg.sha512"
+  ],
+  "logs": []
+}

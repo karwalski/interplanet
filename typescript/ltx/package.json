@@ -1,0 +1,31 @@
+{
+  "name": "@interplanet/ltx",
+  "version": "1.0.0",
+  "description": "LTX (Light-Time eXchange) TypeScript SDK — interplanetary meeting protocol",
+  "keywords": ["interplanetary", "ltx", "meeting", "mars", "light-time", "typescript", "space"],
+  "author": "InterPlanet contributors",
+  "license": "MIT",
+  "homepage": "https://interplanet.live",
+  "repository": { "type": "git", "url": "https://github.com/karwalski/interplanet" },
+  "main": "dist/cjs/index.js",
+  "module": "dist/esm/index.js",
+  "types": "dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js",
+      "types": "./dist/types/index.d.ts"
+    }
+  },
+  "files": ["dist/", "src/"],
+  "scripts": {
+    "build": "npm run build:cjs && npm run build:esm",
+    "build:cjs": "tsc -p tsconfig.cjs.json",
+    "build:esm": "tsc -p tsconfig.esm.json",
+    "test": "node tests/run.js"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  },
+  "engines": { "node": ">=16" }
+}

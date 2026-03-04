@@ -1,0 +1,20 @@
+[package]
+name = "interplanet-ltx"
+version = "1.0.0"
+edition = "2021"
+rust-version = "1.70"
+description = "Rust port of the InterPlanet LTX (Light-Time eXchange) SDK"
+license = "MIT"
+
+[lib]
+name = "interplanet_ltx"
+path = "src/lib.rs"
+
+[dependencies]
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+sha2 = "0.10"
+rand = "0.8"
+base64 = "0.21"
+
+[dev-dependencies]
+# none

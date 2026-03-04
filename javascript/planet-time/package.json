@@ -1,0 +1,42 @@
+{
+  "name": "interplanet-planet-time",
+  "version": "1.4.0",
+  "description": "Planetary time, orbital mechanics, and interplanetary meeting scheduler — for all 9 bodies in our Solar System.",
+  "keywords": [
+    "interplanetary", "planet", "time", "mars", "astronomy",
+    "orbital-mechanics", "light-travel", "solar-system", "scheduling"
+  ],
+  "author": "InterPlanet contributors",
+  "license": "MIT",
+  "homepage": "https://interplanet.live",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/karwalski/interplanet"
+  },
+  "bugs": {
+    "url": "https://github.com/karwalski/interplanet/issues"
+  },
+  "main": "planet-time.js",
+  "module": "dist/planet-time.esm.js",
+  "browser": "dist/planet-time.iife.js",
+  "types": "dist/planet-time.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/planet-time.esm.js",
+      "require": "./planet-time.js",
+      "default": "./planet-time.js"
+    }
+  },
+  "files": [
+    "planet-time.js",
+    "dist/",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --input-type=module < build.mjs && node -e \"const pt = require('./planet-time.js'); console.assert(typeof pt.getPlanetTime === 'function', 'CJS ok');\""
+  },
+  "engines": {
+    "node": ">=14"
+  }
+}

@@ -12,7 +12,84 @@ db-config.php
 db-config.*.php
 *.env
 .env*
+share.php
+api.php
+api.html
+api.js
+slm.php
+dtn.php
 
 # Source favicon (compiled versions are committed)
 favicon-new.png
 favicon.png
+
+# Build artifacts — Rust
+target/
+
+# Build artifacts — Zig
+.zig-cache/
+zig-out/
+
+# Build artifacts — Go
+*.test
+vendor/
+
+# Build artifacts — Java / Kotlin / Scala
+*.class
+*.jar
+build/
+out/
+.gradle/
+
+# Build artifacts — Dart / Flutter
+.dart_tool/
+.pub-cache/
+.pub/
+*.dill
+
+# Build artifacts — Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.eggs/
+*.egg-info/
+dist/
+build/
+htmlcov/
+.coverage
+.pytest_cache/
+
+# Build artifacts — Node / JS
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Build artifacts — Swift
+.build/
+*.xcworkspace
+*.xcodeproj
+
+# Build artifacts — OCaml
+_build/
+*.byte
+*.native
+*.cmo
+*.cmi
+*.cmx
+*.o
+
+# Build artifacts — Elixir
+_build/
+deps/
+.elixir_ls/
+*.beam
+
+# Build artifacts — Lua
+*.so
+luarocks/
+
+# Build artifacts — R
+*.Rcheck/
+*.Rdata
+*.Rhistory

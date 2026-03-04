@@ -1,0 +1,17 @@
+{
+  "name": "@interplanet/ltx-relay",
+  "version": "0.1.0",
+  "description": "LTX DTN store-and-forward relay server simulating light-time delays",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/test_relay.js",
+    "dev": "node server.js --port 3030"
+  },
+  "dependencies": {},
+  "devDependencies": {},
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="x-dns-prefetch-control" content="on">
+<title>LTX Dashboard — InterPlanet</title>
+<!-- DNS prefetch for external domains -->
+<link rel="dns-prefetch" href="//cdnjs.cloudflare.com">
+<link rel="dns-prefetch" href="//fonts.googleapis.com">
+<!-- Preconnect for domains used in the critical path -->
+<link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+<link rel="icon" type="image/x-icon" href="assets/favicon.ico">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16x16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
+<meta name="theme-color" content="#060614">
+<meta name="description" content="LTX Live Session Dashboard — monitor active sessions, relay status, and segment clock.">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#060614;--surface:rgba(255,255,255,.04);--border:rgba(255,255,255,.09);
+  --text:rgba(255,255,255,.92);--text-muted:rgba(255,255,255,.60);
+  --accent:#3563c8;--accent-h:#4472d8;
+  --green:#4caf50;--red:#f44336;--orange:#ff9800;--cyan:#00bcd4;
+  --tx:#3a8de8;--rx:#4caf50;--caucus:#9c27b0;
+  --buffer:#607d8b;--merge:#ff9800;--confirm:#00bcd4;
+}
+html.light-mode{
+  --bg:#f5f6fa;--surface:rgba(0,0,0,.04);--border:rgba(0,0,0,.09);
+  --text:rgba(0,0,0,.87);--text-muted:rgba(0,0,0,.65);
+}
+
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;min-height:100vh;padding-bottom:4rem}
+a{color:inherit}
+
+.wrap{max-width:740px;margin:0 auto;padding:1.5rem 1rem}
+
+/* Top bar */
+.topbar{display:flex;align-items:center;gap:.75rem;margin-bottom:1.5rem;flex-wrap:wrap}
+.wordmark{font-size:1.1rem;font-weight:700;letter-spacing:.02em;display:flex;align-items:center;gap:.4rem}
+.topbar-actions{margin-left:auto;display:flex;gap:.5rem;align-items:center}
+.btn{display:inline-flex;align-items:center;gap:.4rem;padding:.45rem .9rem;border-radius:8px;border:none;cursor:pointer;font-size:.85rem;font-weight:600;transition:background .15s,color .15s;text-decoration:none}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:var(--accent-h)}
+.btn-ghost{background:transparent;color:var(--text);border:1px solid var(--border)}
+.btn-ghost:hover{background:var(--surface)}
+
+/* Session header */
+.session-header{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1rem 1.25rem;margin-bottom:1rem}
+.session-title-row{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:.4rem}
+.session-title{font-size:1.15rem;font-weight:700}
+.status-pill{font-size:.72rem;font-weight:700;letter-spacing:.08em;padding:.25em .7em;border-radius:100px;text-transform:uppercase}
+.status-live{background:rgba(76,175,80,.18);color:#4caf50;border:1px solid rgba(76,175,80,.35)}
+.status-pending{background:rgba(255,152,0,.18);color:#ff9800;border:1px solid rgba(255,152,0,.35)}
+.status-complete{background:rgba(255,255,255,.1);color:var(--text-muted);border:1px solid var(--border)}
+.status-error{background:rgba(244,67,54,.18);color:#f44336;border:1px solid rgba(244,67,54,.35)}
+.session-meta{font-size:.8rem;color:var(--text-muted);font-family:'Courier New',monospace}
+
+/* Cards */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1rem 1.25rem;margin-bottom:1rem}
+.card-title{font-size:.75rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:.75rem}
+
+/* Node list */
+.node-list{display:flex;flex-direction:column;gap:.5rem}
+.node-row{display:flex;align-items:center;gap:.75rem;padding:.5rem .75rem;background:rgba(255,255,255,.03);border-radius:8px;border:1px solid var(--border)}
+.node-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.dot-green{background:#4caf50;box-shadow:0 0 6px rgba(76,175,80,.6)}
+.dot-orange{background:#ff9800;box-shadow:0 0 6px rgba(255,152,0,.6)}
+.dot-red{background:#f44336;box-shadow:0 0 6px rgba(244,67,54,.6)}
+.dot-grey{background:rgba(255,255,255,.25)}
+.node-name{font-weight:600;font-size:.9rem;flex:1}
+.node-time{font-size:.82rem;color:var(--text-muted);font-family:'Courier New',monospace;white-space:nowrap}
+.node-status-badge{font-size:.7rem;font-weight:700;padding:.15em .55em;border-radius:100px;letter-spacing:.06em;text-transform:uppercase}
+.badge-work{background:rgba(76,175,80,.18);color:#4caf50}
+.badge-rest{background:rgba(96,125,139,.18);color:#90a4ae}
+.badge-host{background:rgba(53,99,200,.2);color:#7ba3f0;margin-left:.25rem;font-size:.68rem}
+
+/* Segment clock */
+.segment-clock{position:relative}
+.seg-type-row{display:flex;align-items:baseline;gap:.75rem;margin-bottom:.6rem;flex-wrap:wrap}
+.seg-type-label{font-size:1.05rem;font-weight:800;letter-spacing:.04em}
+.seg-type-tx{color:#3a8de8}
+.seg-type-rx{color:#4caf50}
+.seg-type-caucus{color:#9c27b0}
+.seg-type-buffer{color:#607d8b}
+.seg-type-merge{color:#ff9800}
+.seg-type-confirm{color:#00bcd4}
+.seg-type-waiting{color:var(--text-muted)}
+.seg-type-complete{color:var(--text-muted)}
+.seg-time-remaining{font-size:.9rem;color:var(--text-muted);font-family:'Courier New',monospace}
+.progress-bar-wrap{height:10px;background:rgba(255,255,255,.08);border-radius:100px;overflow:hidden;margin-bottom:.6rem}
+.progress-bar-fill{height:100%;border-radius:100px;transition:width .5s linear}
+.fill-tx{background:#3a8de8}
+.fill-rx{background:#4caf50}
+.fill-caucus{background:#9c27b0}
+.fill-buffer{background:#607d8b}
+.fill-merge{background:#ff9800}
+.fill-confirm{background:#00bcd4}
+.fill-default{background:var(--accent)}
+.seg-relay-row{font-size:.82rem;color:var(--text-muted);margin-bottom:.5rem}
+.seg-relay-row strong{color:var(--text)}
+.seg-next{font-size:.78rem;color:var(--text-muted);border-top:1px solid var(--border);padding-top:.5rem;margin-top:.25rem}
+.seg-next strong{color:var(--text)}
+
+/* DTN status */
+.dtn-rows{display:flex;flex-direction:column;gap:.4rem}
+.dtn-row{display:flex;align-items:center;gap:.6rem;font-size:.87rem}
+.dtn-indicator{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.ind-green{background:#4caf50}
+.ind-orange{background:#ff9800}
+.ind-grey{background:rgba(255,255,255,.25)}
+.dtn-pair{color:var(--text-muted);font-size:.8rem;font-family:'Courier New',monospace}
+
+/* Relay server */
+.relay-grid{display:grid;grid-template-columns:1fr 1fr;gap:.5rem}
+.relay-stat{background:rgba(255,255,255,.03);border-radius:8px;padding:.5rem .75rem;border:1px solid var(--border)}
+.relay-stat-label{font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.2rem}
+.relay-stat-value{font-size:.95rem;font-weight:700}
+
+/* No-plan state */
+.no-plan{text-align:center;padding:3rem 1rem;color:var(--text-muted)}
+.no-plan .icon{font-size:3rem;margin-bottom:.75rem}
+.no-plan p{font-size:.95rem;margin-bottom:.5rem}
+.no-plan .hint{font-size:.8rem;color:var(--text-muted);font-family:'Courier New',monospace}
+.no-plan .demo-link{display:inline-block;margin-top:1.25rem;padding:.5rem 1.25rem;background:var(--accent);color:#fff;border-radius:8px;text-decoration:none;font-weight:700;font-size:.88rem}
+.no-plan .demo-link:hover{background:var(--accent-h)}
+
+/* Toast */
+.toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%);background:rgba(30,32,60,.95);border:1px solid var(--border);color:var(--text);padding:.6rem 1.2rem;border-radius:100px;font-size:.85rem;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s;z-index:9999}
+.toast.show{opacity:1}
+
+/* Responsive */
+@media(max-width:480px){
+  .relay-grid{grid-template-columns:1fr}
+  .topbar-actions{width:100%}
+  .session-title{font-size:1rem}
+}
+/* ── Skip navigation link ─────────────────────────────────────────────── */
+.skip-link{position:absolute;left:-9999px;top:0;z-index:9999;padding:.5rem 1rem;background:#0d0d1c;color:#fff;text-decoration:none;border-radius:0 0 6px 0;border:2px solid rgba(91,141,239,0.9)}
+.skip-link:focus{left:0}
+</style>
+</head>
+<body>
+<a href="#main-content" class="skip-link">Skip to main content</a>
+<div class="wrap" id="page-wrap">
+  <!-- Top bar -->
+  <div class="topbar">
+    <span class="wordmark" aria-label="InterPlanet LTX Dashboard">&#128760; InterPlanet LTX Dashboard</span>
+    <div class="topbar-actions">
+      <button class="btn btn-ghost" id="share-btn" aria-label="Copy share link">&#128279; Share</button>
+      <button class="btn btn-ghost" id="refresh-btn" aria-label="Refresh dashboard">&#8635; Refresh</button>
+    </div>
+  </div>
+
+  <!-- Session header -->
+  <div id="session-header" class="session-header" style="display:none" aria-live="polite">
+    <div class="session-title-row">
+      <span class="session-title" id="session-title-text">&#8212;</span>
+      <span class="status-pill" id="session-status-pill">&#8212;</span>
+      <span class="status-pill badge-host" id="session-mode-pill" style="display:none">&#8212;</span>
+    </div>
+    <div class="session-meta" id="session-plan-id">&#8212;</div>
+  </div>
+
+  <!-- Main content area -->
+  <div id="main-content" tabindex="-1"></div>
+
+  <!-- No-plan placeholder -->
+  <div id="no-plan" class="no-plan" style="display:none">
+    <div class="icon" aria-hidden="true">&#128760;</div>
+    <p>No LTX session loaded</p>
+    <p class="hint">Use ?demo=1, ?h=&lt;hash&gt;, or ?session=&lt;planId&gt;</p>
+    <a class="demo-link" href="?demo=1">Load demo session</a>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="planet-time.js?v=1.7.0"></script>
+<script>
+'use strict';
+
+/* ── Utilities ──────────────────────────────────────────────────────────── */
+
+function _b64enc(str) {
+  return btoa(unescape(encodeURIComponent(str)))
+    .replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+}
+
+function _b64dec(b64) {
+  const s = b64.replace(/-/g,'+').replace(/_/g,'/');
+  try { return decodeURIComponent(escape(atob(s))); } catch(e) { return null; }
+}
+
+function pad(n) { return String(n).padStart(2,'0'); }
+
+function fmtHMS(sec) {
+  sec = Math.max(0, Math.round(sec));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  if (h > 0) return h + ':' + pad(m) + ':' + pad(s);
+  return pad(m) + ':' + pad(s);
+}
+
+function fmtUTC(dt) { return dt.toISOString().slice(11,19) + ' UTC'; }
+
+function escHtml(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+
+function showToast(msg) {
+  var el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(el._t);
+  el._t = setTimeout(function(){ el.classList.remove('show'); }, 2200);
+}
+
+/* ── Plan helpers (mirrors ltx.html logic) ─────────────────────────────── */
+
+function computeSegs(cfg) {
+  var qMs = cfg.quantum * 60 * 1000;
+  var t   = new Date(cfg.start).getTime();
+  return cfg.segments.map(function(s) {
+    var durMs = s.q * qMs;
+    var seg   = { type: s.type, q: s.q, start: new Date(t), end: new Date(t + durMs), durMin: s.q * cfg.quantum };
+    t += durMs;
+    return seg;
+  });
+}
+
+function makePlanId(cfg) {
+  var date  = new Date(cfg.start).toISOString().slice(0,10).replace(/-/g,'');
+  var nodes = (cfg.nodes || []).map(function(n){ return n.id || n.name || '?'; }).join('+');
+  return ('LTX-' + date + '-' + nodes).slice(0, 32);
+}
+
+function encodeHash(cfg) { return '#l=' + _b64enc(JSON.stringify(cfg)); }
+
+function readHash() {
+  var m = location.hash.match(/^#l=([A-Za-z0-9_\-]+)$/);
+  if (!m) return null;
+  var json = _b64dec(m[1]);
+  if (!json) return null;
+  try { return JSON.parse(json); } catch(e) { return null; }
+}
+
+function upgradeConfig(cfg) {
+  if (cfg.v >= 2 && Array.isArray(cfg.nodes) && cfg.nodes.length) return cfg;
+  cfg.nodes = cfg.nodes || [];
+  if (!cfg.nodes.length) {
+    cfg.nodes.push({ id:'N0', name: cfg.host || 'Host', role:'HOST', delay:0, location:'earth' });
+    if (cfg.participant) cfg.nodes.push({ id:'N1', name: cfg.participant, role:'PARTICIPANT', delay: cfg.delay || 0, location:'mars' });
+  }
+  cfg.v = 2;
+  return cfg;
+}
+
+function segTypeColor(type) {
+  var map = { TX:'tx', RX:'rx', CAUCUS:'caucus', BUFFER:'buffer', MERGE:'merge', PLAN_CONFIRM:'confirm' };
+  return map[type] || 'default';
+}
+
+function segTypeLabel(type) {
+  var map = { TX:'TRANSMIT', RX:'RECEIVE', CAUCUS:'CAUCUS', BUFFER:'BUFFER', MERGE:'MERGE', PLAN_CONFIRM:'PLAN CONFIRM' };
+  return map[type] || type;
+}
+
+/* ── Demo plan ──────────────────────────────────────────────────────────── */
+
+function buildDemoCfg() {
+  var startMs = Date.now() - 10 * 60 * 1000; // started 10 minutes ago
+  return {
+    v:        2,
+    title:    'InterPlanet Plenary Session',
+    start:    new Date(startMs).toISOString(),
+    quantum:  5,
+    mode:     'LTX-LIVE',
+    nodes: [
+      { id:'N0', name:'Earth HQ',  role:'HOST',        delay:0,   location:'earth' },
+      { id:'N1', name:'Mars Base', role:'PARTICIPANT',  delay:863, location:'mars'  }
+    ],
+    segments: [
+      { type:'PLAN_CONFIRM', q:1 },
+      { type:'TX',           q:6 },
+      { type:'BUFFER',       q:1 },
+      { type:'RX',           q:6 },
+      { type:'CAUCUS',       q:4 },
+      { type:'MERGE',        q:2 }
+    ]
+  };
+}
+
+/* ── DTN helpers ────────────────────────────────────────────────────────── */
+
+function fmtDelaySec(sec) {
+  if (sec < 60) return sec + 's';
+  var m = Math.floor(sec / 60);
+  var s = sec % 60;
+  return s ? (m + 'm ' + s + 's') : (m + 'm');
+}
+
+function getDelayBetween(nodeA, nodeB) {
+  return Math.abs((nodeA.delay || 0) - (nodeB.delay || 0));
+}
+
+/* ── Node time display ──────────────────────────────────────────────────── */
+
+function getNodeTimeStr(node, nowMs) {
+  var dt = new Date(nowMs);
+  if (window.PlanetTime && node.location && node.location !== 'earth') {
+    try {
+      var pt = window.PlanetTime.getPlanetTime(node.location, dt, node.tzOffset || 0);
+      if (pt && pt.hour !== undefined) {
+        var loc = node.location.charAt(0).toUpperCase() + node.location.slice(1);
+        return pad(pt.hour) + ':' + pad(pt.minute) + ':' + pad(pt.second) + ' ' + loc + ' Sol';
+      }
+    } catch(e) { /* fallthrough */ }
+  }
+  var localMs = nowMs + ((node.tzOffset || 0) * 3600 * 1000);
+  return fmtUTC(new Date(localMs));
+}
+
+function getNodeStatus(node, nowMs) {
+  if (!window.PlanetTime || !node.location) return null;
+  try {
+    var pt = window.PlanetTime.getPlanetTime(node.location, new Date(nowMs), node.tzOffset || 0);
+    if (pt) return pt.isWorkHour ? 'work' : 'rest';
+  } catch(e) { /* ignore */ }
+  return null;
+}
+
+/* ── Render: nodes ──────────────────────────────────────────────────────── */
+
+function renderNodes(cfg, nowMs) {
+  var nodes = cfg.nodes || [];
+  var html  = '<div class="node-list">';
+  nodes.forEach(function(node) {
+    var timeStr   = getNodeTimeStr(node, nowMs);
+    var status    = getNodeStatus(node, nowMs);
+    var dotClass  = 'dot-green';
+    var badgeHtml = '';
+    if (status === 'rest') dotClass = 'dot-orange';
+    if (status !== null) {
+      var bClass = status === 'work' ? 'badge-work' : 'badge-rest';
+      var bLabel = status === 'work' ? 'Work' : 'Rest';
+      badgeHtml = '<span class="node-status-badge ' + bClass + '">' + bLabel + '</span>';
+    }
+    var roleHtml = node.role === 'HOST' ? '<span class="node-status-badge badge-host">Host</span>' : '';
+    html += '<div class="node-row">' +
+      '<span class="node-dot ' + dotClass + '" aria-hidden="true"></span>' +
+      '<span class="node-name">' + escHtml(node.name) + '</span>' +
+      badgeHtml + roleHtml +
+      '<span class="node-time">' + escHtml(timeStr) + '</span>' +
+      '</div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+/* ── Render: segment clock ──────────────────────────────────────────────── */
+
+function renderSegClock(segs, nowMs) {
+  if (!segs.length) return '<div class="segment-clock" id="segment-clock"><div class="seg-time-remaining">No segments</div></div>';
+
+  var firstStart = segs[0].start.getTime();
+  var lastEnd    = segs[segs.length - 1].end.getTime();
+
+  if (nowMs < firstStart) {
+    return '<div class="segment-clock" id="segment-clock">' +
+      '<div class="seg-type-row"><span class="seg-type-label seg-type-waiting">WAITING TO START</span></div>' +
+      '<div class="progress-bar-wrap"><div class="progress-bar-fill fill-default" style="width:0%"></div></div>' +
+      '<div class="seg-time-remaining">Session starts at ' + escHtml(fmtUTC(segs[0].start)) + '</div>' +
+      '</div>';
+  }
+  if (nowMs >= lastEnd) {
+    return '<div class="segment-clock" id="segment-clock">' +
+      '<div class="seg-type-row"><span class="seg-type-label seg-type-complete">SESSION COMPLETE</span></div>' +
+      '<div class="progress-bar-wrap"><div class="progress-bar-fill fill-default" style="width:100%"></div></div>' +
+      '<div class="seg-time-remaining">Ended at ' + escHtml(fmtUTC(segs[segs.length-1].end)) + '</div>' +
+      '</div>';
+  }
+
+  var curIdx = -1;
+  for (var i = 0; i < segs.length; i++) {
+    if (nowMs >= segs[i].start.getTime() && nowMs < segs[i].end.getTime()) { curIdx = i; break; }
+  }
+  if (curIdx === -1) return '<div class="segment-clock" id="segment-clock"><div class="seg-time-remaining">Between segments</div></div>';
+
+  var seg       = segs[curIdx];
+  var segElapsed = nowMs - seg.start.getTime();
+  var segDur    = seg.end.getTime() - seg.start.getTime();
+  var segPct    = Math.min(100, (segElapsed / segDur) * 100).toFixed(1);
+  var segRemSec = (seg.end.getTime() - nowMs) / 1000;
+  var typeColor = segTypeColor(seg.type);
+  var typeLabel = segTypeLabel(seg.type);
+  var nextSeg   = segs[curIdx + 1] || null;
+
+  var relayHtml = '';
+  if (seg.type === 'TX' || seg.type === 'RX') {
+    relayHtml = '<div class="seg-relay-row">Signal direction: <strong>' +
+      (seg.type === 'TX' ? 'Outbound broadcast' : 'Inbound responses') + '</strong></div>';
+  }
+
+  var nextHtml = '';
+  if (nextSeg) {
+    var nextRemSec = (nextSeg.start.getTime() - nowMs) / 1000;
+    nextHtml = '<div class="seg-next">Next: <strong>' + escHtml(segTypeLabel(nextSeg.type)) + '</strong> in ' + fmtHMS(nextRemSec) + '</div>';
+  }
+
+  return '<div class="segment-clock" id="segment-clock">' +
+    '<div class="seg-type-row">' +
+    '<span class="seg-type-label seg-type-' + typeColor + '">' + escHtml(typeLabel) + '</span>' +
+    '<span class="seg-time-remaining">' + fmtHMS(segRemSec) + ' remaining</span>' +
+    '</div>' +
+    '<div class="progress-bar-wrap" role="progressbar" aria-valuenow="' + segPct + '" aria-valuemin="0" aria-valuemax="100" aria-label="' + escHtml(typeLabel) + ' segment progress">' +
+    '<div class="progress-bar-fill fill-' + typeColor + '" style="width:' + segPct + '%"></div>' +
+    '</div>' +
+    relayHtml +
+    nextHtml +
+    '</div>';
+}
+
+/* ── Render: DTN status ─────────────────────────────────────────────────── */
+
+function renderDTN(cfg) {
+  var nodes     = cfg.nodes || [];
+  var dtnStatus = window.__dtnStatus || null;
+  var html      = '<div class="dtn-rows">';
+
+  if (dtnStatus) {
+    var indClass = dtnStatus.operational ? 'ind-green' : 'ind-orange';
+    html += '<div class="dtn-row"><span class="dtn-indicator ' + indClass + '" aria-hidden="true"></span>' +
+      '<span>' + (dtnStatus.operational ? 'Operational' : 'Degraded') + '</span></div>';
+  } else {
+    html += '<div class="dtn-row"><span class="dtn-indicator ind-grey" aria-hidden="true"></span><span>Status unknown</span></div>';
+  }
+
+  for (var i = 0; i < nodes.length; i++) {
+    for (var j = i + 1; j < nodes.length; j++) {
+      var delaySec = getDelayBetween(nodes[i], nodes[j]);
+      var ow = fmtDelaySec(delaySec);
+      var rt = fmtDelaySec(delaySec * 2);
+      html += '<div class="dtn-row"><span class="dtn-indicator ind-green" aria-hidden="true"></span>' +
+        '<span class="dtn-pair">' + escHtml(nodes[i].name) + ' \u2194 ' + escHtml(nodes[j].name) + ': ' + ow + ' one-way, ' + rt + ' RTT</span></div>';
+    }
+  }
+
+  html += '</div>';
+  return html;
+}
+
+/* ── Render: relay server ───────────────────────────────────────────────── */
+
+var _relayData = null;
+
+function renderRelay() {
+  if (!_relayData) {
+    return '<div class="relay-grid">' +
+      '<div class="relay-stat"><div class="relay-stat-label">Status</div><div class="relay-stat-value" style="color:var(--text-muted)">Not configured</div></div>' +
+      '<div class="relay-stat"><div class="relay-stat-label">Sessions</div><div class="relay-stat-value">\u2014</div></div>' +
+      '<div class="relay-stat"><div class="relay-stat-label">Queue</div><div class="relay-stat-value">\u2014</div></div>' +
+      '<div class="relay-stat"><div class="relay-stat-label">Last check</div><div class="relay-stat-value" style="color:var(--text-muted)">\u2014</div></div>' +
+      '</div>';
+  }
+  var d = _relayData;
+  var statusColor = d.ok ? '#4caf50' : '#f44336';
+  return '<div class="relay-grid">' +
+    '<div class="relay-stat"><div class="relay-stat-label">Status</div><div class="relay-stat-value" style="color:' + statusColor + '">' + (d.ok ? 'Online' : 'Offline') + '</div></div>' +
+    '<div class="relay-stat"><div class="relay-stat-label">Sessions</div><div class="relay-stat-value">' + (d.sessions !== undefined ? d.sessions : '\u2014') + '</div></div>' +
+    '<div class="relay-stat"><div class="relay-stat-label">Queue</div><div class="relay-stat-value">' + (d.queue !== undefined ? d.queue + ' frames' : '\u2014') + '</div></div>' +
+    '<div class="relay-stat"><div class="relay-stat-label">Last check</div><div class="relay-stat-value" style="font-size:.8rem">' + (d.checkedAt || '\u2014') + '</div></div>' +
+    '</div>';
+}
+
+/* ── Full page render ───────────────────────────────────────────────────── */
+
+function renderDashboard(cfg) {
+  var nowMs  = Date.now();
+  var segs   = computeSegs(cfg);
+  var planId = makePlanId(cfg);
+
+  var startMs = new Date(cfg.start).getTime();
+  var endMs   = segs.length ? segs[segs.length-1].end.getTime() : startMs;
+  var sessionStatus, pillClass;
+  if (nowMs < startMs) {
+    sessionStatus = 'Pending'; pillClass = 'status-pending';
+  } else if (nowMs >= endMs) {
+    sessionStatus = 'Complete'; pillClass = 'status-complete';
+  } else {
+    sessionStatus = 'Live'; pillClass = 'status-live';
+  }
+
+  var hdr = document.getElementById('session-header');
+  hdr.style.display = '';
+  document.getElementById('session-title-text').textContent = cfg.title || 'Untitled Session';
+  var pill = document.getElementById('session-status-pill');
+  pill.textContent = sessionStatus;
+  pill.className   = 'status-pill ' + pillClass;
+  var modePill = document.getElementById('session-mode-pill');
+  if (cfg.mode) {
+    modePill.textContent = cfg.mode;
+    modePill.style.display = '';
+  }
+  document.getElementById('session-plan-id').textContent =
+    'Plan ID: ' + planId + '  \xB7  Start: ' + fmtUTC(new Date(cfg.start));
+  document.getElementById('no-plan').style.display = 'none';
+
+  var content = document.getElementById('main-content');
+  content.innerHTML =
+    '<div class="card" id="nodes-card">' +
+    '<div class="card-title">Nodes</div>' + renderNodes(cfg, nowMs) + '</div>' +
+    '<div class="card" id="segclock-card">' +
+    '<div class="card-title">Segment Clock</div>' + renderSegClock(segs, nowMs) + '</div>' +
+    '<div class="card" id="dtn-card">' +
+    '<div class="card-title">DTN Status</div>' + renderDTN(cfg) + '</div>' +
+    '<div class="card" id="relay-card">' +
+    '<div class="card-title">Relay Server</div>' + renderRelay() + '</div>';
+}
+
+function updateSegClock(cfg) {
+  var nowMs = Date.now();
+  var segs  = computeSegs(cfg);
+  var card  = document.getElementById('segclock-card');
+  if (!card) return;
+  var existing = card.querySelector('#segment-clock, .segment-clock');
+  var newHtml  = renderSegClock(segs, nowMs);
+  var div      = document.createElement('div');
+  div.innerHTML = newHtml;
+  if (existing && div.firstElementChild) {
+    card.replaceChild(div.firstElementChild, existing);
+  }
+}
+
+function updateNodes(cfg) {
+  var nowMs = Date.now();
+  var card  = document.getElementById('nodes-card');
+  if (!card) return;
+  var list  = card.querySelector('.node-list');
+  if (list) {
+    var div = document.createElement('div');
+    div.innerHTML = renderNodes(cfg, nowMs);
+    card.replaceChild(div.firstElementChild, list);
+  }
+}
+
+/* ── Relay polling ──────────────────────────────────────────────────────── */
+
+function startRelayPolling(endpoint) {
+  function poll() {
+    var timeoutOpt = {};
+    try { timeoutOpt = { signal: AbortSignal.timeout(8000) }; } catch(e) {}
+    fetch(endpoint + '/health', timeoutOpt).then(function(r) {
+      return r.json().then(function(data) {
+        _relayData = { ok: r.ok, sessions: data.sessions, queue: data.queue, checkedAt: new Date().toTimeString().slice(0,8) };
+      }, function() {
+        _relayData = { ok: r.ok, checkedAt: new Date().toTimeString().slice(0,8) };
+      });
+    }, function() {
+      _relayData = { ok: false, checkedAt: new Date().toTimeString().slice(0,8) };
+    }).then(function() {
+      var card = document.getElementById('relay-card');
+      if (card) card.innerHTML = '<div class="card-title">Relay Server</div>' + renderRelay();
+    });
+  }
+  poll();
+  setInterval(poll, 30000);
+}
+
+/* ── Share button ───────────────────────────────────────────────────────── */
+
+function setupShare(cfg) {
+  document.getElementById('share-btn').addEventListener('click', function() {
+    var hash = encodeHash(cfg);
+    var url  = location.href.split('#')[0].split('?')[0] + hash;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(
+        function(){ showToast('Link copied!'); },
+        function(){ showToast(url); }
+      );
+    } else {
+      showToast('Copy: ' + url);
+    }
+  });
+}
+
+/* ── REST API load ──────────────────────────────────────────────────────── */
+
+function loadFromApi(planId) {
+  return fetch('/api/ltx/session/' + encodeURIComponent(planId))
+    .then(function(r) {
+      if (!r.ok) throw new Error('API ' + r.status);
+      return r.json();
+    });
+}
+
+/* ── Init ───────────────────────────────────────────────────────────────── */
+
+(function init() {
+  var params     = new URLSearchParams(location.search);
+  var demoMode   = params.get('demo') === '1';
+  var hashParam  = params.get('h');
+  var sessionId  = params.get('session');
+  var relayParam = params.get('relay');
+
+  // Dark mode default
+  document.documentElement.classList.remove('light-mode');
+
+  var cfg = null;
+
+  if (demoMode) {
+    cfg = buildDemoCfg();
+  } else if (hashParam) {
+    var json = _b64dec(hashParam);
+    if (json) { try { cfg = JSON.parse(json); } catch(e) { cfg = null; } }
+  } else {
+    cfg = readHash();
+  }
+
+  if (cfg) {
+    cfg = upgradeConfig(cfg);
+    renderDashboard(cfg);
+    setupShare(cfg);
+    setInterval(function() { updateSegClock(cfg); updateNodes(cfg); }, 1000);
+    document.getElementById('refresh-btn').addEventListener('click', function() { renderDashboard(cfg); });
+  } else if (sessionId) {
+    document.getElementById('session-header').style.display = 'none';
+    document.getElementById('no-plan').style.display = 'none';
+    document.getElementById('main-content').innerHTML = '<div class="no-plan"><p>Loading session\u2026</p></div>';
+    loadFromApi(sessionId).then(function(data) {
+      cfg = upgradeConfig(data);
+      renderDashboard(cfg);
+      setupShare(cfg);
+      setInterval(function() { updateSegClock(cfg); updateNodes(cfg); }, 1000);
+    }, function(err) {
+      document.getElementById('main-content').innerHTML =
+        '<div class="no-plan"><div class="icon" aria-hidden="true">&#9888;</div>' +
+        '<p>Failed to load session</p><p class="hint">' + escHtml(err.message) + '</p></div>';
+    });
+  } else {
+    document.getElementById('no-plan').style.display = '';
+    document.getElementById('refresh-btn').addEventListener('click', function() { location.reload(); });
+    document.getElementById('share-btn').addEventListener('click', function() {
+      var url = location.href;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(function(){ showToast('Link copied!'); }, function(){});
+      }
+    });
+  }
+
+  if (relayParam) {
+    startRelayPolling(relayParam);
+  }
+})();
+</script>
+</body>
+</html>
