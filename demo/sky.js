@@ -2418,20 +2418,59 @@ function openLtxMeeting(startMs, delayMin, cities) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// ICS CALENDAR EXPORT
+// ICS CALENDAR EXPORT (LTX-extended, RFC 5545 compatible)
 // ════════════════════════════════════════════════════════════════════════════
-function generateICS(startDate, durationMinutes, title, description) {
+
+// Builds LTX-* property lines from city list for inclusion in a VEVENT.
+// Unknown properties are silently ignored by standard calendar clients
+// (RFC 5545 §3.8.8.2), so the file remains fully compatible.
+function _makeMeetingLtxLines(startDate, durationMin, cities) {
+  if (!cities || !cities.length) return [];
+  const hasPlanet = cities.some(c => c.type === 'planet');
+  const mode = hasPlanet ? 'RELAY' : 'LIVE';
+  // Deterministic plan ID
+  const dateStr = startDate.toISOString().slice(0, 10).replace(/-/g, '');
+  const hostId  = (cities[0].customName || cities[0].city || cities[0].planet || 'HOST')
+    .replace(/\s+/g, '').toUpperCase().slice(0, 8);
+  const destPart = cities.slice(1)
+    .map(c => (c.customName || c.city || c.planet || 'NODE').replace(/\s+/g, '').toUpperCase().slice(0, 4))
+    .join('-').slice(0, 16) || 'NODE';
+  let h = 0;
+  const raw = dateStr + hostId + destPart + durationMin;
+  for (let i = 0; i < raw.length; i++) h = (Math.imul(31, h) + raw.charCodeAt(i)) >>> 0;
+  const planId = `LTX-${dateStr}-${hostId}-${destPart}-${h.toString(16).padStart(8, '0')}`;
+  const lines = [
+    'LTX:1',
+    `LTX-PLANID:${planId}`,
+    'LTX-QUANTUM:PT15M',
+    `LTX-MODE:${mode}`,
+    'LTX-SEGMENT-TEMPLATE:A-W-R',
+  ];
+  cities.forEach((c, i) => {
+    const nodeId = (c.customName || c.city || c.planet || 'NODE').replace(/\s+/g, '-').toUpperCase();
+    lines.push(`LTX-NODE:ID=${nodeId};ROLE=${i === 0 ? 'HOST' : 'NODE'}`);
+    if (c.type === 'planet') {
+      const oneWaySec = PlanetTime.lightTravelSeconds('earth', c.planet);
+      const assumed   = (oneWaySec / 60).toFixed(1);
+      const max       = (oneWaySec / 60 + 2).toFixed(1);
+      lines.push(`LTX-DELAY;NODEID=${nodeId}:ONEWAY-MIN=${assumed};ONEWAY-MAX=${max};ONEWAY-ASSUMED=${assumed}`);
+    }
+  });
+  return lines;
+}
+
+function generateICS(startDate, durationMinutes, title, description, ltxLines) {
   const pad = n => String(n).padStart(2, '0');
   const fmt = d =>
     `${d.getUTCFullYear()}${pad(d.getUTCMonth()+1)}${pad(d.getUTCDate())}` +
     `T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}00Z`;
-  const endDate    = new Date(startDate.getTime() + durationMinutes * 60000);
-  const uid        = `${startDate.getTime()}-ip@interplanet.live`;
-  const safeDesc   = (description || '').replace(/\n/g, '\\n').replace(/,/g, '\\,');
+  const endDate     = new Date(startDate.getTime() + durationMinutes * 60000);
+  const uid         = `${startDate.getTime()}-ip@interplanet.live`;
+  const safeDesc    = (description || '').replace(/\n/g, '\\n').replace(/,/g, '\\,');
   const safeSummary = (title || '').replace(/,/g, '\\,');
-  return [
+  const lines = [
     'BEGIN:VCALENDAR', 'VERSION:2.0',
-    'PRODID:-//InterPlanet//Interplanetary Time Scheduler//EN',
+    'PRODID:-//InterPlanet//LTX v1.1//EN',
     'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
     'BEGIN:VEVENT',
     `UID:${uid}`,
@@ -2440,20 +2479,31 @@ function generateICS(startDate, durationMinutes, title, description) {
     `DTEND:${fmt(endDate)}`,
     `SUMMARY:${safeSummary}`,
     `DESCRIPTION:${safeDesc}`,
-    'END:VEVENT', 'END:VCALENDAR',
-  ].join('\r\n');
+  ];
+  if (ltxLines && ltxLines.length) lines.push(...ltxLines);
+  lines.push('END:VEVENT', 'END:VCALENDAR');
+  return lines.join('\r\n');
 }
 
 function downloadICS(startDate, durationMinutes, cities) {
-  const cityNames = (cities || STATE.cities).map(c => c.customName || c.city || c.planet).join(', ');
-  const title = `Meeting — ${cityNames}`;
-  const desc  = `InterPlanet scheduled meeting across: ${cityNames}.\\nScheduled via interplanet.live`;
-  const ics   = generateICS(startDate, durationMinutes, title, desc);
+  const list      = cities || STATE.cities;
+  const cityNames = list.map(c => c.customName || c.city || c.planet).join(', ');
+  const title     = `Meeting — ${cityNames}`;
+  const planets   = list.filter(c => c.type === 'planet');
+  const delayNote = planets.length
+    ? '\\nSignal delays: ' + planets.map(c => {
+        const s = PlanetTime.lightTravelSeconds('earth', c.planet);
+        return (c.customName || c.planet) + ' ' + Math.round(s / 60) + ' min one-way';
+      }).join(', ')
+    : '';
+  const desc  = `InterPlanet scheduled meeting across: ${cityNames}.${delayNote}\\nScheduled via interplanet.live`;
+  const ltxLines = _makeMeetingLtxLines(startDate, durationMinutes, list);
+  const ics   = generateICS(startDate, durationMinutes, title, desc, ltxLines);
   const blob  = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
   const url   = URL.createObjectURL(blob);
   const a     = document.createElement('a');
   a.href = url;
-  a.download = `interplanet-meeting-${startDate.toISOString().slice(0, 10)}.ics`;
+  a.download = `ltx-meeting-${startDate.toISOString().slice(0, 10)}.ics`;
   a.click();
   URL.revokeObjectURL(url);
 }
