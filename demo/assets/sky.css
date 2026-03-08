@@ -75,11 +75,23 @@ html, body {
 .city-sun { font-size: 0.68rem; margin-top: 0.15rem; }
 .city-moon { font-size: 0.68rem; margin-top: 0.05rem; }
 .city-ping { font-size: 0.65rem; margin-top: 0.15rem; font-variant-numeric: tabular-nums; }
+/* Container for holiday badges — holds national + international pills */
+#cities-wrap .holiday-badge-wrap {
+  display: flex; flex-wrap: wrap; gap: 0.2rem; margin-top: 0.2rem;
+}
+/* National public holiday pill — warm yellow */
 .holiday-badge {
-  display: inline-block; font-size: 0.62rem; padding: 0.08rem 0.4rem;
+  display: inline-flex; align-items: center; gap: 0.25rem;
+  font-size: 0.62rem; padding: 0.08rem 0.4rem;
   border-radius: 99px; border: 1px solid rgba(255,220,80,0.5);
   background: rgba(255,200,0,0.12); color: rgba(255,220,80,0.9);
-  margin-top: 0.2rem;
+}
+/* UN international day / week pill — blue (UN brand colour) */
+.holiday-badge-intl {
+  display: inline-flex; align-items: center; gap: 0.2rem;
+  font-size: 0.62rem; padding: 0.08rem 0.4rem;
+  border-radius: 99px; border: 1px solid rgba(100,160,255,0.45);
+  background: rgba(70,130,255,0.1); color: rgba(130,185,255,0.9);
 }
 .los-warn { font-size: 0.65rem; color: rgba(255,160,60,0.9); margin-top: 0.15rem; }
 .planet-zone { font-size: 0.68rem; margin-top: 0.1rem; }
@@ -1137,12 +1149,22 @@ html.light-mode .sp-input { background: rgba(0,0,0,0.06); border-color: rgba(0,0
 @media (max-width: 480px) {
   #cities-wrap:not(.vert-forced) .city-col {
     min-height: 80px; max-height: 100px; /* 58.2 — taller bands for better touch targets */
-    grid-template-columns: 68px 1fr; /* sky | info; drop the tiny 18px hourly column */
+    grid-template-columns: 90px 1fr; /* sky | info; wider sky so time never clips */
   }
   #cities-wrap:not(.vert-forced) .city-info {
     min-height: 80px; max-height: 100px; overflow: hidden; /* 58.2 */
   }
   #cities-wrap:not(.vert-forced) .hourly-wrap { display: none; }
+  /* Scale time down to fit the narrower sky strip */
+  #cities-wrap:not(.vert-forced) .city-time { font-size: 1.5rem; }
+  #cities-wrap:not(.vert-forced) .city-dow  { display: none; }
+}
+/* Very narrow phones (Galaxy S series ~360px, Pixel 5 ~393px) */
+@media (max-width: 380px) {
+  #cities-wrap:not(.vert-forced) .city-col {
+    grid-template-columns: 80px 1fr;
+  }
+  #cities-wrap:not(.vert-forced) .city-time { font-size: 1.3rem; }
 }
 /* Short-screen / landscape iPhone: keep cards compact */
 @media (max-height: 600px) and (max-width: 768px) {

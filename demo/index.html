@@ -11,8 +11,8 @@
 <!-- Preconnect for domains used in the critical path -->
 <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
 <!-- Preload critical local assets -->
-<link rel="preload" href="assets/sky.css?v=1.12.0" as="style">
-<link rel="preload" href="sky.js?v=1.12.0" as="script">
+<link rel="preload" href="assets/sky.css?v=1.14.0" as="style">
+<link rel="preload" href="sky.js?v=1.14.0" as="script">
 <link rel="icon" type="image/x-icon" href="assets/favicon.ico">
 <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16x16.png">
@@ -31,7 +31,7 @@
 <meta name="twitter:title"       content="InterPlanet — The Solar System Clock">
 <meta name="twitter:description" content="See what time it is on every planet in the solar system, right now. Compare cities, planets, and space missions on one live timeline.">
 <meta name="twitter:image"       content="https://interplanet.live/assets/screenshot.png">
-<link rel="stylesheet" href="assets/sky.css?v=1.12.0">
+<link rel="stylesheet" href="assets/sky.css?v=1.14.0">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/fontawesome.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/solid.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
 </head>
@@ -608,11 +608,13 @@
 
 <div id="info-pop" class="info-pop" style="display:none" role="tooltip"></div>
 <div id="info-pop-overlay"></div>
-<script src="assets/i18n.js?v=1.12.0"></script>
-<script src="assets/llm-providers.js?v=1.12.0"></script>
+<script src="assets/i18n.js?v=1.14.0"></script>
+<script src="assets/llm-providers.js?v=1.14.0"></script>
+<script src="assets/holidays-data.js?v=1.14.0"></script>
+<script src="assets/un-days.js?v=1.14.0"></script>
 <!-- CDN: https://cdn.jsdelivr.net/npm/interplanet-planet-time@1.2.0/dist/planet-time.iife.js -->
-<script src="planet-time.js?v=1.12.0"></script>
-<script src="sky.js?v=1.12.0"></script>
+<script src="planet-time.js?v=1.14.0"></script>
+<script src="sky.js?v=1.14.0"></script>
 <script>
   // Service worker registration (Story 5.2)
   if ('serviceWorker' in navigator) {
