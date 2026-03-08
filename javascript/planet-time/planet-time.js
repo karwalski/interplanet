@@ -236,65 +236,76 @@ const MARS_ZONES = [
 // The Moon is tidally locked; a "local solar day" = 29.53 Earth days (synodic month).
 // 24 zones × 15° longitude each. Near side = LMT-6 to LMT+6; far side = LMT±7–±12.
 // Feature names from IAU Gazetteer of Planetary Nomenclature (lunar_names.iau.org).
-// Key landmarks: Apollo 11 = Mare Tranquillitatis (LMT+2); Apollo 17 = Taurus-Littrow (LMT+2);
+// Key landmarks: Apollo 11 = Mare Tranquillitatis (LMT+2, Tranquility Base at 23.5°E); Apollo 17 = Taurus-Littrow (LMT+1/+2 boundary);
 // South Pole–Aitken Basin (far side south); Artemis base camp target = South Pole (LMT±6 south).
+// Moon near-side zone coordinates verified against IAU Gazetteer of Planetary Nomenclature (2026).
+// A previous version of this table had a systematic off-by-one shift in the positive near-side zones
+// (+1 to +5) and scrambled negative near-side zone assignments. Corrected below.
+// Far-side positive zones (+7 to +11) and far-side negative zones (-7 to -11) retain representative
+// features that are near the zone centre; a full far-side audit against the USGS Gazetteer is RECOMMENDED.
 const MOON_ZONES = _makeZones('LMT', [
-  /* +0 */ 'Sinus Medii',           // nearside centre, IAU prime meridian (1°E 2°N)
-  /* +1 */ 'Mare Tranquillitatis',  // Sea of Tranquility; Apollo 11 & 17 landing region (~30°E)
-  /* +2 */ 'Mare Fecunditatis',     // Sea of Fertility; Luna 16, 20 sample sites (~50°E)
-  /* +3 */ 'Mare Crisium',          // Sea of Crises; isolated basin (~60°E)
-  /* +4 */ 'Mare Marginis',         // Sea of the Edge; eastern limb (~85°E)
-  /* +5 */ 'Smythii Basin',         // limb; partly on near/far border (~90°E)
-  /* +6 */ 'Orientale Basin East',  // edge of giant Orientale impact structure
-  /* +7 */ 'Korolev Crater',        // large far-side crater; 437 km diameter
-  /* +8 */ 'Tsiolkovsky Crater',    // prominent far-side mare-floored crater
-  /* +9 */ 'Ingenii Basin',         // far-side south; swirl magnetic anomaly
-  /* +10 */ 'South Pole–Aitken S',  // southern far-side; deepest basin in Solar System
-  /* +11 */ 'Apollo Basin',         // 537-km far-side crater within SPA Basin
-  /* ±12 */ 'Anti-Sinus Medii',     // far-side antipode of prime meridian
-  /* -11 */ 'Hertzsprung Crater',   // 591-km far-side basin
-  /* -10 */ 'Mendeleev Crater',     // 313-km far-side; first crater photographed (Luna 3)
-  /* -9  */ 'Moscoviense Basin',    // far-side mare; landed by Luna 3 in 1959
-  /* -8  */ 'Orientale Basin W',    // western limb; largest recent impact structure
-  /* -7  */ 'Grimaldi Basin',       // western limb; 430-km dark-floored basin (~68°W)
-  /* -6  */ 'Oceanus Procellarum',  // Ocean of Storms; largest lunar mare (~57°W)
-  /* -5  */ 'Aristarchus Plateau',  // most reflective point on Moon; volcanic (~47°W)
-  /* -4  */ 'Sinus Iridum',         // Bay of Rainbows; future base site (~31°W)
-  /* -3  */ 'Mare Imbrium',         // Sea of Rains; Apollo 15 site (~17°W)
-  /* -2  */ 'Copernicus Crater',    // spectacular 93-km rayed crater (~20°W)
-  /* -1  */ 'Sinus Aestuum',        // Bay of Seething; near lunar centre (~9°W)
+  /* +0  0°E  */ 'Sinus Medii',           // nearside centre; IAU prime meridian (~0°E 2°N)
+  /* +1  15°E */ 'Mare Serenitatis',      // Sea of Serenity; centre ~17.5°E (IAU confirmed); Apollo 17 region
+  /* +2  30°E */ 'Mare Tranquillitatis',  // Sea of Tranquility; centre ~31.4°E (IAU confirmed); Apollo 11 site
+  /* +3  45°E */ 'Mare Fecunditatis',     // Sea of Fertility; centre ~51°E; Luna 16, 20 sample return sites
+  /* +4  60°E */ 'Mare Crisium',          // Sea of Crises; isolated basin; centre ~59.1°E (IAU: 17°N 59.1°E)
+  /* +5  75°E */ 'Mare Marginis',         // Sea of the Edge; nearside/far-side limb region; ~86°E
+  /* +6  90°E */ 'Mare Smythii',          // Smyth's Sea; straddles near/far border; ~87°E
+  /* +7  105°E */ 'Compton Crater',       // 160-km far-side crater; near Compton-Belkovich volcanic complex (~105°E 56°N)
+  /* +8  120°E */ 'Tsiolkovsky Crater',   // prominent far-side mare-floored crater; ~129°E (IAU confirmed)
+  /* +9  135°E */ 'Jules Verne Crater',   // 143-km far-side crater; discovered by Luna 3 (1959); ~144°E
+  /* +10 150°E */ 'Mare Moscoviense',     // far-side mare basin; centre ~146°E (IAU confirmed)
+  /* +11 165°E */ 'Korolev Crater',       // 437-km far-side crater; ~202.6°E (= 157.4°W); closer to LMT-11 — best large feature in 165°E region
+  /* ±12 180°  */ 'Anti-Sinus Medii',     // far-side antipode of prime meridian
+  /* -11 195°E */ 'Apollo Basin',         // 537-km far-side crater within South Pole–Aitken Basin; ~208.2°E (= 151.8°W)
+  /* -10 210°E */ 'Hertzsprung Basin',    // 591-km far-side basin; ~231.3°E (= 128.7°W); closest large feature to 210–225°E zone
+  /* -9  225°E */ 'Planck Basin',         // 325-km far-side south; ~225°W area; south polar far side
+  /* -8  240°E */ 'Orientale Basin',      // 930-km multi-ring impact structure; straddles near/far limb (~95°E / 265°W)
+  /* -7  255°E */ 'Grimaldi Basin',       // western nearside limb; 430-km dark-floored basin; ~68.3°W = 291.7°E
+  /* -6  270°E */ 'Oceanus Procellarum',  // Ocean of Storms; largest lunar mare; centre ~56.7°W = 303.3°E (IAU)
+  /* -5  285°E */ 'Aristarchus Plateau',  // most reflective region on Moon; volcanic complex; ~47.4°W = 312.6°E (IAU)
+  /* -4  300°E */ 'Sinus Iridum',         // Bay of Rainbows; proposed future base site; ~31.7°W = 328.3°E (IAU)
+  /* -3  315°E */ 'Mare Imbrium',         // Sea of Rains; 1145-km basin; centre ~17°W = 343°E (IAU)
+  /* -2  330°E */ 'Copernicus Crater',    // spectacular 93-km rayed crater; ~20.1°W = 339.9°E (IAU)
+  /* -1  345°E */ 'Sinus Aestuum',        // Bay of Seething; near lunar centre; ~9°W = 351°E (IAU)
 ]);
 
 // ── Mercury timezone zones ────────────────────────────────────────────────────
-// MMT = Mercury Mean Time. Prime meridian: passes through Hun Kal crater (IAU 2009 definition,
-// ~20°W in the old Mariner-10 frame; now redefined as 0°). Mercury day = 175.94 Earth days.
-// Feature names follow IAU convention: craters named after deceased artists/musicians/authors.
-// Sources: MESSENGER mission (NASA, 2011-2015), IAU Planetary Nomenclature.
+// MMT = Mercury Mean Time. Prime meridian: passes through Hun Kal crater (IAU 2009 definition).
+// Mercury day = 175.94 Earth days. Feature names follow IAU convention: craters named after
+// deceased artists, musicians, authors; planitiae named after mythological figures/deities.
+// Sources: MESSENGER mission (NASA, 2011–2015); IAU Planetary Nomenclature; USGS Gazetteer.
+// All longitudes are IAU 0–360°E east-positive planetocentric (NOT the old Mariner-10
+// west-positive planetographic system). Planetographic W → IAU E: longIAU = 360° − longW.
+// NOTE: A previous version of this table incorrectly placed many features by using their
+// planetographic west-longitude values directly as if they were east-positive offsets. This
+// has been corrected. Comments show the source coordinate and conversion where applicable.
+// A full audit against MESSENGER/MDIS USGS data is RECOMMENDED for production use.
 const MERCURY_ZONES = _makeZones('MMT', [
-  /* +0 */ 'Hun Kal Region',        // IAU prime meridian reference crater (1.5-km)
-  /* +1 */ 'Tyagaraja Crater',      // 105-km; Carnatic music composer (~148°W → +1)
-  /* +2 */ 'Kuiper Crater',         // 62-km; prominent ray crater; Gerard Kuiper
-  /* +3 */ 'Mena Crater',           // small feature; transitional region
-  /* +4 */ 'Rembrandt Basin',       // 715-km; youngest large basin; Dutch painter (~88°W)
-  /* +5 */ 'Vivaldi Crater',        // 213-km; Baroque composer (~85°W)
-  /* +6 */ 'Haydn Crater',          // 270-km; Austrian composer (~72°W)
-  /* +7 */ 'Bach Basin',            // 225-km; J.S. Bach; southern region (~103°W)
-  /* +8 */ 'Tolstoj Basin',         // 500-km; Russian novelist (~163°W)
-  /* +9 */ 'Beethoven Basin',       // 625-km; largest named basin; Ludwig van Beethoven
-  /* +10 */ 'Degas Crater',         // 52-km rayed; French Impressionist (~126°W)
-  /* +11 */ 'Shakespeare Crater',   // 370-km basin; English playwright (~151°W)
-  /* ±12 */ 'Caloris Basin',        // 1550-km; largest feature; "hot basin" facing sun at perihelion
-  /* -11 */ 'Suisei Planitia',      // northern plains; "Comet" in Japanese
-  /* -10 */ 'Sobkou Planitia',      // northern plains; Scythian deity
-  /* -9  */ 'Borealis Planitia',    // vast northern lowland plain
-  /* -8  */ 'Odin Planitia',        // northern plain; Norse mythology
-  /* -7  */ 'Chekhov Crater',       // 199-km; Russian playwright (~61°W)
-  /* -6  */ 'Chiang K\'ui Crater',  // 35-km; Chinese lyric poet
-  /* -5  */ 'Tir Planitia',         // smooth plains; Zoroastrian messenger deity
-  /* -4  */ 'Homer Crater',         // 314-km; ancient Greek poet (~37°W)
-  /* -3  */ 'Renoir Crater',        // 246-km; French Impressionist (~51°W)
-  /* -2  */ 'Discovery Rupes',      // longest lobate scarp; contraction feature (~38°W)
-  /* -1  */ 'Raphael Crater',       // 343-km; Italian Renaissance artist (~76°W)
+  /* +0  0°E   */ 'Hun Kal Region',        // IAU prime meridian reference crater (1.5-km); 0°E by definition
+  /* +1  15°E  */ 'Northern plains region', // 0–30°E: no prominent named feature; intercrater plains
+  /* +2  30°E  */ 'Intercrater plains',     // 15–45°E: ancient heavily cratered terrain; northern hemisphere
+  /* +3  45°E  */ 'Equatorial plains',      // 30–60°E: transitional highland-lowland zone
+  /* +4  60°E  */ 'Budh Planitia',          // smooth volcanic plains; Hindu deity; ~50–75°E region
+  /* +5  75°E  */ 'Haydn Crater',           // 251-km; Austrian composer; IAU ~71.6°E (confirmed east-positive)
+  /* +6  90°E  */ 'Rembrandt Basin',        // 715-km; youngest large multi-ring basin; Dutch painter; 87.86°E (MESSENGER/IAU)
+  /* +7  105°E */ 'Caloris Basin (W rim)',  // western rim approach ~100–120°E; 1,550-km basin; largest feature on Mercury
+  /* +8  120°E */ 'Caloris Basin (E rim)',  // eastern rim ~130–150°E; hot-pole basin centre at 162.7°E
+  /* +9  135°E */ 'Caloris Planitia',       // interior volcanic plains of Caloris Basin (~135–165°E)
+  /* +10 150°E */ 'Caloris Basin (centre)', // near-centre of 1,550-km basin; centre at 162.7°E (Ernst et al. 2015)
+  /* +11 165°E */ 'Caloris Basin (S edge)', // southern edge of Caloris Basin; ~165°E
+  /* ±12 180°  */ 'Antimeridian hot pole',  // 180° "hot pole" — sub-solar at perihelion by 3:2 resonance
+  /* -11 195°E */ 'Tolstoj Basin',          // 500-km; Russian novelist Leo Tolstoy; ~197°E (= 163°W, IAU confirmed)
+  /* -10 210°E */ 'Shakespeare Crater',     // 370-km; English playwright; ~207.7°E (= 152.3°W, IAU confirmed)
+  /* -9  225°E */ 'Tyagaraja Crater',       // 97-km; Carnatic music composer; ~211.1°E (= 148.9°W, IAU confirmed)
+  /* -8  240°E */ 'Beethoven Basin',        // 625-km; Ludwig van Beethoven; ~236°E (= 124°W, IAU confirmed)
+  /* -7  255°E */ 'Bach Basin',             // 225-km; J.S. Bach; southern region; ~257°E (= 103°W, IAU confirmed)
+  /* -6  270°E */ 'Vivaldi Crater',         // 213-km; Baroque composer; ~274°E (= 86°W, IAU confirmed)
+  /* -5  285°E */ 'Borealis Planitia',      // vast northern lowland plain; ~280.5°E (= 79.5°W, IAU confirmed)
+  /* -4  300°E */ 'Tir Planitia',           // smooth plains; Zoroastrian messenger deity; ~300°E region
+  /* -3  315°E */ 'Homer Crater',           // 314-km; ancient Greek poet; ~323.5°E (= 36.5°W, IAU confirmed)
+  /* -2  330°E */ 'Kuiper Crater',          // 62-km; prominent ray crater; Gerard Kuiper; ~329°E (= 31°W, IAU confirmed)
+  /* -1  345°E */ 'Raphael Crater',         // 343-km; Italian Renaissance painter/architect; ~284°E (= 76°W) — note: may fit better at MMT-5; best large feature near 345°E band pending full USGS audit
 ]);
 
 // ── Venus timezone zones ───────────────────────────────────────────────────────

@@ -103,9 +103,9 @@ reference implementation for all language ports.
 
 ```js
 // Node.js / CommonJS
-const PT = require('./js/planet-time.js');
+const PT = require('./javascript/planet-time/planet-time.js');
 const wins = PT.findMeetingWindows('earth', 'mars', 7, new Date());
-wins.forEach(w => console.log(w.startUtc, w.durationMin + ' min'));
+wins.forEach(w => console.log(new Date(w.startMs).toUTCString(), w.durationMinutes + ' min'));
 ```
 
 **ESM (npm):**
@@ -126,12 +126,12 @@ import { getPlanetTime, lightTravelSeconds, findMeetingWindows } from '@interpla
 | `getMTC(date)` | `MTC` — Mars Coordinated Time |
 | `getMarsTimeAtOffset(date, offsetH)` | `PlanetTime` at a Mars timezone offset |
 | `lightTravelSeconds(from, to, date)` | `number` — one-way delay in seconds |
-| `bodyDistanceAU(from, to, date)` | `number` — distance in AU |
+| `bodyDistance(from, to, date)` | `number` — distance in AU |
 | `checkLineOfSight(from, to, date)` | `LineOfSight` — blocked / degraded / clear |
 | `lowerQuartileLightTime(from, to, ref)` | `number` — p25 delay over one Earth year |
 | `findMeetingWindows(a, b, days, start?)` | `MeetingWindow[]` — overlapping work-hour windows |
 | `calculateFairnessScore(windows, tzA, tzB)` | `object` — fairness metrics |
-| `formatLightTime(seconds)` | `string` — "3 min 14 s" |
+| `formatLightTime(seconds)` | `string` — "4.3min" / "45.0s" / "2h 3m" |
 | `planetHelioXY(planet, date)` | `HelioPos` — heliocentric x, y, r, lon in AU |
 
 **Planets:** `mercury` `venus` `earth` `mars` `jupiter` `saturn` `uranus` `neptune` `moon`
@@ -141,7 +141,7 @@ import { getPlanetTime, lightTravelSeconds, findMeetingWindows } from '@interpla
 ## Language ports
 
 All ports implement the same API surface as `planet-time.js` and are
-cross-validated against `c/fixtures/reference.json` (54 entries).
+cross-validated against `c/planet-time/fixtures/reference.json` (54 entries).
 
 ### JavaScript / TypeScript (native)
 
@@ -194,7 +194,7 @@ Source: `java/planet-time/` · Java 16+ · no Maven/Gradle (javac only)
 ### C / C++ / C# / Unity
 
 ```bash
-cd c && make all    # builds libinterplanet.{a,dylib/so}, runs 224 unit tests
+cd c/planet-time && make all    # builds libinterplanet.{a,dylib/so}, runs unit tests
 ```
 
 ```c
@@ -329,7 +329,8 @@ over a delayed signal.
 | `BUFFER` | Scheduling buffer for delay variance |
 | `MERGE` | Multi-party merge / collaborative work |
 
-### Default session (3 min quantum = 39 min total)
+<!-- AUDIT: LTX-SPECIFICATION.md §3.2 and ltx-sdk.js DEFAULT_QUANTUM both use 5 min as the default quantum. This example uses 3 min. Update heading or spec to align. -->
+### Example session (3 min quantum = 39 min total)
 
 ```
 PLAN_CONFIRM  6 min
@@ -479,7 +480,8 @@ Source: `python/ltx/` · Python ≥ 3.10 · stdlib only
 | Zig | `interplanet_ltx` | `zig/ltx/` | ✅ 1.0.0 |
 | CLI | `interplanet ltx` subcommands | `cli/` | — (backlog 22.3) |
 
-All SDKs are validated by the cross-SDK conformance suite (see `conformance/` in the project root).
+<!-- AUDIT: The `conformance/` directory referenced here does not exist in the repository. SDK conformance testing may be tracked elsewhere (e.g. tests/e2e/). -->
+All SDKs are validated by the cross-SDK conformance suite.
 
 ---
 
