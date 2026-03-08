@@ -38,6 +38,7 @@ export interface PlanetTime {
   workPeriodsPerWeek: number;
   timeString: string;       // "HH:MM"
   timeStringFull: string;   // "HH:MM:SS"
+  zoneId: string | null;    // null for Earth; e.g. "AMT+4", "LMT+0" for others
 }
 
 /** Result of getMTC(). */

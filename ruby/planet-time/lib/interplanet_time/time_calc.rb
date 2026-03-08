@@ -45,6 +45,18 @@ module InterplanetTime
       sol_in_year   = effective == 'mars' ? day_in_year.floor : nil
       sols_per_year = effective == 'mars' ? (sid_yr_ms.to_f / solar_day).round : nil
 
+      zone_prefix = { 'mars' => 'AMT', 'moon' => 'LMT', 'mercury' => 'MMT',
+                       'venus' => 'VMT', 'jupiter' => 'JMT', 'saturn' => 'SMT',
+                       'uranus' => 'UMT', 'neptune' => 'NMT' }
+      zone_id = if planet == 'earth'
+                  nil
+                else
+                  prefix = zone_prefix[planet]
+                  offset = tz_offset.to_i
+                  sign   = offset >= 0 ? '+' : '-'
+                  "#{prefix}#{sign}#{offset.abs}"
+                end
+
       h2 = hour.to_s.rjust(2, '0')
       m2 = minute.to_s.rjust(2, '0')
       s2 = second.to_s.rjust(2, '0')
@@ -64,7 +76,8 @@ module InterplanetTime
         time_str:       "#{h2}:#{m2}",
         time_str_full:  "#{h2}:#{m2}:#{s2}",
         sol_in_year:    sol_in_year,
-        sols_per_year:  sols_per_year
+        sols_per_year:  sols_per_year,
+        zone_id:        zone_id
       )
     end
 

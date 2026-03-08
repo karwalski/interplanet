@@ -11,7 +11,7 @@
 <!-- Preconnect for domains used in the critical path -->
 <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
 <!-- Preload critical local assets -->
-<link rel="preload" href="planet-time.js?v=1.11.0" as="script">
+<link rel="preload" href="planet-time.js?v=1.12.0" as="script">
 <link rel="icon" type="image/x-icon" href="assets/favicon.ico">
 <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16x16.png">
@@ -22,8 +22,8 @@
       media="print" onload="this.media='all'" crossorigin="anonymous"
       referrerpolicy="no-referrer">
 <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"></noscript>
-<script src="assets/i18n.js?v=1.11.0"></script>
-<script src="planet-time.js?v=1.11.0"></script>
+<script src="assets/i18n.js?v=1.12.0"></script>
+<script src="planet-time.js?v=1.12.0"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -256,7 +256,7 @@ html.light-mode .tpl-card.selected{background:rgba(53,99,200,.06)}
       <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> InterPlanet
     </a>
     <span class="wordmark"><i class="fa-solid fa-satellite-dish" aria-hidden="true"></i> <span id="setup-heading">Space Meeting Planner</span></span>
-    <span class="ltx-badge">v1.10</span>
+    <span class="ltx-badge">v1.11</span>
   </div>
   <p id="setup-intro" style="font-size:.8rem;color:var(--text-muted);margin-bottom:1.25rem;line-height:1.55">
     Plan a meeting across Earth, Mars, or any world. Each participant runs this page and stays in sync — no live internet connection needed.
@@ -2366,7 +2366,7 @@ function generateLtxICS(cfg) {
   return [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//InterPlanet//LTX v1.10//EN',
+    'PRODID:-//InterPlanet//LTX v1.11//EN',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     'BEGIN:VEVENT',

@@ -58,6 +58,19 @@ get_planet_time <- function(planet_idx, utc_ms, tz_offset_h = 0) {
     sol_in_year   <- floor(day_in_year)
   }
 
+  zone_prefixes <- c(
+    mars = "AMT", moon = "LMT", mercury = "MMT", venus = "VMT",
+    jupiter = "JMT", saturn = "SMT", uranus = "UMT", neptune = "NMT"
+  )
+  if (p$key == "earth") {
+    zone_id <- NULL
+  } else {
+    prefix  <- zone_prefixes[p$key]
+    abs_off <- as.integer(abs(tz_offset_h))
+    sign    <- if (tz_offset_h >= 0) "+" else "-"
+    zone_id <- paste0(prefix, sign, abs_off)
+  }
+
   time_str      <- sprintf("%02d:%02d", as.integer(h), as.integer(m))
   time_str_full <- sprintf("%02d:%02d:%02d", as.integer(h), as.integer(m), as.integer(s))
 
@@ -77,7 +90,8 @@ get_planet_time <- function(planet_idx, utc_ms, tz_offset_h = 0) {
     time_str       = time_str,
     time_str_full  = time_str_full,
     sol_in_year    = sol_in_year,
-    sols_per_year  = sols_per_year
+    sols_per_year  = sols_per_year,
+    zone_id        = zone_id
   )
 }
 

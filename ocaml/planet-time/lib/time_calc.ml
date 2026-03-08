@@ -83,7 +83,21 @@ type full_planet_time = {
   time_str_full   : string;
   sol_in_year     : int option;
   sols_per_year   : int option;
+  zone_id         : string option;
 }
+
+(* Zone prefix table: body index → prefix string (Earth=2, Moon=8 are absent) *)
+let zone_prefix_of_body (body : int) : string option =
+  match body with
+  | 0 -> Some "MMT"  (* Mercury *)
+  | 1 -> Some "VMT"  (* Venus   *)
+  | 3 -> Some "AMT"  (* Mars    *)
+  | 4 -> Some "JMT"  (* Jupiter *)
+  | 5 -> Some "SMT"  (* Saturn  *)
+  | 6 -> Some "UMT"  (* Uranus  *)
+  | 7 -> Some "NMT"  (* Neptune *)
+  | 8 -> Some "LMT"  (* Moon    *)
+  | _ -> None        (* Earth (2) and unknown *)
 
 let get_planet_time ~(body : int) ~(utc_ms : float) : full_planet_time =
   let idx = pdata_idx body in
@@ -133,10 +147,15 @@ let get_planet_time ~(body : int) ~(utc_ms : float) : full_planet_time =
       (Some day_in_year, Some (int_of_float (floor (spy_f +. 0.5))))
     end else (None, None)
   in
+  let zone_id =
+    match zone_prefix_of_body body with
+    | None        -> None
+    | Some prefix -> Some (prefix ^ "+0")
+  in
   { hour = h; minute = m; second = s;
     local_hour; day_fraction = day_frac;
     day_number; day_in_year; year_number;
     period_in_week = piw; is_work_period; is_work_hour;
     time_str      = Printf.sprintf "%02d:%02d" h m;
     time_str_full = Printf.sprintf "%02d:%02d:%02d" h m s;
-    sol_in_year; sols_per_year }
+    sol_in_year; sols_per_year; zone_id }

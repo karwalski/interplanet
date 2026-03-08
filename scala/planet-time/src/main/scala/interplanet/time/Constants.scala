@@ -63,6 +63,19 @@ case class PlanetData(
   earthClockSched: Boolean = false
 )
 
+/** Zone prefixes for zoneId strings (None for Earth — no interplanetary zone system). */
+val ZONE_PREFIX: Map[Planet, Option[String]] = Map(
+  Planet.Mercury -> Some("MMT"),
+  Planet.Venus   -> Some("VMT"),
+  Planet.Earth   -> None,
+  Planet.Mars    -> Some("AMT"),
+  Planet.Jupiter -> Some("JMT"),
+  Planet.Saturn  -> Some("SMT"),
+  Planet.Uranus  -> Some("UMT"),
+  Planet.Neptune -> Some("NMT"),
+  Planet.Moon    -> Some("LMT")
+)
+
 val PLANET_DATA: Map[Planet, PlanetData] = Map(
   Planet.Mercury -> PlanetData(
     solarDayMs        = (175.9408 * EARTH_DAY_MS).toLong,

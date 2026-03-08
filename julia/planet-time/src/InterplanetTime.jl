@@ -214,6 +214,7 @@ struct PlanetTime
     time_str_full   ::String   # "HH:MM:SS"
     sol_in_year     ::Union{Int64,Nothing}
     sols_per_year   ::Union{Int64,Nothing}
+    zone_id         ::Union{String,Nothing}
 end
 
 """Mars Coordinated Time result."""
@@ -339,6 +340,19 @@ function light_travel_seconds(from_planet::Planet, to_planet::Planet, utc_ms::In
     return body_distance_au(from_planet, to_planet, utc_ms) * AU_SECONDS
 end
 
+# ── Zone prefix map ────────────────────────────────────────────────────────────
+
+const ZONE_PREFIXES = Dict{Planet,String}(
+    MERCURY => "MMT",
+    VENUS   => "VMT",
+    MARS    => "AMT",
+    JUPITER => "JMT",
+    SATURN  => "SMT",
+    URANUS  => "UMT",
+    NEPTUNE => "NMT",
+    MOON    => "LMT",
+)
+
 # ── Planet time calculation ────────────────────────────────────────────────────
 
 """
@@ -401,6 +415,13 @@ function get_planet_time(planet::Planet, utc_ms::Int64, tz_offset_h::Float64=0.0
         sols_per_year = Int64(round(Float64(pd.sidereal_yr_ms) / solar_day))
     end
 
+    zone_id::Union{String,Nothing} = nothing
+    if haskey(ZONE_PREFIXES, planet)
+        prefix = ZONE_PREFIXES[planet]
+        n = Int(floor(tz_offset_h))
+        zone_id = n >= 0 ? "$(prefix)+$(n)" : "$(prefix)-$(abs(n))"
+    end
+
     time_str      = @sprintf("%02d:%02d", h, m)
     time_str_full = @sprintf("%02d:%02d:%02d", h, m, s)
 
@@ -411,6 +432,7 @@ function get_planet_time(planet::Planet, utc_ms::Int64, tz_offset_h::Float64=0.0
         piw, is_work_period, is_work_hour,
         time_str, time_str_full,
         sol_in_year, sols_per_year,
+        zone_id,
     )
 end
 

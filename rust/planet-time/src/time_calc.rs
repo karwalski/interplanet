@@ -24,6 +24,7 @@ pub struct PlanetTime {
     pub time_str_full:  String, // "HH:MM:SS"
     pub sol_in_year:    Option<i64>, // Mars only
     pub sols_per_year:  Option<i64>, // Mars only
+    pub zone_id:        Option<String>, // e.g. "AMT+4"; None for Earth
 }
 
 /// MTC — Mars Coordinated Time.
@@ -47,6 +48,33 @@ fn pos_mod(a: i64, b: i64) -> i64 {
 
 fn pos_mod_f(a: f64, b: f64) -> f64 {
     ((a % b) + b) % b
+}
+
+// ── Zone ID helpers ───────────────────────────────────────────────────────────
+
+/// Returns the interplanetary time zone prefix for a body, or `None` for Earth.
+fn zone_prefix(planet: Planet) -> Option<&'static str> {
+    match planet {
+        Planet::Mars    => Some("AMT"),
+        Planet::Moon    => Some("LMT"),
+        Planet::Mercury => Some("MMT"),
+        Planet::Venus   => Some("VMT"),
+        Planet::Jupiter => Some("JMT"),
+        Planet::Saturn  => Some("SMT"),
+        Planet::Uranus  => Some("UMT"),
+        Planet::Neptune => Some("NMT"),
+        Planet::Earth   => None,
+    }
+}
+
+/// Builds a zone ID string from a prefix and an integer offset.
+/// offset >= 0 → "PREFIX+N"; offset < 0 → "PREFIX-N".
+fn build_zone_id(prefix: &str, offset: i64) -> String {
+    if offset >= 0 {
+        format!("{}+{}", prefix, offset)
+    } else {
+        format!("{}{}", prefix, offset)
+    }
 }
 
 // ── get_planet_time ───────────────────────────────────────────────────────────
@@ -132,6 +160,11 @@ pub fn get_planet_time(planet: Planet, utc_ms: i64, tz_offset_h: f64) -> PlanetT
     let time_str      = format!("{}:{}", pad2(hour), pad2(minute));
     let time_str_full = format!("{}:{}:{}", pad2(hour), pad2(minute), pad2(second));
 
+    // Zone ID — None for Earth; Some("PREFIX±N") for all other bodies.
+    let zone_id = zone_prefix(planet).map(|prefix| {
+        build_zone_id(prefix, tz_offset_h.round() as i64)
+    });
+
     PlanetTime {
         hour, minute, second,
         local_hour, day_fraction: frac_day,
@@ -139,6 +172,7 @@ pub fn get_planet_time(planet: Planet, utc_ms: i64, tz_offset_h: f64) -> PlanetT
         period_in_week, is_work_period, is_work_hour,
         time_str, time_str_full,
         sol_in_year, sols_per_year,
+        zone_id,
     }
 }
 

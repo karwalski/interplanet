@@ -423,6 +423,16 @@ pub const PlanetTimeResult = struct {
     // Mars only (0 / null equiv for other bodies):
     sol_in_year: ?i64,
     sols_per_year: ?i64,
+    // Zone ID: null for Earth; e.g. "AMT+4", "LMT+0" for non-Earth bodies.
+    // Storage for the formatted string (prefix up to 3 chars + sign + digits).
+    zone_id_buf: [12]u8,
+    zone_id_len: usize,
+
+    /// Returns the zone ID as a slice, or null for Earth.
+    pub fn zoneId(self: *const PlanetTimeResult) ?[]const u8 {
+        if (self.zone_id_len == 0) return null;
+        return self.zone_id_buf[0..self.zone_id_len];
+    }
 };
 
 /// Get local time on a planet at a given UTC instant and tz offset (planet hours).
@@ -485,6 +495,28 @@ pub fn getPlanetTime(body: u8, utc_ms: i64, tz_h: f64) ?PlanetTimeResult {
         sols_per_year = spy_i;
     }
 
+    // Zone ID: null for Earth; PREFIX+N or PREFIX-N for all others.
+    const ZONE_PREFIXES = [9]?[]const u8{
+        "MMT", // 0 Mercury
+        "VMT", // 1 Venus
+        null,  // 2 Earth
+        "AMT", // 3 Mars
+        "JMT", // 4 Jupiter
+        "SMT", // 5 Saturn
+        "UMT", // 6 Uranus
+        "NMT", // 7 Neptune
+        "LMT", // 8 Moon
+    };
+    var zone_id_buf = [_]u8{0} ** 12;
+    var zone_id_len: usize = 0;
+    const zone_prefix = ZONE_PREFIXES[@as(usize, body)];
+    if (zone_prefix) |prefix| {
+        const abs_off: i64 = @intFromFloat(@abs(@trunc(tz_h)));
+        const sign_char: u8 = if (tz_h >= 0.0) '+' else '-';
+        const written = std.fmt.bufPrint(&zone_id_buf, "{s}{c}{d}", .{ prefix, sign_char, abs_off }) catch "";
+        zone_id_len = written.len;
+    }
+
     return PlanetTimeResult{
         .hour = h,
         .minute = m,
@@ -499,6 +531,8 @@ pub fn getPlanetTime(body: u8, utc_ms: i64, tz_h: f64) ?PlanetTimeResult {
         .is_work_hour = is_work_hour,
         .sol_in_year = sol_in_year,
         .sols_per_year = sols_per_year,
+        .zone_id_buf = zone_id_buf,
+        .zone_id_len = zone_id_len,
     };
 }
 

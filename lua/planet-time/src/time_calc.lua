@@ -7,6 +7,20 @@ local C      = require("src.constants")
 local Orbital = require("src.orbital")
 local math   = math
 
+-- ── Zone prefix table ─────────────────────────────────────────────────────────
+-- Maps planet index to interplanetary timezone prefix string.
+-- Earth (2) is absent — returns nil.
+local ZONE_PREFIXES = {
+  [C.MERCURY] = "MMT",
+  [C.VENUS]   = "VMT",
+  [C.MARS]    = "AMT",
+  [C.JUPITER] = "JMT",
+  [C.SATURN]  = "SMT",
+  [C.URANUS]  = "UMT",
+  [C.NEPTUNE] = "NMT",
+  [C.MOON]    = "LMT",
+}
+
 -- ── Internal helpers ──────────────────────────────────────────────────────────
 
 -- Return the planet data entry (Moon maps to Earth).
@@ -143,6 +157,13 @@ function M.planet_time(body_idx, unix_ms)
   -- Sol from planet epoch (same as day_number for Mars; total_days for others)
   local sol_total = total_days
 
+  -- Zone ID: PREFIX+0 for non-Earth bodies (no tz_offset_h param in this API)
+  local zone_id = nil
+  local prefix = ZONE_PREFIXES[body_idx]
+  if prefix then
+    zone_id = prefix .. "+0"
+  end
+
   return {
     body                      = body_idx,
     jd                        = jd,
@@ -168,6 +189,8 @@ function M.planet_time(body_idx, unix_ms)
     sol_in_year               = sol_in_year,
     sols_per_year             = sols_per_year,
     mtc                       = mtc,
+    -- Zone ID
+    zone_id                   = zone_id,
   }
 end
 

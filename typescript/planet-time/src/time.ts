@@ -8,6 +8,11 @@ import { PLANETS, MARS_EPOCH_MS, MARS_SOL_MS } from './constants.js';
 const DOW_NAMES  = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 const DOW_SHORT  = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 
+const ZONE_PREFIXES: Partial<Record<string, string>> = {
+  mars: 'AMT', moon: 'LMT', mercury: 'MMT', venus: 'VMT',
+  jupiter: 'JMT', saturn: 'SMT', uranus: 'UMT', neptune: 'NMT',
+};
+
 function pad(n: number): string {
   return String(n).padStart(2, '0');
 }
@@ -68,6 +73,16 @@ export function getPlanetTime(
     solInfo = { solInYear: Math.floor(dayInYear), solsPerYear: Math.round(solsPerYear) };
   }
 
+  let zoneId: string | null = null;
+  if (planet !== 'earth') {
+    const prefix = ZONE_PREFIXES[planet];
+    if (prefix !== undefined) {
+      const absOff = Math.abs(Math.trunc(tzOffsetHours));
+      const sign   = tzOffsetHours >= 0 ? '+' : '-';
+      zoneId = `${prefix}${sign}${absOff}`;
+    }
+  }
+
   const dowIndex = periodInWeek % 7;
 
   const data = planet === 'moon' ? PLANETS.moon : p;
@@ -82,6 +97,7 @@ export function getPlanetTime(
     solarDayMs: p.solarDayMs, daysPerPeriod, periodsPerWeek, workPeriodsPerWeek,
     timeString: `${pad(h)}:${pad(m)}`,
     timeStringFull: `${pad(h)}:${pad(m)}:${pad(s)}`,
+    zoneId,
   };
 }
 

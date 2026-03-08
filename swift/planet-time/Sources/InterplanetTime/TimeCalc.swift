@@ -12,6 +12,7 @@ public extension InterplanetTime {
         public let isWorkPeriod, isWorkHour: Bool
         public let timeStr, timeStrFull: String  // "HH:MM", "HH:MM:SS"
         public let solInYear, solsPerYear: Int64? // Mars only
+        public let zoneId: String?               // e.g. "AMT+4"; nil for Earth
     }
 
     struct MTC {
@@ -19,6 +20,17 @@ public extension InterplanetTime {
         public let hour, minute, second: Int
         public let mtcStr: String // "HH:MM"
     }
+
+    private static let zonePrefix: [String: String] = [
+        "mars":    "AMT",
+        "moon":    "LMT",
+        "mercury": "MMT",
+        "venus":   "VMT",
+        "jupiter": "JMT",
+        "saturn":  "SMT",
+        "uranus":  "UMT",
+        "neptune": "NMT",
+    ]
 
     static func getPlanetTime(_ planet: String, _ utcMs: Int64, tzOffsetH: Double = 0) -> PlanetTime {
         let effective = planet == "moon" ? "earth" : planet
@@ -64,6 +76,13 @@ public extension InterplanetTime {
         let solInYear:   Int64? = effective == "mars" ? dayInYear : nil
         let solsPerYear: Int64? = effective == "mars" ? Int64((Double(pd.siderealYrMs) / solarDay).rounded()) : nil
 
+        var zoneId: String? = nil
+        if planet != "earth", let prefix = zonePrefix[planet] {
+            let off = Int(tzOffsetH)
+            let sign = off < 0 ? "-" : "+"
+            zoneId = "\(prefix)\(sign)\(abs(off))"
+        }
+
         let h2 = String(format: "%02d", hour)
         let m2 = String(format: "%02d", minute)
         let s2 = String(format: "%02d", second)
@@ -74,7 +93,8 @@ public extension InterplanetTime {
             dayNumber: dayNumber, dayInYear: dayInYear, yearNumber: yearNumber,
             periodInWeek: piw, isWorkPeriod: isWorkPeriod, isWorkHour: isWorkHour,
             timeStr: "\(h2):\(m2)", timeStrFull: "\(h2):\(m2):\(s2)",
-            solInYear: solInYear, solsPerYear: solsPerYear
+            solInYear: solInYear, solsPerYear: solsPerYear,
+            zoneId: zoneId
         )
     }
 

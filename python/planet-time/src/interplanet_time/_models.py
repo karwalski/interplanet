@@ -25,6 +25,7 @@ class PlanetTime:
     time_str_full: str   # "HH:MM:SS"
     sol_in_year: int | None      # Mars only
     sols_per_year: int | None    # Mars only
+    zone_id: str | None          # e.g. "AMT+0", "LMT-3"; None for Earth
 
 
 @dataclass(frozen=True)

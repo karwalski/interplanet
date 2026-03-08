@@ -9,6 +9,17 @@ defmodule InterplanetTime.TimeCalc do
 
   # ── Planet time ──────────────────────────────────────────────────────────────
 
+  @zone_prefixes %{
+    mercury: "MMT",
+    venus:   "VMT",
+    mars:    "AMT",
+    jupiter: "JMT",
+    saturn:  "SMT",
+    uranus:  "UMT",
+    neptune: "NMT",
+    moon:    "LMT"
+  }
+
   @doc """
   Get the local time on `planet` at `utc_ms`.
 
@@ -19,7 +30,8 @@ defmodule InterplanetTime.TimeCalc do
     :hour, :minute, :second, :local_hour, :day_fraction,
     :day_number, :day_in_year, :year_number, :period_in_week,
     :is_work_period, :is_work_hour, :time_str, :time_str_full,
-    :sol_in_year (nil unless :mars), :sols_per_year (nil unless :mars)
+    :sol_in_year (nil unless :mars), :sols_per_year (nil unless :mars),
+    :zone_id (nil for Earth; e.g. "AMT+4" for Mars with tz_offset_h=4)
   """
   def get_planet_time(planet, utc_ms, tz_offset_h \\ 0.0) do
     # Moon uses Earth's solar day
@@ -71,6 +83,14 @@ defmodule InterplanetTime.TimeCalc do
         {nil, nil}
       end
 
+    zone_id =
+      case Map.get(@zone_prefixes, planet) do
+        nil    -> nil
+        prefix ->
+          n = trunc(tz_offset_h)
+          if n >= 0, do: "#{prefix}+#{n}", else: "#{prefix}-#{abs(n)}"
+      end
+
     %{
       hour:           h,
       minute:         m,
@@ -86,7 +106,8 @@ defmodule InterplanetTime.TimeCalc do
       time_str:       "#{pad2(h)}:#{pad2(m)}",
       time_str_full:  "#{pad2(h)}:#{pad2(m)}:#{pad2(s)}",
       sol_in_year:    sol_in_year,
-      sols_per_year:  sols_per_year
+      sols_per_year:  sols_per_year,
+      zone_id:        zone_id
     }
   end
 

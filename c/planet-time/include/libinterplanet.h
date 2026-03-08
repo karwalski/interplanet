@@ -75,6 +75,7 @@ typedef struct {
     /* Mars only — zero for other planets */
     int32_t sol_in_year;    /**< sol index within the current Mars year */
     int32_t sols_per_year;  /**< total sols in a Mars year (~668) */
+    char    zone_id[12];    /**< interplanetary zone ID e.g. "AMT+4\0"; "" for Earth */
 } ipt_planet_time_t;
 
 /**

@@ -4,6 +4,19 @@
 import 'constants.dart';
 import 'models.dart';
 
+// ── Zone prefixes ─────────────────────────────────────────────────────────────
+
+const Map<Planet, String> _zonePrefix = {
+  Planet.mars:    'AMT',
+  Planet.moon:    'LMT',
+  Planet.mercury: 'MMT',
+  Planet.venus:   'VMT',
+  Planet.jupiter: 'JMT',
+  Planet.saturn:  'SMT',
+  Planet.uranus:  'UMT',
+  Planet.neptune: 'NMT',
+};
+
 // ── Planet time ───────────────────────────────────────────────────────────────
 
 /// Get the local time on [planet] at [utcMs].
@@ -60,6 +73,16 @@ PlanetTime getPlanetTime(Planet planet, int utcMs, {double tzOffsetH = 0.0}) {
     solsPerYear = (pd.siderealYrMs / solarDay + 0.5).floor();
   }
 
+  String? zoneId;
+  if (planet != Planet.earth) {
+    final prefix = _zonePrefix[planet];
+    if (prefix != null) {
+      final off = tzOffsetH.truncate();
+      final sign = off < 0 ? '-' : '+';
+      zoneId = '$prefix$sign${off.abs()}';
+    }
+  }
+
   final hStr = h.toString().padLeft(2, '0');
   final mStr = m.toString().padLeft(2, '0');
   final sStr = s.toString().padLeft(2, '0');
@@ -80,6 +103,7 @@ PlanetTime getPlanetTime(Planet planet, int utcMs, {double tzOffsetH = 0.0}) {
     timeStrFull: '$hStr:$mStr:$sStr',
     solInYear: solInYear,
     solsPerYear: solsPerYear,
+    zoneId: zoneId,
   );
 }
 

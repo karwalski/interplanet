@@ -78,6 +78,21 @@ final class Time
         $solInYear   = ($effectivePlanet === 'mars') ? $dayInYear % self::MARS_SOLS_PER_YEAR : null;
         $solsPerYear = ($effectivePlanet === 'mars') ? self::MARS_SOLS_PER_YEAR : null;
 
+        // Zone ID — null for Earth, PREFIX+N or PREFIX-N for all others
+        $zonePrefixes = [
+            'mercury' => 'MMT', 'venus'   => 'VMT', 'mars'    => 'AMT',
+            'jupiter' => 'JMT', 'saturn'  => 'SMT', 'uranus'  => 'UMT',
+            'neptune' => 'NMT', 'moon'    => 'LMT',
+        ];
+        if ($planet === 'earth') {
+            $zoneId = null;
+        } else {
+            $prefix  = $zonePrefixes[$planet] ?? 'XMT';
+            $absOff  = (int)abs($tzOffset);
+            $sign    = $tzOffset >= 0.0 ? '+' : '-';
+            $zoneId  = $prefix . $sign . $absOff;
+        }
+
         $h2 = str_pad((string)$hour,   2, '0', STR_PAD_LEFT);
         $m2 = str_pad((string)$minute, 2, '0', STR_PAD_LEFT);
         $s2 = str_pad((string)$second, 2, '0', STR_PAD_LEFT);
@@ -98,6 +113,7 @@ final class Time
             timeStrFull:  "$h2:$m2:$s2",
             solInYear:    $solInYear,
             solsPerYear:  $solsPerYear,
+            zoneId:       $zoneId,
         );
     }
 

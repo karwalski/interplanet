@@ -29,21 +29,22 @@ namespace InterplanetTime
     // ── Result records ───────────────────────────────────────────────────────────
 
     public record PlanetTime(
-        int    Hour,
-        int    Minute,
-        int    Second,
-        double LocalHour,
-        double DayFraction,
-        long   DayNumber,
-        long   DayInYear,
-        long   YearNumber,
-        int    PeriodInWeek,
-        bool   IsWorkPeriod,
-        bool   IsWorkHour,
-        string TimeStr,
-        string TimeStrFull,
-        int?   SolInYear,
-        int?   SolsPerYear
+        int     Hour,
+        int     Minute,
+        int     Second,
+        double  LocalHour,
+        double  DayFraction,
+        long    DayNumber,
+        long    DayInYear,
+        long    YearNumber,
+        int     PeriodInWeek,
+        bool    IsWorkPeriod,
+        bool    IsWorkHour,
+        string  TimeStr,
+        string  TimeStrFull,
+        int?    SolInYear,
+        int?    SolsPerYear,
+        string? ZoneId
     );
 
     public record MtcResult(
@@ -142,6 +143,20 @@ namespace InterplanetTime
             ["neptune"] = new OrbElems { L0 = 304.3480, DL =     219.8997, Om0 =  48.1234, E0 = 0.00899, A = 30.06900 },
             // Moon uses Earth's orbit for helio position
             ["moon"]    = new OrbElems { L0 = 100.4664, DL =  36_000.7698, Om0 = 102.9373, E0 = 0.01671, A =  1.00000 },
+        };
+
+        // ── Zone prefixes ────────────────────────────────────────────────────────
+
+        private static readonly Dictionary<string, string> ZONE_PREFIX = new()
+        {
+            ["mars"]    = "AMT",
+            ["moon"]    = "LMT",
+            ["mercury"] = "MMT",
+            ["venus"]   = "VMT",
+            ["jupiter"] = "JMT",
+            ["saturn"]  = "SMT",
+            ["uranus"]  = "UMT",
+            ["neptune"] = "NMT",
         };
 
         // ── Planet data table ────────────────────────────────────────────────────
@@ -401,6 +416,14 @@ namespace InterplanetTime
                 solsPerYear = (int)Math.Round((double)pd.SiderealYrMs / solarDay);
             }
 
+            string? zoneId = null;
+            if (planet != "earth" && ZONE_PREFIX.TryGetValue(planet, out string? prefix))
+            {
+                int off = (int)tzOffsetH;
+                string sign = off < 0 ? "-" : "+";
+                zoneId = $"{prefix}{sign}{Math.Abs(off)}";
+            }
+
             return new PlanetTime(
                 Hour         : h,
                 Minute       : m,
@@ -416,7 +439,8 @@ namespace InterplanetTime
                 TimeStr      : $"{h:D2}:{m:D2}",
                 TimeStrFull  : $"{h:D2}:{m:D2}:{s:D2}",
                 SolInYear    : solInYear,
-                SolsPerYear  : solsPerYear
+                SolsPerYear  : solsPerYear,
+                ZoneId       : zoneId
             );
         }
 

@@ -36,7 +36,7 @@
 // ── Version ───────────────────────────────────────────────────────────────────
 
 /** Library version (semver, pre-v1) */
-const VERSION = '1.9.0';
+const VERSION = '1.10.0';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -616,6 +616,7 @@ const _DOW_SHORT  = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
  * @returns {PlanetTimeResult}
  */
 function getPlanetTime(planetKey, date = new Date(), tzOffsetHours = 0) {
+  const _originalKey = planetKey; // save before moon→earth swap
   // Moon uses Earth's solar day (tidally locked; work schedules run on Earth time)
   if (planetKey === 'moon') planetKey = 'earth';
   const p = PLANETS[planetKey];
@@ -660,6 +661,10 @@ function getPlanetTime(planetKey, date = new Date(), tzOffsetHours = 0) {
 
   const dowIndex = periodInWeek % 7;
 
+  const prefix = ZONE_PREFIXES[_originalKey];
+  const offSign = tzOffsetHours >= 0 ? '+' : '';
+  const zoneId = prefix ? `${prefix}${offSign}${Math.trunc(tzOffsetHours)}` : null;
+
   return {
     planet: p.name, symbol: p.symbol,
     hour: h, minute: m, second: s, localHour, dayFraction,
@@ -669,6 +674,7 @@ function getPlanetTime(planetKey, date = new Date(), tzOffsetHours = 0) {
     solarDayMs: p.solarDayMs, daysPerPeriod, periodsPerWeek, workPeriodsPerWeek,
     timeString: `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`,
     timeStringFull: `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`,
+    zoneId,
   };
 }
 

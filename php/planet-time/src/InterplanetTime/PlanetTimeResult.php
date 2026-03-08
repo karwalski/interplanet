@@ -22,7 +22,8 @@ final class PlanetTimeResult
         public readonly bool   $isWorkHour,
         public readonly string $timeStr,       // "HH:MM"
         public readonly string $timeStrFull,   // "HH:MM:SS"
-        public readonly ?int   $solInYear,     // Mars only
-        public readonly ?int   $solsPerYear,   // Mars only
+        public readonly ?int    $solInYear,     // Mars only
+        public readonly ?int    $solsPerYear,  // Mars only
+        public readonly ?string $zoneId,       // null for Earth; e.g. "AMT+4" for others
     ) {}
 }

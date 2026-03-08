@@ -40,6 +40,11 @@ public final class InterplanetTime {
         "Mercury","Venus","Earth","Mars","Jupiter","Saturn","Uranus","Neptune","Moon"
     };
 
+    /** Zone prefixes for zoneId (null for Earth at index 2). */
+    private static final String[] ZONE_PREFIX = {
+        "MMT", "VMT", null, "AMT", "JMT", "SMT", "UMT", "NMT", "LMT"
+    };
+
     /** Solar day in milliseconds. Moon = Earth. */
     private static final double[] SOLAR_DAY_MS = {
         175.9408 * EARTH_DAY_MS,  // Mercury
@@ -253,12 +258,21 @@ public final class InterplanetTime {
         String ts  = String.format("%02d:%02d", h, m);
         String tsf = String.format("%02d:%02d:%02d", h, m, s);
 
+        // zoneId: null for Earth; "PREFIX+N" or "PREFIX-N" for all others
+        int    planetIdx = planet.ordinal();
+        String prefix    = ZONE_PREFIX[planetIdx];
+        String zoneId    = null;
+        if (prefix != null) {
+            int offsetInt = (int) Math.round(tzOffsetH);
+            zoneId = prefix + (offsetInt >= 0 ? "+" : "-") + Math.abs(offsetInt);
+        }
+
         return new PlanetTime(
             h, m, s, localHour, dayFrac,
             dayNumber, (int) Math.floor(dayInYear),
             yearNumber, periodInWeek,
             isWorkPeriod, isWorkHour,
-            ts, tsf, solInYear, solsPerYear
+            ts, tsf, solInYear, solsPerYear, zoneId
         );
     }
 

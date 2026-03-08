@@ -19,12 +19,12 @@ public record PlanetTime(
     String  timeStr,        // "HH:MM"
     String  timeStrFull,    // "HH:MM:SS"
     Integer solInYear,      // Mars only (null for other planets)
-    Integer solsPerYear     // Mars only (null for other planets)
+    Integer solsPerYear,    // Mars only (null for other planets)
+    String  zoneId          // e.g. "AMT+4", "LMT+0"; null for Earth
 ) {
     /** @return "HH:MM" formatted time string. */
     @Override
     public String toString() {
-        return timeStr + " (" + InterplanetTime.PLANETS_NAME[
-            solInYear != null ? Planet.MARS.ordinal() : Planet.EARTH.ordinal()] + ")";
+        return timeStr + (zoneId != null ? " (" + zoneId + ")" : "");
     }
 }

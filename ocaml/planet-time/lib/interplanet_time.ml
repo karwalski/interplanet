@@ -13,6 +13,25 @@ type planet_time = Time_calc.planet_time = {
   light_travel_from_earth_sec : float;
 }
 
+type full_planet_time = Time_calc.full_planet_time = {
+  hour            : int;
+  minute          : int;
+  second          : int;
+  local_hour      : float;
+  day_fraction    : float;
+  day_number      : int;
+  day_in_year     : int;
+  year_number     : int;
+  period_in_week  : int;
+  is_work_period  : bool;
+  is_work_hour    : bool;
+  time_str        : string;
+  time_str_full   : string;
+  sol_in_year     : int option;
+  sols_per_year   : int option;
+  zone_id         : string option;
+}
+
 (* ── Body names ──────────────────────────────────────────────────────────── *)
 
 (** [body_name body] returns the display name for body index 0..8. *)
@@ -82,3 +101,10 @@ let sol_number = Time_calc.sol_number
 (** [planet_time ~body ~unix_ms] computes the planet_time record for the
     given body at the given Unix millisecond timestamp (float). *)
 let planet_time = Time_calc.planet_time
+
+(* ── Full planet time ────────────────────────────────────────────────────── *)
+
+(** [get_planet_time ~body ~utc_ms] computes the full_planet_time record
+    (including zone_id) for the given body at the given Unix millisecond
+    timestamp (float). *)
+let get_planet_time = Time_calc.get_planet_time

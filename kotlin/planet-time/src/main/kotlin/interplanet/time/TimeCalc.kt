@@ -68,6 +68,13 @@ fun getPlanetTime(planet: Planet, utcMs: Long, tzOffsetH: Double = 0.0): PlanetT
         solsPerYear = null
     }
 
+    // zoneId: null for Earth; "PREFIX+N" or "PREFIX-N" for all others
+    val zonePrefix = ZONE_PREFIX[planet]
+    val zoneId: String? = zonePrefix?.let { prefix ->
+        val offsetInt = kotlin.math.round(tzOffsetH).toInt()
+        prefix + (if (offsetInt >= 0) "+$offsetInt" else "-${-offsetInt}")
+    }
+
     return PlanetTime(
         hour = h,
         minute = m,
@@ -83,7 +90,8 @@ fun getPlanetTime(planet: Planet, utcMs: Long, tzOffsetH: Double = 0.0): PlanetT
         timeStr = "%02d:%02d".format(h, m),
         timeStrFull = "%02d:%02d:%02d".format(h, m, s),
         solInYear = solInYear,
-        solsPerYear = solsPerYear
+        solsPerYear = solsPerYear,
+        zoneId = zoneId
     )
 }
 

@@ -20,7 +20,8 @@ case class PlanetTime(
   timeStr: String,
   timeStrFull: String,
   solInYear: Option[Int] = None,
-  solsPerYear: Option[Int] = None
+  solsPerYear: Option[Int] = None,
+  zoneId: Option[String] = None
 )
 
 case class MtcResult(

@@ -456,6 +456,29 @@ int ipt_get_planet_time(ipt_planet_t p, int64_t utc_ms, int tz_h,
         out->sols_per_year = (int32_t)round(pl->sidereal_yr_ms / pl->solar_day_ms);
     }
 
+    /* Zone ID — empty string for Earth; "PREFIX±N" for all other bodies */
+    {
+        const char *prefix = NULL;
+        switch (p) {
+            case IPT_MARS:    prefix = "AMT"; break;
+            case IPT_MOON:    prefix = "LMT"; break;
+            case IPT_MERCURY: prefix = "MMT"; break;
+            case IPT_VENUS:   prefix = "VMT"; break;
+            case IPT_JUPITER: prefix = "JMT"; break;
+            case IPT_SATURN:  prefix = "SMT"; break;
+            case IPT_URANUS:  prefix = "UMT"; break;
+            case IPT_NEPTUNE: prefix = "NMT"; break;
+            default:          prefix = NULL;  break; /* Earth */
+        }
+        if (prefix == NULL) {
+            out->zone_id[0] = '\0';
+        } else if (tz_h >= 0) {
+            snprintf(out->zone_id, sizeof(out->zone_id), "%s+%d", prefix, tz_h);
+        } else {
+            snprintf(out->zone_id, sizeof(out->zone_id), "%s%d", prefix, tz_h);
+        }
+    }
+
     return 0;
 }
 

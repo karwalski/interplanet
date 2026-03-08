@@ -53,6 +53,19 @@ data class PlanetData(
     val earthClockSched: Boolean = false
 )
 
+/** Zone prefixes for zoneId strings (null for Earth — no interplanetary zone system). */
+val ZONE_PREFIX: Map<Planet, String?> = mapOf(
+    Planet.MERCURY to "MMT",
+    Planet.VENUS   to "VMT",
+    Planet.EARTH   to null,
+    Planet.MARS    to "AMT",
+    Planet.JUPITER to "JMT",
+    Planet.SATURN  to "SMT",
+    Planet.URANUS  to "UMT",
+    Planet.NEPTUNE to "NMT",
+    Planet.MOON    to "LMT"
+)
+
 val PLANET_DATA: Map<Planet, PlanetData> = mapOf(
     Planet.MERCURY to PlanetData(
         solarDayMs = (175.9408 * EARTH_DAY_MS).toLong(),

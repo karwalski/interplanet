@@ -63,6 +63,12 @@ def getPlanetTime(planet: Planet, utcMs: Long, tzOffsetH: Double = 0.0): PlanetT
     else
       (None, None)
 
+  // zoneId: None for Earth; Some("PREFIX+N") or Some("PREFIX-N") for all others
+  val zoneId: Option[String] = ZONE_PREFIX(planet).map { prefix =>
+    val offsetInt = math.round(tzOffsetH).toInt
+    if offsetInt >= 0 then s"$prefix+$offsetInt" else s"$prefix-${-offsetInt}"
+  }
+
   PlanetTime(
     hour = h,
     minute = m,
@@ -78,7 +84,8 @@ def getPlanetTime(planet: Planet, utcMs: Long, tzOffsetH: Double = 0.0): PlanetT
     timeStr = f"$h%02d:$m%02d",
     timeStrFull = f"$h%02d:$m%02d:$s%02d",
     solInYear = solInYear,
-    solsPerYear = solsPerYear
+    solsPerYear = solsPerYear,
+    zoneId = zoneId
   )
 
 /**

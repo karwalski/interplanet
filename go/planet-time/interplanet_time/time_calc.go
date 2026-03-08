@@ -22,6 +22,7 @@ type PlanetTime struct {
 	TimeStrFull    string // "HH:MM:SS"
 	SolInYear      int64  // Mars only; -1 otherwise
 	SolsPerYear    int64  // Mars only; -1 otherwise
+	ZoneID         string // interplanetary zone ID e.g. "AMT+4"; "" for Earth
 }
 
 // MTC holds Mars Coordinated Time.
@@ -31,6 +32,31 @@ type MTC struct {
 	Minute int
 	Second int
 	MTCStr string // "HH:MM"
+}
+
+// zonePrefix returns the interplanetary time zone prefix for a planet.
+// Returns "" for Earth (no interplanetary zone system).
+func zonePrefix(planet string) string {
+	switch planet {
+	case "mars":
+		return "AMT"
+	case "moon":
+		return "LMT"
+	case "mercury":
+		return "MMT"
+	case "venus":
+		return "VMT"
+	case "jupiter":
+		return "JMT"
+	case "saturn":
+		return "SMT"
+	case "uranus":
+		return "UMT"
+	case "neptune":
+		return "NMT"
+	default:
+		return ""
+	}
 }
 
 // GetPlanetTime returns the local time on a planet at utcMs.
@@ -88,6 +114,17 @@ func GetPlanetTime(planet string, utcMs int64, tzOffsetH float64) PlanetTime {
 		solsPerYear = int64(math.Round(float64(pd.SiderealYrMs) / solarDay))
 	}
 
+	// Zone ID — empty string for Earth; PREFIX±N for all other bodies.
+	var zoneID string
+	if prefix := zonePrefix(planet); prefix != "" {
+		offset := int(math.Round(tzOffsetH))
+		if offset >= 0 {
+			zoneID = fmt.Sprintf("%s+%d", prefix, offset)
+		} else {
+			zoneID = fmt.Sprintf("%s%d", prefix, offset)
+		}
+	}
+
 	return PlanetTime{
 		Hour:         hour,
 		Minute:       minute,
@@ -104,6 +141,7 @@ func GetPlanetTime(planet string, utcMs int64, tzOffsetH float64) PlanetTime {
 		TimeStrFull:  fmt.Sprintf("%02d:%02d:%02d", hour, minute, second),
 		SolInYear:    solInYear,
 		SolsPerYear:  solsPerYear,
+		ZoneID:       zoneID,
 	}
 }
 

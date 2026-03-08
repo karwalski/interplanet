@@ -9,6 +9,7 @@ module InterplanetTime
     :period_in_week, :is_work_period, :is_work_hour,
     :time_str, :time_str_full,
     :sol_in_year, :sols_per_year,
+    :zone_id,
     keyword_init: true
   )
 

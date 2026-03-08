@@ -20,7 +20,8 @@ data class PlanetTime(
     val timeStr: String,
     val timeStrFull: String,
     val solInYear: Int? = null,
-    val solsPerYear: Int? = null
+    val solsPerYear: Int? = null,
+    val zoneId: String? = null
 )
 
 data class MtcResult(

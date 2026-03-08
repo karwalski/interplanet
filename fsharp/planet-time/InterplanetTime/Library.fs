@@ -41,6 +41,7 @@ type PlanetTime = {
     TimeStrFull  : string
     SolInYear    : int option
     SolsPerYear  : int option
+    ZoneId       : string option
 }
 
 type MtcResult = {
@@ -300,6 +301,20 @@ let getMtc (utcMs: int64) : MtcResult =
     { Sol = sol; Hour = h; Minute = m; Second = s
       MtcStr = sprintf "%02d:%02d" h m }
 
+// ── Zone prefixes ─────────────────────────────────────────────────────────────
+
+let private ZONE_PREFIX : Map<string, string> =
+    Map.ofList [
+        "mars",    "AMT"
+        "moon",    "LMT"
+        "mercury", "MMT"
+        "venus",   "VMT"
+        "jupiter", "JMT"
+        "saturn",  "SMT"
+        "uranus",  "UMT"
+        "neptune", "NMT"
+    ]
+
 /// Get the local time on a planet.
 /// tzOffsetH is the optional zone offset in local hours from the planet prime meridian.
 /// For Moon, uses Earth solar day and epoch (tidally locked).
@@ -357,6 +372,16 @@ let getPlanetTime (planet: string) (utcMs: int64) (tzOffsetH: float) : PlanetTim
         else
             None, None
 
+    let zoneId =
+        if planet = "earth" then None
+        else
+            match ZONE_PREFIX |> Map.tryFind planet with
+            | None -> None
+            | Some prefix ->
+                let off = int tzOffsetH
+                let sign = if off < 0 then "-" else "+"
+                Some (sprintf "%s%s%d" prefix sign (abs off))
+
     { Hour         = h
       Minute       = m
       Second       = s
@@ -371,7 +396,8 @@ let getPlanetTime (planet: string) (utcMs: int64) (tzOffsetH: float) : PlanetTim
       TimeStr      = sprintf "%02d:%02d" h m
       TimeStrFull  = sprintf "%02d:%02d:%02d" h m s
       SolInYear    = solInYear
-      SolsPerYear  = solsPerYear }
+      SolsPerYear  = solsPerYear
+      ZoneId       = zoneId }
 
 /// Format a light travel time (seconds) as a human-readable string.
 /// Mirrors formatLightTime() in planet-time.js.

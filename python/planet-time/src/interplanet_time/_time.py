@@ -11,6 +11,18 @@ from datetime import datetime, timezone
 from ._constants import Planet, PLANETS, MARS_EPOCH_MS, MARS_SOL_MS
 from ._models import PlanetTime, MTC
 
+# Maps Planet enum → 3-letter timezone zone prefix (mirrors ZONE_PREFIXES in planet-time.js)
+_ZONE_PREFIXES: dict[Planet, str] = {
+    Planet.MARS:    "AMT",
+    Planet.MOON:    "LMT",
+    Planet.MERCURY: "MMT",
+    Planet.VENUS:   "VMT",
+    Planet.JUPITER: "JMT",
+    Planet.SATURN:  "SMT",
+    Planet.URANUS:  "UMT",
+    Planet.NEPTUNE: "NMT",
+}
+
 __all__ = ["get_planet_time", "get_mtc", "get_mars_time_at_offset"]
 
 
@@ -79,6 +91,13 @@ def get_planet_time(
         sol_in_year   = math.floor(day_in_year)
         sols_per_year = round(sols_per_year_f)
 
+    prefix = _ZONE_PREFIXES.get(planet)
+    if prefix is not None:
+        off_sign = "+" if tz_offset_h >= 0 else ""
+        zone_id: str | None = f"{prefix}{off_sign}{math.trunc(tz_offset_h)}"
+    else:
+        zone_id = None
+
     return PlanetTime(
         hour=h, minute=m, second=s,
         local_hour=local_hour,
@@ -93,6 +112,7 @@ def get_planet_time(
         time_str_full=f"{h:02d}:{m:02d}:{s:02d}",
         sol_in_year=sol_in_year,
         sols_per_year=sols_per_year,
+        zone_id=zone_id,
     )
 
 

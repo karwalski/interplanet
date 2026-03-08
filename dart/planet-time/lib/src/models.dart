@@ -32,6 +32,8 @@ class PlanetTime {
   final int? solInYear;
   /// Total sols per Mars year (null for non-Mars planets).
   final int? solsPerYear;
+  /// Interplanetary zone identifier, e.g. "AMT+4" (null for Earth).
+  final String? zoneId;
 
   const PlanetTime({
     required this.hour,
@@ -49,6 +51,7 @@ class PlanetTime {
     required this.timeStrFull,
     this.solInYear,
     this.solsPerYear,
+    this.zoneId,
   });
 }
 
