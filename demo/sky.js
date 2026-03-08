@@ -1,4 +1,4 @@
-/* InterPlanet — sky.js v1.10.0 */
+/* InterPlanet — sky.js v1.11.0 */
 // ════════════════════════════════════════════════════════════════════════════
 // i18n shorthand — t() / getDayAbbr() delegates to window.I18N
 // Inline English fallbacks guard against a browser-cached i18n.js that
@@ -2432,7 +2432,7 @@ function openLtxMeeting(startMs, delayMin, cities) {
     title:    hostName + ' ↔ ' + participantStr + ' — LTX',
     start:    new Date(startMs).toISOString(),
     quantum:  5,
-    mode:     'LTX-LIVE',
+    mode:     planetCities.length > 0 || (delayMin || 0) >= 2 ? 'LTX-ASYNC' : 'LTX-LIVE',
     nodes,
     segments: [
       { type:'PLAN_CONFIRM', q:2 },
@@ -4365,77 +4365,64 @@ async function runAgentNegotiation() {
     return slot.startMs + Math.min(30 * 60000, Math.floor((slot.endMs - slot.startMs) / 2));
   }
 
-  const ms0 = _mid(slots[0]);
-  const ms1 = slots.length > 1 ? _mid(slots[1]) : ms0;
-  const ms2 = slots.length > 2 ? _mid(slots[2]) : ms1;
+  // Per-agent delay note (only for planet-type locs)
+  function _agentDelay(loc) {
+    if (loc.type !== 'planet') return '';
+    try {
+      const secs = PlanetTime.lightTravelSeconds('earth', loc.planet, Date.now());
+      return secs < 90 ? ` (${Math.round(secs)} s signal delay)` : ` (${(secs/60).toFixed(1)} min signal delay)`;
+    } catch(_) { return ''; }
+  }
 
-  const utc0 = _fmtUtc(ms0);
-  const utc1 = _fmtUtc(ms1);
-  const utc2 = _fmtUtc(ms2);
+  // All agents negotiate equally — each responds to every proposed slot
+  const slotMids = slots.map(_mid);
+  const slotUtcs = slotMids.map(_fmtUtc);
 
-  const planetLoc = locs.find(l => l.type === 'planet');
-  const delayNote = planetLoc ? ` Signal delay: ${_delayStr(planetLoc.planet)} each way.` : '';
+  for (let si = 0; si < slotMids.length; si++) {
+    const ms  = slotMids[si];
+    const utc = slotUtcs[si];
 
-  const workForB0 = slots[0].localTimes?.[1]?.isWorkHour ?? true;
-  const workForAll0 = slots[0].localTimes?.every(lt => lt.isWorkHour !== false) ?? true;
-  const workForA1 = slots.length > 1 ? (slots[1].localTimes?.[0]?.isWorkHour ?? true) : true;
-  const workForAll1 = slots.length > 1 ? (slots[1].localTimes?.every(lt => lt.isWorkHour !== false) ?? true) : true;
+    // Agent A (locs[0]) proposes or re-checks
+    const aMsg = si === 0
+      ? `Hi all! How about <strong>${utc}</strong> — that's ${_fmtLocal(ms, locs[0])} for me?`
+      : `How about <strong>${utc}</strong> — ${_fmtLocal(ms, locs[0])} for me?`;
+    await _bubble('agent-a', locs[0].label, aMsg, si === 0 ? 450 : 500);
 
-  // Additional agents (cities 3+) confirm after primary two-party negotiation
-  async function _confirmOthers(ms, slotIdx) {
-    if (locs.length <= 2) return;
-    const slot = slots[slotIdx] || slots[slots.length - 1];
-    for (let i = 2; i < locs.length; i++) {
-      const workOk = slot?.localTimes?.[i]?.isWorkHour ?? true;
-      const side = i % 2 === 0 ? 'agent-a' : 'agent-b';
-      const note = workOk ? ' Works for me!' : ' (outside my preferred hours but I\'ll join)';
+    // Every other agent responds in turn
+    let allOk = true;
+    for (let i = 1; i < locs.length; i++) {
+      const works  = slots[si]?.localTimes?.[i]?.isWorkHour ?? true;
+      const side   = i % 2 === 1 ? 'agent-b' : 'agent-a';
+      const delay  = _agentDelay(locs[i]);
+      const isLast = i === locs.length - 1;
+
+      if (!works) {
+        allOk = false;
+        const nextOpt = si + 1 < slotUtcs.length
+          ? ` Could we try <strong>${slotUtcs[si + 1]}</strong>?` : '';
+        await _bubble(side, locs[i].label,
+          `${utc} is rest hours here (${_fmtLocal(ms, locs[i])}).${delay}${nextOpt}`,
+          700 + i * 200);
+        break; // first rejecter drives next counter-proposal
+      }
+
+      const agreedNote = (isLast && allOk) ? ' That works for everyone!' : '';
       await _bubble(side, locs[i].label,
-        `${_fmtLocal(ms, locs[i])} for me.${note}`,
-        350 + (i - 2) * 250);
+        `${utc} works — ${_fmtLocal(ms, locs[i])} here.${delay}${agreedNote}`,
+        600 + i * 200);
+    }
+
+    if (allOk) {
+      _agreed(ms, utc);
+      return;
     }
   }
 
-  // Round 1 — Agent A proposes slot 0
-  await _bubble('agent-a', labelA,
-    `Hi! I'd like to schedule our meeting. How about <strong>${utc0}</strong>` +
-    ` — that's ${_fmtLocal(ms0, locs[0])} for me?`,
-    450);
-
-  if (workForB0) {
-    await _bubble('agent-b', labelB,
-      `That works — it's ${_fmtLocal(ms0, locs[1])} here.${delayNote} Let's do it!`,
-      750);
-    await _confirmOthers(ms0, 0);
-    _agreed(ms0, utc0);
-    return;
-  }
-
-  // Slot 0 bad for B — B counter-proposes slot 1
-  await _bubble('agent-b', labelB,
-    `${utc0} is rest hours here (${_fmtLocal(ms0, locs[1])}).${delayNote}` +
-    ` Could we try <strong>${utc1}</strong> instead?`,
-    750);
-
-  if (workForA1) {
-    await _bubble('agent-a', labelA,
-      `${utc1} works for me — ${_fmtLocal(ms1, locs[0])}. Agreed!`,
-      750);
-    await _confirmOthers(ms1, 1);
-    _agreed(ms1, utc1);
-    return;
-  }
-
-  // Slot 1 also bad for A — A tries slot 2
-  await _bubble('agent-a', labelA,
-    `That's tricky for me too. How about <strong>${utc2}</strong>?`,
-    750);
-
-  await _bubble('agent-b', labelB,
-    `${utc2} — ${_fmtLocal(ms2, locs[1])} for me.${delayNote} That works!`,
-    750);
-
-  await _confirmOthers(ms2, 2);
-  _agreed(ms2, utc2);
+  // All slots exhausted — proceed with best available
+  const fbMs = slotMids[slotMids.length - 1];
+  await _bubble('agent-a', locs[0].label,
+    `Let's go with <strong>${slotUtcs[slotMids.length - 1]}</strong> as our best option.`, 400);
+  _agreed(fbMs, slotUtcs[slotMids.length - 1]);
 }
 
 document.getElementById('mp-agent-btn').addEventListener('click', () => {
