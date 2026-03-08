@@ -5,33 +5,38 @@ their support status for **planet-time** (orbital mechanics, planet clocks,
 meeting windows) and **LTX** (Light-Travel Xchange session protocol), and
 the current version of each.
 
+## Parity Policy
+
+Both **planet-time** and **LTX** must be implemented in exactly the same set of languages.
+If a language has one, it must have both. Any gap is a tracked backlog item.
+
 ## Support Matrix
 
-| Language | planet-time | LTX | Notes |
-|---|:---:|:---:|---|
-| **JavaScript** | ✓ 1.1.0 | ✓ 1.1.0 | Separate packages: `javascript/planet-time/`, `javascript/ltx/` |
-| **TypeScript** | ✓ 1.1.0 | ✓ 1.0.0 | Native TS types; separate packages |
-| **Python** | ✓ 0.1.0 | ✓ 1.0.0 | PyPI: `interplanet-time` / `interplanet-ltx` |
-| **Java** | ✓ 1.0.0 | ✓ 1.0.0 | Maven Central; stdlib-only |
-| **C** | ✓ 1.0.0 | ✓ 1.0.0 | `libinterplanet`; no external deps |
-| **PHP** | ✓ 1.0.0 | ✓ 1.0.0 | Packagist; stdlib-only |
-| **Ruby** | ✓ 1.0.0 | ✓ 1.0.0 | RubyGems; stdlib-only |
-| **Go** | ✓ 1.0.0 | ✓ 1.0.0 | Go modules; stdlib-only |
-| **Swift** | ✓ 1.0.0 | ✓ 1.0.0 | Swift Package Index; Foundation-only |
-| **Rust** | ✓ 1.0.0 | ✓ 1.0.0 | Crates.io; stdlib-only |
-| **R** | ✓ 0.1.0 | — | CRAN: `interplanet.time`; base R only |
-| **C#** | — | ✓ 1.0.0 | NuGet; .NET 6; planet-time: backlog (18.11) |
-| **Dart** | — | ✓ 1.0.0 | pub.dev; Dart 3; planet-time: backlog (18.12) |
-| **Elixir** | — | ✓ 1.0.0 | Hex; Mix 1.14+; planet-time: backlog (18.13) |
-| **F#** | — | ✓ 1.0.0 | NuGet; .NET 6; planet-time: backlog (18.14) |
-| **Kotlin** | — | ✓ 1.0.0 | Maven Central; JVM; planet-time: backlog (18.15) |
-| **Scala** | — | ✓ 1.0.0 | Maven Central; Scala 3 JVM; planet-time: backlog (18.16) |
-| **Lua** | — | ✓ 1.0.0 | stdlib-only; Lua 5.3+; planet-time: backlog (18.19) |
-| **OCaml** | — | ✓ 1.0.0 | stdlib-only; OCaml 4.13+; ocamlfind; planet-time: backlog (18.18) |
-| **Zig** | — | ✓ 1.0.0 | stdlib-only; Zig 0.12+; no external deps; planet-time: backlog (18.17) |
-| **Julia** | — | — | planet-time: backlog (18.10); LTX: backlog (18.20) |
+| Language | planet-time | LTX | Min version | Fixture tested | Notes |
+|---|:---:|:---:|---|:---:|---|
+| **JavaScript** | ✓ 1.1.0 | ✓ 1.1.0 | Node ≥ 16 | ✅ 54 | `javascript/planet-time/`, `javascript/ltx/` |
+| **TypeScript** | ✓ 1.1.0 | ✓ 1.0.0 | Node ≥ 16 | ✅ 54 | Native TS types; `typescript/planet-time/`, `typescript/ltx/` |
+| **Python** | ✓ 0.1.0 | ✓ 1.0.0 | Python ≥ 3.10 | ✅ 54 | PyPI: `interplanet-time` / `interplanet-ltx` |
+| **Java** | ✓ 1.0.0 | ✓ 1.0.0 | Java 16+ | ✅ 54 | stdlib-only; `java/planet-time/`, `java/ltx/` |
+| **C** | ✓ 1.0.0 | ✓ 1.0.0 | C99 | ✅ 54 | `libinterplanet`; no external deps |
+| **PHP** | ✓ 1.0.0 | ✓ 1.0.0 | PHP 8.1+ | ✅ 54 | Packagist; PSR-4; stdlib-only |
+| **Ruby** | ✓ 1.0.0 | ✓ 1.0.0 | Ruby 2.6+ | ✅ 54 | RubyGems; stdlib-only |
+| **Go** | ✓ 1.0.0 | ✓ 1.0.0 | Go 1.21+ | ✅ 54 | Go modules; stdlib-only |
+| **Swift** | ✓ 1.0.0 | ✓ 1.0.0 | Swift 5.9+ | ✅ 54 | Swift Package Index; Foundation-only |
+| **Rust** | ✓ 1.0.0 | ✓ 1.0.0 | Rust 1.70+ | ✅ 54 | Crates.io; stdlib-only |
+| **R** | ✓ 0.1.0 | ✓ 0.1.0 | R 4.1+ | ✅ 54 | base R only; `r/planet-time/`, `r/ltx/` |
+| **C#** | ✓ 1.0.0 | ✓ 1.0.0 | .NET 8+ | ✅ 54 | NuGet; `csharp/planet-time/`, `csharp/ltx/` |
+| **Dart** | ✓ 1.0.0 | ✓ 1.0.0 | Dart 3+ | ✅ 54 | pub.dev; `dart/planet-time/`, `dart/ltx/` |
+| **Elixir** | ✓ 1.0.0 | ✓ 1.0.0 | Elixir 1.14+ | ✅ 54 | Hex; Mix; `elixir/planet-time/`, `elixir/ltx/` |
+| **F#** | ✓ 1.0.0 | ✓ 1.0.0 | .NET 8+ | ✅ 54 | NuGet; `fsharp/planet-time/`, `fsharp/ltx/` |
+| **Kotlin** | ✓ 1.0.0 | ✓ 1.0.0 | Kotlin 1.9+ JVM | ✅ 54 | Maven Central; `kotlin/planet-time/`, `kotlin/ltx/` |
+| **Scala** | ✓ 1.0.0 | ✓ 1.0.0 | Scala 3 JVM | ✅ 54 | Maven Central; `scala/planet-time/`, `scala/ltx/` |
+| **Lua** | ✓ 1.0.0 | ✓ 1.0.0 | Lua 5.3+ | ✅ 54 | stdlib-only; `lua/planet-time/`, `lua/ltx/` |
+| **OCaml** | ✓ 1.0.0 | ✓ 1.0.0 | OCaml 4.13+ | ✅ 54 | ocamlfind; `ocaml/planet-time/`, `ocaml/ltx/` |
+| **Zig** | ✓ 1.0.0 | ✓ 1.0.0 | Zig 0.12+ | ✅ 54 | stdlib-only; `zig/planet-time/`, `zig/ltx/` |
+| **Julia** | ✓ 1.0.0 | ✓ 1.0.0 | Julia 1.9+ | ✅ 54 | stdlib-only; `julia/planet-time/`, `julia/ltx/` |
 
-**Legend:** ✓ = implemented · — = not yet implemented
+**Legend:** ✓ = implemented · ✅ 54 = all 54 cross-language fixture entries pass · — = not yet implemented
 
 ---
 
@@ -72,26 +77,38 @@ interplanet-github/
 │   ├── planet-time/     ← Rust crate
 │   └── ltx/             ← Rust crate
 ├── r/
-│   └── planet-time/     ← R package
+│   ├── planet-time/     ← R package
+│   └── ltx/             ← R LTX package
 ├── csharp/
+│   ├── planet-time/     ← .NET NuGet package
 │   └── ltx/             ← .NET NuGet package
 ├── dart/
+│   ├── planet-time/     ← Dart pub package
 │   └── ltx/             ← Dart pub package
 ├── elixir/
+│   ├── planet-time/     ← Elixir Hex package
 │   └── ltx/             ← Elixir Hex package
 ├── fsharp/
-│   └── ltx/             ← .NET NuGet package
+│   ├── planet-time/     ← F# .NET NuGet package
+│   └── ltx/             ← F# .NET NuGet package
 ├── kotlin/
+│   ├── planet-time/     ← Kotlin/JVM Maven artifact
 │   └── ltx/             ← Kotlin/JVM Maven artifact
 ├── scala/
+│   ├── planet-time/     ← Scala 3 Maven artifact
 │   └── ltx/             ← Scala 3 Maven artifact
 ├── lua/
+│   ├── planet-time/     ← Lua 5.3+ module
 │   └── ltx/             ← Lua 5.3+ module
 ├── ocaml/
+│   ├── planet-time/     ← OCaml 4.13+ library (ocamlfind)
 │   └── ltx/             ← OCaml 4.13+ library (ocamlfind)
 ├── zig/
-│   └── ltx/             ← Zig 0.12+ LTX library
-└── julia/               ← (backlog — no implementations yet)
+│   ├── planet-time/     ← Zig 0.12+ library
+│   └── ltx/             ← Zig 0.12+ library
+└── julia/
+    ├── planet-time/     ← Julia 1.9+ package
+    └── ltx/             ← Julia 1.9+ package
 ```
 
 ---
@@ -122,29 +139,4 @@ All LTX implementations conform to the cross-SDK vector test suite
 
 ---
 
-## Backlog — Planet-Time Ports Pending
-
-| Story | Language | Priority |
-|---|---|---|
-| 18.10 | Julia | Low |
-| 18.11 | C# | Medium |
-| 18.12 | Dart | Medium |
-| 18.13 | Elixir | Medium |
-| 18.14 | F# | Medium |
-| 18.15 | Kotlin | Medium |
-| 18.16 | Scala | Medium |
-| 18.17 | Zig | Low |
-| 18.18 | OCaml | Low |
-| 18.19 | Lua | Low |
-
-## Backlog — LTX Ports Pending
-
-| Story | Language | Priority |
-|---|---|---|
-| 18.20 | Julia | Low |
-| 18.21 | R | Low |
-| 22.3 | CLI (`interplanet ltx` subcommands) | Medium |
-
----
-
-*Last updated: 2026-03-02*
+*Last updated: 2026-03-08*

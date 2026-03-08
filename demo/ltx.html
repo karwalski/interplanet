@@ -11,19 +11,19 @@
 <!-- Preconnect for domains used in the critical path -->
 <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
 <!-- Preload critical local assets -->
-<link rel="preload" href="planet-time.js?v=1.1.0" as="script">
+<link rel="preload" href="planet-time.js?v=1.9.0" as="script">
 <link rel="icon" type="image/x-icon" href="assets/favicon.ico">
 <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16x16.png">
 <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
 <meta name="theme-color" content="#060614">
-<meta name="description" content="LTX — Light-Time eXchange. Structured deterministic meeting protocol for interplanetary sessions with high signal propagation delay.">
+<meta name="description" content="Plan meetings across Earth, Mars, and other worlds. Works even without a live connection.">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
       media="print" onload="this.media='all'" crossorigin="anonymous"
       referrerpolicy="no-referrer">
 <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"></noscript>
-<script src="assets/i18n.js?v=1.1.0"></script>
-<script src="planet-time.js?v=1.1.0"></script>
+<script src="assets/i18n.js?v=1.9.0"></script>
+<script src="planet-time.js?v=1.9.0"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -254,14 +254,18 @@ html.light-mode .tpl-card.selected{background:rgba(53,99,200,.06)}
     <a href="index.html" class="back-link" id="back-link-setup" aria-label="Back to InterPlanet">
       <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> InterPlanet
     </a>
-    <span class="wordmark"><i class="fa-solid fa-satellite-dish" aria-hidden="true"></i> <span id="setup-heading">LTX Meeting</span></span>
-    <span class="ltx-badge">v1.1</span>
+    <span class="wordmark"><i class="fa-solid fa-satellite-dish" aria-hidden="true"></i> <span id="setup-heading">Space Meeting Planner</span></span>
+    <span class="ltx-badge">v1.9</span>
   </div>
   <p id="setup-intro" style="font-size:.8rem;color:var(--text-muted);margin-bottom:1.25rem;line-height:1.55">
-    <strong>Light-Time eXchange</strong> — a deterministic structured meeting protocol designed for
+    Plan a meeting across Earth, Mars, or any world. Each participant runs this page and stays in sync — no live internet connection needed.
+  </p>
+  <details style="font-size:.78rem;color:var(--text-muted);margin-bottom:1.25rem;line-height:1.55">
+    <summary style="cursor:pointer;font-weight:600;margin-bottom:.4rem">Technical Details</summary>
+    <strong>Light-Time eXchange (LTX)</strong> — a deterministic structured meeting protocol designed for
     interplanetary sessions where signal propagation delay prevents real-time interaction.
     All nodes run this page independently and stay in sync without a live connection.
-  </p>
+  </details>
 
   <!-- Recent Sessions history (Story 46.1) -->
   <div class="card" id="history-card" hidden>
@@ -2289,7 +2293,7 @@ function generateLtxICS(cfg) {
   return [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//InterPlanet//LTX v1.1//EN',
+    'PRODID:-//InterPlanet//LTX v1.9//EN',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     'BEGIN:VEVENT',

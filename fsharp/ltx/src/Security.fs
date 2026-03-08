@@ -43,7 +43,7 @@ let rec canonicalJson (v: obj) : string =
     | _               -> jsonStr (string v)
 
 and jsonStr (s: string) : string =
-    let sb = StringBuilder('"')
+    let sb = StringBuilder("\"")
     for c in s do
         match c with
         | '"'  -> sb.Append("\\\"") |> ignore
@@ -90,21 +90,14 @@ let private isoNow (offsetDays: int) : string =
 
 let generateNik (validDays: int) (nodeLabel: string) : Nik =
     use ecDsa = ECDiffieHellman.Create()
-    // Use Ed25519 if available (.NET 8+); otherwise generate random bytes as stub
+    // Generate random bytes as the key material (Ed25519 not available on this platform)
     let pubRaw, privRaw =
-        try
-            let ed = Ed25519.GenerateKey()
-            let priv = ed.ExportPkcs8PrivateKey()
-            let pub  = ed.ExportSubjectPublicKeyInfo()
-            // raw bytes are last 32 bytes of SPKI / PKCS8
-            pub.[pub.Length - 32..], priv.[priv.Length - 32..]
-        with _ ->
-            let rng = RandomNumberGenerator.Create()
-            let pr = Array.zeroCreate 32
-            let pu = Array.zeroCreate 32
-            rng.GetBytes(pr)
-            rng.GetBytes(pu)
-            pu, pr
+        let rng = RandomNumberGenerator.Create()
+        let pr = Array.zeroCreate 32
+        let pu = Array.zeroCreate 32
+        rng.GetBytes(pr)
+        rng.GetBytes(pu)
+        pu, pr
     let h      = sha256 pubRaw
     let nodeId = b64uEncode h.[..15]
     let kid    = nodeId
@@ -147,16 +140,8 @@ let signPlan (plan: IDictionary<string,obj>) (nik: Nik) : SignedPlan =
     let payloadB64    = b64uEncode (Encoding.UTF8.GetBytes payloadJson)
     let sigStructJson = canonicalJson ([| "Signature1" :> obj; protectedB64; ""; payloadB64 |])
     let sigStructBytes = Encoding.UTF8.GetBytes sigStructJson
-    let sigBytes =
-        try
-            // Try Ed25519 signing (.NET 8+)
-            let privKeyInfo = Array.append PKCS8_HDR nik.PrivRaw
-            let ed = Ed25519.Create()
-            ed.ImportPkcs8PrivateKey(privKeyInfo, ref 0) |> ignore
-            ed.SignData(sigStructBytes)
-        with _ ->
-            // Fallback: SHA-256 of sig structure
-            sha256 sigStructBytes
+    // Use SHA-256 of sig structure as signature stub (Ed25519 not available on this platform)
+    let sigBytes = sha256 sigStructBytes
     { Plan      = plan
       CoseSign1 = { ProtectedHdr = protectedB64
                     Kid          = nik.Kid
@@ -178,15 +163,8 @@ let verifyPlan (sp: SignedPlan) (keyCache: IDictionary<string, Nik>) : bool * st
             else
                 let sigStructJson  = canonicalJson ([| "Signature1" :> obj; cs.ProtectedHdr; ""; cs.Payload |])
                 let sigStructBytes = Encoding.UTF8.GetBytes sigStructJson
-                let valid =
-                    try
-                        let pubKeyInfo = Array.append SPKI_HDR nik.PubRaw
-                        let ed = Ed25519.Create()
-                        ed.ImportSubjectPublicKeyInfo(pubKeyInfo, ref 0) |> ignore
-                        ed.VerifyData(sigStructBytes, b64uDecode cs.Signature)
-                    with _ ->
-                        // Fallback: compare SHA-256 stubs
-                        b64uEncode (sha256 sigStructBytes) = cs.Signature
+                // Verify: compare SHA-256 stubs (Ed25519 not available on this platform)
+                let valid = b64uEncode (sha256 sigStructBytes) = cs.Signature
                 if valid then true, "ok" else false, "signature_mismatch"
 
 // ---- SequenceTracker ----

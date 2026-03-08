@@ -961,6 +961,7 @@ let STATE = {
     showLabel:true, showHourly:true, showWork:true, horiz:false,
     showWeather:true, showSunMoon:true, showPing:true, compact:false,
     reduceMotion: false,
+    simpleMode: true,    // 58.8 — simple view hides advanced display toggles
     hdtnApiUrl: 'https://dtn.interplanet.live/',
     llmApiUrl: 'https://slm.interplanet.live/',
     weatherApiUrl: 'https://api.open-meteo.com/v1',
@@ -1638,8 +1639,13 @@ function updateCityDisplay(city) {
   const isLight = lum(horizon) > 0.42;
   // Text colour: strongly contrasting against horizon colour
   const textCol = isLight ? 'rgba(0,0,0,0.88)' : 'rgba(255,255,255,0.95)';
-  // Panel overlay: very subtle — just enough for readability over blurred horizon colour
-  const panelOverlay = isLight ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.18)';
+  // 58.11 — 3-way panel overlay based on solar altitude
+  let panelOverlay;
+  if (isLight) {
+    panelOverlay = alt > 30 ? 'rgba(255,200,100,0.04)' : 'rgba(255,255,255,0.18)';
+  } else {
+    panelOverlay = alt < -6 ? 'rgba(0,0,40,0.15)' : 'rgba(50,20,60,0.12)';
+  }
 
   const colEl   = document.getElementById(`city-${city.id}`);
   const skyEl   = document.getElementById(`sky-${city.id}`);
@@ -1660,6 +1666,8 @@ function updateCityDisplay(city) {
   infoEl.style.borderTop  = `1px solid ${isLight ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.1)'}`;
 
   if (slabel) { slabel.textContent = s.showLabel ? desc : ''; }
+  const tbEl = document.getElementById(`tb-${city.id}`);
+  if (tbEl) tbEl.style.display = s.showTime ? '' : 'none';
   if (timeEl) { timeEl.textContent = s.showTime ? formatLocalTime(city.tz) : ''; }
 
   // Day of week
@@ -1846,7 +1854,14 @@ function updatePlanetDisplay(city, now) {
 
   const isLight = lum(horizon) > 0.42;
   const textCol = isLight ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,0.95)';
-  const panelOverlay = isLight ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.18)';
+  // 58.11 — 3-way panel overlay using solar hour angle as proxy for alt
+  const hourAngle = pt.localHour - 12; // -12..+12; 0 = noon
+  let panelOverlay;
+  if (isLight) {
+    panelOverlay = Math.abs(hourAngle) < 3 ? 'rgba(255,200,100,0.04)' : 'rgba(255,255,255,0.18)';
+  } else {
+    panelOverlay = Math.abs(hourAngle) > 8 ? 'rgba(0,0,40,0.15)' : 'rgba(50,20,60,0.12)';
+  }
 
   // Column background = horizon colour (fills info area below sky)
   if (colEl) colEl.style.background = hex3(horizon);
@@ -1858,6 +1873,8 @@ function updatePlanetDisplay(city, now) {
   // Sky description label in the sky area
   if (slabelEl && s.showLabel) slabelEl.textContent = planetSkyDesc(pt.localHour);
 
+  const tbElP = document.getElementById(`tb-${city.id}`);
+  if (tbElP) tbElP.style.display = s.showTime ? '' : 'none';
   if (timeEl && s.showTime) {
     if (_use12h()) {
       const h = pt.hour % 12 || 12;
@@ -3768,6 +3785,14 @@ function syncSettingsUI() {
 
   // AI Provider — restore saved provider selection
   _syncProviderUI();
+
+  // 58.8 — simple/advanced mode toggle
+  const sp = document.getElementById('settings-panel');
+  if (sp) sp.classList.toggle('settings-simple', !!s.simpleMode);
+  const simpleModeVal = s.simpleMode ? 'simple' : 'advanced';
+  document.querySelectorAll('#detail-mode-seg .sp-seg-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.val === simpleModeVal);
+  });
 }
 
 let _mqlTheme = null;
@@ -3842,6 +3867,14 @@ function bindSettingsToggles() {
   document.getElementById('s-theme').addEventListener('change', e => {
     STATE.settings.theme = e.target.value;
     applySettings(); saveState(); syncHash();
+  });
+
+  // 58.8 — detail level segmented control
+  document.querySelectorAll('#detail-mode-seg .sp-seg-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      STATE.settings.simpleMode = btn.dataset.val === 'simple';
+      syncSettingsUI(); saveState();
+    });
   });
 }
 
@@ -3965,7 +3998,10 @@ document.getElementById('kbd-btn').addEventListener('click', toggleKbd);
 document.getElementById('kbd-close').addEventListener('click', closeKbd);
 
 function openMeetingPanel() {
-  if (window.innerWidth < 768) document.body.classList.add('scheduler-fullscreen');
+  if (window.innerWidth < 768) {
+    document.body.classList.add('scheduler-fullscreen');
+    history.pushState({ schedulerOpen: true }, '', location.href); // 58.5
+  }
   const panel = document.getElementById('meeting-panel');
   const dateInput = document.getElementById('mp-date');
   if (dateInput && !dateInput.value) {
@@ -5146,6 +5182,48 @@ document.querySelectorAll('#time-format-seg .sp-seg-btn').forEach(btn => {
   });
 });
 
+// ── 58.9 Contextual info (i) popovers ─────────────────────────────────────
+const INFO_CONTENT = {
+  amt: { titleKey: 'info.amt_title', textKey: 'info.amt_text', learnUrl: 'https://github.com/karwalski/interplanet/blob/main/docs/GLOSSARY.md' },
+  sol: { titleKey: 'info.sol_title', textKey: 'info.sol_text', learnUrl: 'https://github.com/karwalski/interplanet/blob/main/docs/GLOSSARY.md' },
+  work_hours: { titleKey: 'info.work_title', textKey: 'info.work_text', learnUrl: 'https://github.com/karwalski/interplanet/blob/main/docs/WHITEPAPER.md' },
+  scheduler: { titleKey: 'info.scheduler_title', textKey: 'info.scheduler_text', learnUrl: 'https://github.com/karwalski/interplanet/blob/main/demo/ltx.html' },
+};
+
+document.addEventListener('click', function(e) {
+  const btn = e.target.closest('.info-btn');
+  if (btn) {
+    e.stopPropagation();
+    const key = btn.dataset.info;
+    const info = INFO_CONTENT[key];
+    if (!info) return;
+    const pop = document.getElementById('info-pop');
+    const ov = document.getElementById('info-pop-overlay');
+    pop.innerHTML = '<span class="info-pop-title">' + t(info.titleKey) + '</span>' +
+      t(info.textKey) +
+      '<div class="info-pop-links"><a href="' + info.learnUrl + '" target="_blank" rel="noopener">' + t('info.learn_more') + '</a></div>';
+    const rect = btn.getBoundingClientRect();
+    pop.style.display = 'block';
+    pop.style.top = Math.min(rect.bottom + 8, window.innerHeight - 200) + 'px';
+    pop.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - 276)) + 'px';
+    ov.classList.add('on');
+    return;
+  }
+  if (e.target.id === 'info-pop-overlay') {
+    document.getElementById('info-pop').style.display = 'none';
+    e.target.classList.remove('on');
+  }
+});
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    const pop = document.getElementById('info-pop');
+    const ov = document.getElementById('info-pop-overlay');
+    if (pop) pop.style.display = 'none';
+    if (ov) ov.classList.remove('on');
+  }
+});
+
 // Dismiss pinned hour popup when clicking outside
 document.addEventListener('pointerdown', e => {
   if (_popPinned && !e.target.closest('#hpop') && !e.target.closest('.hour-cell')) {
@@ -5305,6 +5383,15 @@ function equalizeInfoHeights() {
 
 // ── Welcome splash + feature tour ──────────────────────────────────────────
 function getTourSteps() {
+  if (window.innerWidth < 768) {
+    // 58.6 — Mobile-specific tour steps
+    return [
+      { sel:'#cities-wrap',  title:t('tour.mobile_step1_title'), place:'top',    text:t('tour.mobile_step1_text') },
+      { sel:'#controls',     title:t('tour.mobile_step2_title'), place:'bottom', text:t('tour.mobile_step2_text') },
+      { sel:'#meeting-btn',  title:t('tour.mobile_step3_title'), place:'bottom', text:t('tour.mobile_step3_text') },
+      { sel:'#add-col',      title:t('tour.mobile_step4_title'), place:'top',    text:t('tour.mobile_step4_text') },
+    ];
+  }
   return [
     { sel:'#add-col',      title:t('tour.step1_title'), place:'bottom',
       text:t('tour.step1_text') },
@@ -5408,6 +5495,12 @@ document.getElementById('splash-earth').addEventListener('click', () => {
   loadEarthOnlyCities();
 });
 
+// "Start Exploring" — primary CTA: load the interplanet demo and close splash
+document.getElementById('splash-start').addEventListener('click', () => {
+  closeSplash();
+  loadInterplanetDemo();
+});
+
 // "Include Mars" — seed an Earth city aligned with current Mars time + Mars
 document.getElementById('splash-demo').addEventListener('click', () => {
   closeSplash();
@@ -5418,6 +5511,13 @@ document.getElementById('splash-demo').addEventListener('click', () => {
 document.getElementById('splash-skip').addEventListener('click', () => {
   closeSplash();
   [...STATE.cities].forEach(c => removeCity(c.id));
+});
+
+// 58.5 — Mobile back button closes the scheduler panel
+window.addEventListener('popstate', function() {
+  if (document.getElementById('meeting-panel').classList.contains('on')) {
+    closeMeetingPanel();
+  }
 });
 
 // "Take a tour ↗"

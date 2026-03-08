@@ -20,10 +20,10 @@ class FixtureEntry
     public string planet          { get; set; } = "";
     public int    hour            { get; set; }
     public int    minute          { get; set; }
-    public double light_travel_s  { get; set; }
-    public int    period_in_week  { get; set; }
-    public int    is_work_period  { get; set; }
-    public int    is_work_hour    { get; set; }
+    public double? light_travel_s  { get; set; }
+    public int?   period_in_week  { get; set; }
+    public int?   is_work_period  { get; set; }
+    public int?   is_work_hour    { get; set; }
 }
 
 class FixtureFile
@@ -39,7 +39,7 @@ static class Program
     {
         string fixturePath = args.Length > 0
             ? args[0]
-            : Path.Combine(AppContext.BaseDirectory, "../../c/fixtures/reference.json");
+            : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../../c/planet-time/fixtures/reference.json"));
 
         // Resolve relative paths against the assembly directory
         if (!Path.IsPathRooted(fixturePath))
@@ -105,7 +105,7 @@ static class Program
                 && entry.planet != "moon")
             {
                 double lt = Ipt.LightTravelSeconds("earth", entry.planet, entry.utc_ms);
-                if (Math.Abs(lt - entry.light_travel_s) <= 2.0)
+                if (Math.Abs(lt - entry.light_travel_s!.Value) <= 2.0)
                     passed++;
                 else
                 {

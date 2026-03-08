@@ -45,10 +45,11 @@ html, body {
 .city-time-block {
   text-align: center; pointer-events: none;
   text-shadow: 0 1px 10px rgba(0,0,0,0.45), 0 0 28px rgba(0,0,0,0.25);
+  padding: 0.35rem 0; /* 58.3 */
 }
 .city-time-row { display: flex; align-items: baseline; justify-content: center; gap: 0.5rem; line-height: 1; }
 .city-time { font-size: 2rem; font-weight: 700; letter-spacing: -0.04em; }
-.city-dow  { font-size: 0.88rem; font-weight: 600; color: rgba(255,255,255,0.75); }
+.city-dow  { font-size: 0.75rem; font-weight: 600; color: rgba(255,255,255,0.75); } /* 58.10 reduced */
 
 /* sky description label */
 .sky-label {
@@ -490,14 +491,14 @@ html.light-mode body.scheduler-fullscreen .mp-back-btn:hover { color: rgba(0,0,0
   display: contents;
 }
 .mp-cell {
-  padding: 2px 6px; font-size: 0.72rem; min-width: 70px;
+  padding: 4px 6px; font-size: 0.72rem; min-width: 70px; /* 58.3 */
   border-right: 1px solid rgba(255,255,255,0.05);
   display: flex; align-items: center;
 }
 .mp-cell:last-child { border-right: none; }
 .mp-cell.time-col {
   font-size: 0.68rem; opacity: 0.5; min-width: 80px; justify-content: flex-end;
-  padding-right: 8px;
+  padding: 5px 8px 5px 6px; /* 58.3 */
 }
 .mp-cell.work { background: rgba(76,175,80,0.18); }
 .mp-cell.marginal { background: rgba(255,152,0,0.14); }
@@ -1106,6 +1107,7 @@ html.light-mode .sp-input { background: rgba(0,0,0,0.06); border-color: rgba(0,0
 @media (max-width: 768px) {
   #cities-wrap:not(.vert-forced) {
     flex-direction: column; overflow-x: hidden; overflow-y: auto;
+    padding-top: 54px; /* 58.1 — clear fixed toolbar; on scroll container not #app to avoid flex recalc glitch on resize */
   }
   #cities-wrap:not(.vert-forced) .city-col {
     flex: 0 0 auto; min-width: unset; max-width: unset; width: 100%;
@@ -1134,11 +1136,11 @@ html.light-mode .sp-input { background: rgba(0,0,0,0.06); border-color: rgba(0,0
 }
 @media (max-width: 480px) {
   #cities-wrap:not(.vert-forced) .city-col {
-    min-height: 68px; max-height: 88px;
+    min-height: 80px; max-height: 100px; /* 58.2 — taller bands for better touch targets */
     grid-template-columns: 68px 1fr; /* sky | info; drop the tiny 18px hourly column */
   }
   #cities-wrap:not(.vert-forced) .city-info {
-    min-height: 68px; max-height: 88px; overflow: hidden;
+    min-height: 80px; max-height: 100px; overflow: hidden; /* 58.2 */
   }
   #cities-wrap:not(.vert-forced) .hourly-wrap { display: none; }
 }
@@ -1709,3 +1711,33 @@ html.light-mode #orrery-panel {
   border-color: rgba(0,0,60,0.18);
 }
 html.light-mode .orrery-head { background: rgba(10,10,28,0.98); }
+
+/* ── 58.8 Simple/Advanced settings toggle ────────────────────────────────── */
+#settings-panel.settings-simple .adv-only { display: none; }
+
+/* ── 58.9 Contextual info (i) buttons and popover ───────────────────────── */
+.info-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.4); background: none;
+  font-size: 0.65rem; font-weight: 700; cursor: pointer;
+  color: rgba(255,255,255,0.6); vertical-align: middle; margin-left: 0.3rem;
+  line-height: 1; padding: 0;
+}
+html.light-mode .info-btn { border-color: rgba(0,0,0,0.3); color: rgba(0,0,0,0.5); }
+.info-btn:hover { color: rgba(255,255,255,0.9); border-color: rgba(255,255,255,0.7); }
+html.light-mode .info-btn:hover { color: rgba(0,0,0,0.8); border-color: rgba(0,0,0,0.6); }
+.info-pop {
+  position: fixed; z-index: 2000;
+  background: #1a1a2e; border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 10px; padding: 0.7rem 0.85rem;
+  font-size: 0.76rem; max-width: 260px; line-height: 1.5;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.55);
+  color: rgba(255,255,255,0.88);
+}
+.info-pop-title { font-weight: 700; margin-bottom: 0.35rem; font-size: 0.8rem; display: block; }
+.info-pop-links { margin-top: 0.55rem; display: flex; gap: 0.6rem; font-size: 0.72rem; }
+.info-pop-links a { color: #4472d8; text-decoration: none; }
+.info-pop-links a:hover { text-decoration: underline; }
+#info-pop-overlay { display:none; position:fixed; inset:0; z-index:1999; }
+#info-pop-overlay.on { display:block; }

@@ -5,7 +5,7 @@
 //   Network-First — external APIs (weather, HDTN, SLM, geocoding)
 // ═══════════════════════════════════════════════════════════════════════════
 
-const CACHE_VERSION = 'interplanet-v1.8.4';
+const CACHE_VERSION = 'interplanet-v1.9.0';
 
 const SHELL_URLS = [
   '/',

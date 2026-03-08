@@ -21,10 +21,10 @@ type FixtureEntry = {
     planet          : string
     hour            : int
     minute          : int
-    light_travel_s  : float
-    period_in_week  : int
-    is_work_period  : int
-    is_work_hour    : int
+    light_travel_s  : System.Nullable<float>
+    period_in_week  : System.Nullable<int>
+    is_work_period  : System.Nullable<int>
+    is_work_hour    : System.Nullable<int>
 }
 
 [<CLIMutable>]
@@ -36,7 +36,7 @@ type FixtureFile = {
 
 [<EntryPoint>]
 let main argv =
-    let defaultRelPath = "../../c/fixtures/reference.json"
+    let defaultRelPath = "../../../../../../c/planet-time/fixtures/reference.json"
 
     let fixturePath =
         if argv.Length > 0 then argv.[0]
@@ -86,39 +86,39 @@ let main argv =
             printfn "FAIL: %s minute=%d (got %d)" tag entry.minute pt.Minute
 
         // Check light travel (skip for earth and moon)
-        if entry.light_travel_s <> 0.0
+        if entry.light_travel_s.HasValue
            && entry.planet <> "earth"
            && entry.planet <> "moon" then
             let lt = lightTravelSeconds "earth" entry.planet entry.utc_ms
-            if Math.Abs(lt - entry.light_travel_s) <= 2.0 then
+            if Math.Abs(lt - entry.light_travel_s.Value) <= 2.0 then
                 passed <- passed + 1
             else
                 failed <- failed + 1
                 printfn "FAIL: %s lightTravel — expected %.3f, got %.3f"
-                    tag entry.light_travel_s lt
+                    tag entry.light_travel_s.Value lt
 
         // Check period_in_week
-        if pt.PeriodInWeek = entry.period_in_week then
+        if pt.PeriodInWeek = entry.period_in_week.GetValueOrDefault() then
             passed <- passed + 1
         else
             failed <- failed + 1
-            printfn "FAIL: %s period_in_week=%d (got %d)" tag entry.period_in_week pt.PeriodInWeek
+            printfn "FAIL: %s period_in_week=%d (got %d)" tag (entry.period_in_week.GetValueOrDefault()) pt.PeriodInWeek
 
         // Check is_work_period
         let gotWP = if pt.IsWorkPeriod then 1 else 0
-        if gotWP = entry.is_work_period then
+        if gotWP = entry.is_work_period.GetValueOrDefault() then
             passed <- passed + 1
         else
             failed <- failed + 1
-            printfn "FAIL: %s is_work_period=%d (got %d)" tag entry.is_work_period gotWP
+            printfn "FAIL: %s is_work_period=%d (got %d)" tag (entry.is_work_period.GetValueOrDefault()) gotWP
 
         // Check is_work_hour
         let gotWH = if pt.IsWorkHour then 1 else 0
-        if gotWH = entry.is_work_hour then
+        if gotWH = entry.is_work_hour.GetValueOrDefault() then
             passed <- passed + 1
         else
             failed <- failed + 1
-            printfn "FAIL: %s is_work_hour=%d (got %d)" tag entry.is_work_hour gotWH
+            printfn "FAIL: %s is_work_hour=%d (got %d)" tag (entry.is_work_hour.GetValueOrDefault()) gotWH
 
     printfn "Fixture entries checked: %d" fixture.entries.Length
     printfn "%d passed  %d failed" passed failed

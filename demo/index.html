@@ -4,34 +4,34 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta http-equiv="x-dns-prefetch-control" content="on">
-<title>InterPlanet — Interplanetary Time &amp; Meeting Scheduler</title>
+<title>InterPlanet — The Solar System Clock</title>
 <!-- DNS prefetch for external domains -->
 <link rel="dns-prefetch" href="//cdnjs.cloudflare.com">
 <link rel="dns-prefetch" href="//fonts.googleapis.com">
 <!-- Preconnect for domains used in the critical path -->
 <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
 <!-- Preload critical local assets -->
-<link rel="preload" href="assets/sky.css?v=1.8.4" as="style">
-<link rel="preload" href="sky.js?v=1.8.4" as="script">
+<link rel="preload" href="assets/sky.css?v=1.9.0" as="style">
+<link rel="preload" href="sky.js?v=1.9.0" as="script">
 <link rel="icon" type="image/x-icon" href="assets/favicon.ico">
 <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16x16.png">
 <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#060614">
-<meta name="description" content="Schedule meetings across Earth cities and planets. Live planetary time, light-speed signal delay, and AI-powered communication window recommendations.">
+<meta name="description" content="See what time it is on every planet in the solar system, right now. Compare cities, planets, and space missions on one live timeline.">
 <!-- Open Graph -->
 <meta property="og:type"        content="website">
 <meta property="og:url"         content="https://interplanet.live/">
-<meta property="og:title"       content="InterPlanet — Interplanetary Time &amp; Meeting Scheduler">
-<meta property="og:description" content="Schedule meetings across Earth cities and planets. Live planetary time, light-speed signal delay, and AI-powered communication window recommendations.">
+<meta property="og:title"       content="InterPlanet — The Solar System Clock">
+<meta property="og:description" content="See what time it is on every planet in the solar system, right now. Compare cities, planets, and space missions on one live timeline.">
 <meta property="og:image"       content="https://interplanet.live/assets/screenshot.png">
 <!-- Twitter / X -->
 <meta name="twitter:card"        content="summary_large_image">
-<meta name="twitter:title"       content="InterPlanet — Interplanetary Time &amp; Meeting Scheduler">
-<meta name="twitter:description" content="Schedule meetings across Earth cities and planets. Live planetary time, light-speed signal delay, and AI-powered communication window recommendations.">
+<meta name="twitter:title"       content="InterPlanet — The Solar System Clock">
+<meta name="twitter:description" content="See what time it is on every planet in the solar system, right now. Compare cities, planets, and space missions on one live timeline.">
 <meta name="twitter:image"       content="https://interplanet.live/assets/screenshot.png">
-<link rel="stylesheet" href="assets/sky.css?v=1.8.4">
+<link rel="stylesheet" href="assets/sky.css?v=1.9.0">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/fontawesome.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/solid.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
 </head>
@@ -121,7 +121,7 @@
 <!-- Meeting panel -->
 <div id="meeting-panel" role="dialog" aria-modal="true" data-i18n-aria="meeting.panel_aria" aria-label="Meeting Scheduler" aria-labelledby="mp-title-text">
   <div class="mp-head">
-    <span class="mp-title" id="mp-title-text" data-i18n="meeting.title">Meeting Scheduler</span>
+    <span class="mp-title" id="mp-title-text" data-i18n="meeting.title">Meeting Scheduler</span><button class="info-btn" data-info="scheduler" aria-label="About the scheduler">i</button>
     <div style="display:flex;align-items:center;gap:0.5rem;">
       <a id="mp-back-btn" class="mp-back-btn" href="./" title="Back to InterPlanet" aria-label="Back to InterPlanet"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i></a>
       <a id="mp-fullscreen-link" href="?schedule=fullscreen" title="Open full-page scheduler" aria-label="Open full-page scheduler"><i class="fa-solid fa-expand" aria-hidden="true"></i></a>
@@ -222,6 +222,13 @@
 
   <div class="sp-sec">
     <div class="sp-sec-title" id="settings-display-label" data-i18n="settings.section_display">Display</div>
+    <div class="tog-row">
+      <label class="tog-label" data-i18n="settings.detail_level">Detail level</label>
+      <div class="sp-segmented" id="detail-mode-seg">
+        <button class="sp-seg-btn active" data-val="simple" data-i18n="settings.simple_mode">Simple</button>
+        <button class="sp-seg-btn" data-val="advanced" data-i18n="settings.advanced_mode">Advanced</button>
+      </div>
+    </div>
     <div class="tog-row" title="Show or hide the large clock face in each card">
       <label class="tog-label" for="s-time" data-i18n="settings.show_time">Show time</label>
       <label class="tog"><input type="checkbox" id="s-time" checked aria-describedby="s-time-desc"><span class="tog-sl"></span></label>
@@ -242,12 +249,12 @@
       <label class="tog"><input type="checkbox" id="s-country" checked aria-describedby="s-country-desc"><span class="tog-sl"></span></label>
       <span id="s-country-desc" class="sr-only" data-i18n="settings.show_country_desc">Toggles the country or region name beneath the city name</span>
     </div>
-    <div class="tog-row" title="Show or hide the sky colour description label at the bottom of each sky area">
+    <div class="tog-row adv-only" title="Show or hide the sky colour description label at the bottom of each sky area">
       <label class="tog-label" for="s-label" data-i18n="settings.show_sky_label">Show sky label</label>
       <label class="tog"><input type="checkbox" id="s-label" checked aria-describedby="s-label-desc"><span class="tog-sl"></span></label>
       <span id="s-label-desc" class="sr-only" data-i18n="settings.show_sky_label_desc">Toggles the sky condition label (e.g. Clear Sky, Twilight, Overcast)</span>
     </div>
-    <div class="tog-row" title="Show or hide the 24-hour work/rest colour bar at the bottom of each card">
+    <div class="tog-row adv-only" title="Show or hide the 24-hour work/rest colour bar at the bottom of each card">
       <label class="tog-label" for="s-hourly" data-i18n="settings.show_hourly">Show hourly bar</label>
       <label class="tog"><input type="checkbox" id="s-hourly" checked aria-describedby="s-hourly-desc"><span class="tog-sl"></span></label>
       <span id="s-hourly-desc" class="sr-only" data-i18n="settings.show_hourly_desc">Toggles the 24-hour bar showing work hours (green), marginal (orange), and rest periods (red)</span>
@@ -258,7 +265,7 @@
       <span id="s-compact-desc" class="sr-only" data-i18n="settings.compact_desc">Shows time and timezone only — hides weather, hourly bar, and work indicator</span>
     </div>
     <div class="tog-row" title="Show or hide the green/orange/red work status indicator">
-      <label class="tog-label" for="s-work" data-i18n="settings.show_work">Show work indicator</label>
+      <label class="tog-label" for="s-work" data-i18n="settings.show_work">Show work indicator<button class="info-btn" data-info="work_hours" aria-label="About work hours">i</button></label>
       <label class="tog"><input type="checkbox" id="s-work" checked aria-describedby="s-work-desc"><span class="tog-sl"></span></label>
       <span id="s-work-desc" class="sr-only" data-i18n="settings.show_work_desc">Toggles the dot and label showing whether it is currently work hours, off-shift, or a rest day</span>
     </div>
@@ -267,12 +274,12 @@
       <label class="tog"><input type="checkbox" id="s-weather" checked aria-describedby="s-weather-desc"><span class="tog-sl"></span></label>
       <span id="s-weather-desc" class="sr-only" data-i18n="settings.show_weather_desc">Toggles weather data for Earth cities: temperature, humidity, rain probability, and conditions. Requires internet access to Open-Meteo API.</span>
     </div>
-    <div class="tog-row" title="Show or hide sunrise/sunset times and moon phase illumination (Earth cities; requires network)">
+    <div class="tog-row adv-only" title="Show or hide sunrise/sunset times and moon phase illumination (Earth cities; requires network)">
       <label class="tog-label" for="s-sunmoon" data-i18n="settings.show_sunmoon">Show sunrise, sunset &amp; moon</label>
       <label class="tog"><input type="checkbox" id="s-sunmoon" checked aria-describedby="s-sunmoon-desc"><span class="tog-sl"></span></label>
       <span id="s-sunmoon-desc" class="sr-only" data-i18n="settings.show_sunmoon_desc">Toggles sunrise and sunset times and the moon phase percentage for Earth cities.</span>
     </div>
-    <div class="tog-row" title="One-way signal propagation delay to planets and Earth cities">
+    <div class="tog-row adv-only" title="One-way signal propagation delay to planets and Earth cities">
       <label class="tog-label" for="s-ping" data-i18n="settings.show_ping">Show propagation delay</label>
       <label class="tog"><input type="checkbox" id="s-ping" checked aria-describedby="s-ping-desc"><span class="tog-sl"></span></label>
       <span id="s-ping-desc" class="sr-only" data-i18n="settings.show_ping_desc">Toggles the one-way signal propagation delay to each planet.</span>
@@ -461,7 +468,7 @@
         <p class="sp-hiw-body">
           InterPlanet implements the proposed InterPlanet Time (IPT) standard, aligned with
           RFC 9557 (IANA timezone extensions) and IAU/IERS planetary conventions.
-          The 25 Mars AMT zones follow the same 1-hour offset structure as Earth's UTC offsets.
+          The 25 Mars AMT zones<button class="info-btn" data-info="amt" aria-label="About Airy Mean Time">i</button> follow the same 1-hour offset structure as Earth's UTC offsets.
           The LTX meeting protocol (Light-Time eXchange) extends RFC 5545 iCalendar with
           <code style="font-size:.72rem;opacity:.85">LTX-*</code> properties designed for high-latency structured sessions.
           <a href="ltx.html" style="color:rgba(91,141,239,.9);text-decoration:none" target="_blank" rel="noopener">Try an LTX meeting →</a>
@@ -535,18 +542,19 @@
 <div id="splash-modal" class="off" role="dialog" aria-modal="true" data-i18n-aria="splash.modal_aria" aria-label="Welcome to InterPlanet">
   <div id="splash-box">
     <button id="splash-close" class="splash-close-btn" aria-label="Close" data-i18n-aria="splash.close_aria">&times;</button>
-    <h2 data-i18n="splash.title">InterPlanet Time (IPT)</h2>
+    <h2 data-i18n="splash.title">The Solar System Clock</h2>
     <p class="splash-sub" data-i18n="splash.subtitle">
-      Time across the solar system — in real time.
+      See what time it is anywhere on Earth — and on other worlds. Compare cities, planets, and space missions on one timeline.
     </p>
     <ul class="splash-bullets">
-      <li data-i18n="splash.bullet1">Real-time local time for every planet in the solar system</li>
-      <li data-i18n="splash.bullet2">Work schedules adapted to each planet's day length</li>
-      <li data-i18n="splash.bullet3">Live light-speed communication delays between worlds</li>
-      <li data-i18n="splash.bullet4">LTX meeting planner for high-latency interplanetary sessions</li>
+      <li data-i18n="splash.bullet1">Live local time on every planet</li>
+      <li data-i18n="splash.bullet2">See who's awake — or asleep — right now</li>
+      <li data-i18n="splash.bullet3">Plan meetings across Earth, Mars, and beyond</li>
+      <li data-i18n="splash.bullet4">Light-speed communication delays, live</li>
     </ul>
     <div class="splash-btns">
-      <p class="splash-demo-label" data-i18n="splash.demo_label">Quick demo:</p>
+      <button class="splash-btn-primary splash-btn-alone" id="splash-start" data-i18n="splash.start">Start Exploring</button>
+      <p class="splash-demo-label" data-i18n="splash.demo_label">Or try a quick demo:</p>
       <div class="splash-demo-row">
         <button class="splash-btn-ghost"   id="splash-earth" data-i18n="splash.earth">Earth cities</button>
         <button class="splash-btn-primary" id="splash-demo"  data-i18n="splash.demo">Earth + Mars</button>
@@ -598,11 +606,13 @@
 </div>
 <div id="tour-cancel-tip" data-i18n="tour.cancel_tip">Reopen tour via Settings</div>
 
-<script src="assets/i18n.js?v=1.8.4"></script>
+<div id="info-pop" class="info-pop" style="display:none" role="tooltip"></div>
+<div id="info-pop-overlay"></div>
+<script src="assets/i18n.js?v=1.9.0"></script>
 <script src="assets/llm-providers.js?v=1.8.0"></script>
 <!-- CDN: https://cdn.jsdelivr.net/npm/interplanet-planet-time@1.2.0/dist/planet-time.iife.js -->
-<script src="planet-time.js?v=1.8.4"></script>
-<script src="sky.js?v=1.8.4"></script>
+<script src="planet-time.js?v=1.9.0"></script>
+<script src="sky.js?v=1.9.0"></script>
 <script>
   // Service worker registration (Story 5.2)
   if ('serviceWorker' in navigator) {

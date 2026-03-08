@@ -1,16 +1,35 @@
-# InterPlanet
+# InterPlanet — The Solar System Clock
 
 [![CI](https://github.com/interplanet/interplanet/actions/workflows/ci.yml/badge.svg)](https://github.com/interplanet/interplanet/actions/workflows/ci.yml)
 
-Time zones on Earth are complex. Now imagine scheduling a meeting when your
-colleague is on another planet entirely — where the local day is a different
-length, the speed of light imposes a one-way signal delay of minutes to hours,
-and the Sun can block communications altogether.
+**See what time it is anywhere on Earth — and on other worlds.**
+
+InterPlanet is an open-source Solar System clock and meeting scheduler. It shows
+live local time for every city on Earth and every planet in the solar system,
+accounts for light-speed communication delays, and helps teams coordinate across
+impossible distances.
 
 **[interplanet.live](https://interplanet.live)** — try it live
 
-> Whitepapers on the LTX protocol and orbital time standards will be published
-> soon. Watch the repository for updates.
+> **Whitepapers and technical documentation** are published in [`docs/`](docs/) —
+> including the [LTX specification](docs/LTX-SPECIFICATION.md),
+> [orbital time standards whitepaper](docs/WHITEPAPER.md),
+> and [LTX security architecture](docs/LTX-SECURITY.md).
+
+---
+
+### What it does
+
+| | |
+|---|---|
+| 🌍 **World clock** | Live time for 5,000+ Earth cities and every solar-system body |
+| 🔴 **Mars time** | Airy Mean Time + 25 Mars time zones + sol calendar |
+| ⚡ **Light-travel delay** | Real-time signal delay and round-trip time for every planet pair |
+| 🌑 **Conjunction blackouts** | Detects when the Sun blocks the signal path |
+| 📅 **Meeting planner** | Finds overlapping work hours across Earth, Mars, and beyond |
+| 🤖 **AI assistant** | LLM-powered scheduling suggestions (works with any OpenAI-compatible API) |
+| 📡 **LTX meetings** | Structured async meeting protocol for interplanetary sessions |
+| 🎓 **Educational** | Designed to be understandable by anyone — from students to mission planners |
 
 ---
 

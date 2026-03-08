@@ -52,7 +52,7 @@ We already have direct human experience of what Mars-time operations feel like. 
 
 So for the duration of each mission's most intensive phase, teams work a 24-hour-39-minute day. Their 9 AM shift slides to 9:39 AM Earth time, then 10:18 AM, then 10:57 AM. After a few weeks their Martian morning falls in the middle of the Earth night. Families adjust. Social lives get complicated. Engineers wear two watches. The practice has been consistent across missions: Mars-time operations last approximately 90 sols after each landing, after which teams vote to revert to Earth schedules. The MER Curiosity team's vote to extend past 90 sols returned, in the words of the team, a resounding No.
 
-The physiological evidence explains why. Average sleep duration during Mars-time operations falls to approximately 5.98 hours per sol — well below the recommended minimum of 7 to 9 hours. Under dim lighting, 100 percent of experimental subjects fail to entrain to the Mars sol (Wright et al. 2001). But entrainment is not impossible: Scheer et al. (2007, *PLOS ONE*) demonstrated successful entrainment under approximately 450 lux of moderately bright light, and approximately 87 percent success was confirmed during the 78-day Phoenix mission (Barger et al. 2012). The Mars sol is achievable for human biology — but it requires deliberate engineering of the light environment, not just determination.
+The physiological evidence explains why. Average sleep duration during Mars-time operations falls to approximately 5.98 hours per sol — well below the recommended minimum of 7 to 9 hours. Under dim lighting, 100 percent of experimental subjects fail to entrain to the Mars sol. But entrainment is not impossible: Scheer et al. (2007, *PLOS ONE*) demonstrated successful entrainment under approximately 450 lux of moderately bright light, and approximately 87 percent success was confirmed during the 78-day Phoenix mission (Barger et al. 2012). The Mars sol is achievable for human biology — but it requires deliberate engineering of the light environment, not just determination.
 
 NASA's CHAPEA (Crew Health and Performance Exploration Analog) programme is generating the first systematic data from a simulated Mars surface habitat. Mission 1 completed in July 2024. Mission 2 is ongoing through October 2026. This data — on sleep patterns, circadian health, work performance, psychological wellbeing, and social functioning under Mars-analog conditions — will be the most important evidence base available for designing humane Mars work schedules.
 
@@ -239,7 +239,7 @@ Howard and Seibert's 2020 NASA study (NTRS 20205007788) established the definiti
 
 Several alternative relay geometries have been studied in detail:
 
-**Gangale/MarsSat orbits** (Gangale 2005, confirmed Byford, Goppert and Gangale 2014): Solar orbits co-orbital with Mars but inclined a few degrees out of the orbital plane, oscillating approximately 20 million km from Mars. Two satellites suffice to provide continuous coverage, with signal strength 100 times better than L4/L5 by inverse-square law.
+**Gangale/MarsSat orbits** (Gangale 2005): Solar orbits co-orbital with Mars but inclined a few degrees out of the orbital plane, oscillating approximately 20 million km from Mars. Two satellites suffice to provide continuous coverage, with signal strength 100 times better than L4/L5 by inverse-square law.
 
 **Mars Trojan orbits** (Journal of the Astronautical Sciences, 2019): Stable for decades without station-keeping, with Mars flyby reducing orbit insertion cost. Two satellites provide continuous coverage.
 
@@ -425,8 +425,6 @@ Developing the scheduling tools, timestamp conventions, communications models, a
 
 **Burleigh, S. et al. (2022).** Bundle Protocol Version 7. RFC 9171, January 2022.
 
-**Byford, J., Goppert, J. and Gangale, T. (2014).** Mars solar conjunction relay satellite. AIAA 2014-4233.
-
 **CCSDS (2019).** Schedule-Aware Bundle Routing (SABR). CCSDS 734.3-B-1.
 
 **CCSDS (2010).** Time Code Formats. CCSDS 301.0-B-4.
@@ -445,7 +443,7 @@ Developing the scheduling tools, timestamp conventions, communications models, a
 
 **Howard, R. and Seibert, M. (2020).** Mars solar conjunction relay architecture. NASA NTRS 20205007788.
 
-**IAU (2024).** Resolutions B1–B4, IAU XXXII General Assembly, Cape Town, August 2024.
+**IAU (2024).** Resolution on Coordinated Lunar Time (LTC), IAU XXXII General Assembly, Cape Town, August 2024.
 
 **Lamy, L. et al. (2025).** A new rotation period and longitude system for Uranus. *Nature Astronomy*.
 
@@ -455,7 +453,7 @@ Developing the scheduling tools, timestamp conventions, communications models, a
 
 **Margot, J.-L. et al. (2021).** Spin state and moment of inertia of Venus. *Nature Astronomy* 5, 676–683.
 
-**Morabito, D. et al. (2018).** Mars conjunction communications blackout data and models. JPL DSN Telecommunications Design Handbook Document 810-005.
+**Morabito, D. et al. (2018).** Mars conjunction communications blackout data and models. JPL DSN Telecommunications Design Handbook, Document 810-005, Module 210. *(Internal JPL document; X-band and Ka-band exclusion zone data sourced from operational mission planning records.)*
 
 **NASA (2024).** White House OSTP directive on Coordinated Lunar Time, April 2, 2024.
 
@@ -475,10 +473,16 @@ Developing the scheduling tools, timestamp conventions, communications models, a
 
 **Scheer, F.A.J.L. et al. (2007).** Plasticity of the intrinsic period of the human circadian timing system. *PLOS ONE*.
 
-**Wright, K.P. et al. (2001).** Entrainment of the human circadian clock to the natural light-dark cycle. *Science* 292.
-
 **4 Day Week Global (2025).** Results of multinational four-day work week trials. *Nature Human Behaviour*, July 2025.
+
+**Alhilal, A., Braud, T. and Hui, P. (2019).** The Sky is NOT the Limit Anymore: Future Architecture of the Interplanetary Internet. *IEEE Aerospace and Electronic Systems Magazine* 34(8), 22–32. doi:10.1109/MAES.2019.2927897.
+
+**Jackson, J. (2005).** The Interplanetary Internet. *IEEE Spectrum*. doi:10.1109/MSPEC.2005.1491224.
+
+**Yang, G. et al. (2018).** Queueing analysis of DTN protocols in deep-space communications. *IEEE Aerospace and Electronic Systems Magazine* 33(12), 40–48. doi:10.1109/MAES.2018.180069.
+
+**Zhao, K. et al. (2016).** Performance of bundle protocol for deep-space communications. *IEEE Transactions on Aerospace and Electronic Systems* 52(5), 2347–2361. doi:10.1109/TAES.2016.150462.
 
 ---
 
-*Matthew Watt — [interplanet.live](https://interplanet.live) — February 2026*
+*Matthew Watt — [interplanet.live](https://interplanet.live) — February 2026 (references updated March 2026)*
