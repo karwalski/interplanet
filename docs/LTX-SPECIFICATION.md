@@ -97,7 +97,9 @@ Each stream executes deterministically from the SessionPlan.
 
 ## 3.6 Session Modes
 
-All LTX sessions declare a `mode` field in the SessionPlan. Three modes are defined:
+All LTX sessions declare a `mode` field in the SessionPlan. Three modes are defined.
+
+> **Compatibility note:** Early implementations used `'LTX'` as the mode string for sequential turn-taking sessions. `'LTX'` is a valid alias for `LTX-LIVE` and MUST be treated identically by all implementations. The `planId` hash includes the mode string verbatim; plans created with `mode: 'LTX'` retain that string and must not be silently migrated.
 
 ### LTX-LIVE
 
