@@ -1,4 +1,4 @@
-/* InterPlanet — sky.js v1.0.0 */
+/* InterPlanet — sky.js v1.10.0 */
 // ════════════════════════════════════════════════════════════════════════════
 // i18n shorthand — t() / getDayAbbr() delegates to window.I18N
 // Inline English fallbacks guard against a browser-cached i18n.js that
@@ -244,7 +244,22 @@ const PUBLIC_HOLIDAYS = {
   '01-26': { 'India':'Republic Day','Australia':'Australia Day' },
   '02-11': { 'Japan':'National Foundation Day','Iran':'Islamic Revolution Day' },
   '02-23': { 'Japan':'Emperor\'s Birthday' },
-  '03-08': { 'Russia':'International Women\'s Day','Ukraine':'International Women\'s Day' },
+  '03-08': {
+    'Russia':'International Women\'s Day','Ukraine':'International Women\'s Day',
+    'Belarus':'International Women\'s Day','Kazakhstan':'International Women\'s Day',
+    'Uzbekistan':'International Women\'s Day','Kyrgyzstan':'International Women\'s Day',
+    'Tajikistan':'International Women\'s Day','Turkmenistan':'International Women\'s Day',
+    'Armenia':'International Women\'s Day','Azerbaijan':'International Women\'s Day',
+    'Georgia':'International Women\'s Day','Moldova':'International Women\'s Day',
+    'Mongolia':'International Women\'s Day','Vietnam':'International Women\'s Day',
+    'China':'International Women\'s Day (half-day)','Cuba':'International Women\'s Day',
+    'North Korea':'International Women\'s Day','Nepal':'International Women\'s Day',
+    'Angola':'International Women\'s Day','Uganda':'International Women\'s Day',
+    'Zambia':'International Women\'s Day','Madagascar':'International Women\'s Day',
+    'Cameroon':'International Women\'s Day','Laos':'International Women\'s Day',
+    'Eritrea':'International Women\'s Day','Guinea-Bissau':'International Women\'s Day',
+    'Burkina Faso':'International Women\'s Day',
+  },
   '03-17': { 'Ireland':'St Patrick\'s Day' },
   '03-25': { 'Greece':'Independence Day' },
   '04-01': { 'Iran':'Islamic Republic Day' },
@@ -2662,8 +2677,7 @@ function renderRotationPreview(cities, firstDate, container) {
     .map((c, i) => ({ name: c.customName || c.city || c.planet, pct: Math.round(100 * restCounts[i] / rows.length) }))
     .filter(x => x.pct >= 50);
 
-  // Abbreviated city names for column headers (≤5 chars)
-  const abbr = c => (c.customName || c.city || c.planet || '').slice(0, 5);
+  const abbr = c => c.customName || c.city || c.planet || '';
 
   let html = `<div class="mp-rotation">`;
   html += `<div class="mp-rotation-hdr">${t('meeting.rotation_preview')}</div>`;
@@ -4160,17 +4174,19 @@ function findAsyncWindows(cities, currentDelayMin) {
   const results = [];
   const now = new Date();
   const delayMs = (currentDelayMin || 0) * 60000;
+  const senderTz = cities[0]?.tz || null;
 
   cities.forEach((city, i) => {
     const name = city.customName || city.city || city.planet;
+    const cityTz = city.tz || null;
     // Find when the work day starts for this city
     const arrivalTime = _workDayStart(city, now);
-    if (!arrivalTime) { results.push({ name, sendAt: null, arrivalAt: null }); return; }
+    if (!arrivalTime) { results.push({ name, sendAt: null, arrivalAt: null, cityTz, senderTz }); return; }
 
     // Ideal send time = work-day start minus one-way delay (so message arrives at start)
     const sendAt = delayMs > 0 ? new Date(arrivalTime.getTime() - delayMs) : arrivalTime;
     const sendPast = sendAt < now;
-    results.push({ name, sendAt, arrivalAt: arrivalTime, sendPast, delayMin: currentDelayMin || 0 });
+    results.push({ name, sendAt, arrivalAt: arrivalTime, sendPast, delayMin: currentDelayMin || 0, cityTz, senderTz });
   });
   return results;
 }
@@ -4182,9 +4198,10 @@ function renderAsyncResult(cities, currentDelayMin) {
 
   const windows = findAsyncWindows(cities, currentDelayMin);
   const locale  = window.I18N ? window.I18N.getLocale() : 'en-US';
-  const fmtTime = d => new Intl.DateTimeFormat(locale, {
+  const fmtTime = (d, tz) => new Intl.DateTimeFormat(locale, {
     weekday:'short', month:'short', day:'numeric',
-    hour:'2-digit', minute:'2-digit', hour12:_use12h(), timeZone:'UTC',
+    hour:'2-digit', minute:'2-digit', hour12:_use12h(),
+    timeZone: tz || 'UTC', timeZoneName:'short',
   }).format(d);
 
   let html = `<div class="mp-async-result">`;
@@ -4201,10 +4218,10 @@ function renderAsyncResult(cities, currentDelayMin) {
     html += `<div class="mp-async-row">` +
       `<span class="mp-async-name">${w.name}</span>` +
       `<span class="${sendClass}">` +
-        `${w.sendPast ? t('meeting.async_send_now') : t('meeting.async_send_at', { time: fmtTime(w.sendAt) })}` +
+        `${w.sendPast ? t('meeting.async_send_now') : t('meeting.async_send_at', { time: fmtTime(w.sendAt, w.senderTz) })}` +
         delayNote +
       `</span>` +
-      ` <span class="mp-async-arrives">${t('meeting.async_arrives', { time: fmtTime(w.arrivalAt) })}</span>` +
+      ` <span class="mp-async-arrives">${t('meeting.async_arrives', { time: fmtTime(w.arrivalAt, w.cityTz) })}</span>` +
       `</div>`;
   });
 
@@ -4364,6 +4381,20 @@ async function runAgentNegotiation() {
   const workForA1 = slots.length > 1 ? (slots[1].localTimes?.[0]?.isWorkHour ?? true) : true;
   const workForAll1 = slots.length > 1 ? (slots[1].localTimes?.every(lt => lt.isWorkHour !== false) ?? true) : true;
 
+  // Additional agents (cities 3+) confirm after primary two-party negotiation
+  async function _confirmOthers(ms, slotIdx) {
+    if (locs.length <= 2) return;
+    const slot = slots[slotIdx] || slots[slots.length - 1];
+    for (let i = 2; i < locs.length; i++) {
+      const workOk = slot?.localTimes?.[i]?.isWorkHour ?? true;
+      const side = i % 2 === 0 ? 'agent-a' : 'agent-b';
+      const note = workOk ? ' Works for me!' : ' (outside my preferred hours but I\'ll join)';
+      await _bubble(side, locs[i].label,
+        `${_fmtLocal(ms, locs[i])} for me.${note}`,
+        350 + (i - 2) * 250);
+    }
+  }
+
   // Round 1 — Agent A proposes slot 0
   await _bubble('agent-a', labelA,
     `Hi! I'd like to schedule our meeting. How about <strong>${utc0}</strong>` +
@@ -4371,10 +4402,10 @@ async function runAgentNegotiation() {
     450);
 
   if (workForB0) {
-    const allNote = locs.length > 2 && workForAll0 ? ` That works for all ${locs.length} locations!` : '';
     await _bubble('agent-b', labelB,
-      `That works — it's ${_fmtLocal(ms0, locs[1])} here.${delayNote}${allNote} Let's do it!`,
+      `That works — it's ${_fmtLocal(ms0, locs[1])} here.${delayNote} Let's do it!`,
       750);
+    await _confirmOthers(ms0, 0);
     _agreed(ms0, utc0);
     return;
   }
@@ -4386,10 +4417,10 @@ async function runAgentNegotiation() {
     750);
 
   if (workForA1) {
-    const allNote = locs.length > 2 && workForAll1 ? ` Works for all ${locs.length} locations.` : '';
     await _bubble('agent-a', labelA,
-      `${utc1} works for me — ${_fmtLocal(ms1, locs[0])}.${allNote} Agreed!`,
+      `${utc1} works for me — ${_fmtLocal(ms1, locs[0])}. Agreed!`,
       750);
+    await _confirmOthers(ms1, 1);
     _agreed(ms1, utc1);
     return;
   }
@@ -4403,6 +4434,7 @@ async function runAgentNegotiation() {
     `${utc2} — ${_fmtLocal(ms2, locs[1])} for me.${delayNote} That works!`,
     750);
 
+  await _confirmOthers(ms2, 2);
   _agreed(ms2, utc2);
 }
 
@@ -5831,7 +5863,7 @@ function init() {
   new MutationObserver(() => {
     clearTimeout(_eqTimer);
     _eqTimer = setTimeout(equalizeInfoHeights, 80);
-  }).observe(document.getElementById('cities-wrap'), { childList: true });
+  }).observe(document.getElementById('cities-wrap'), { childList: true, subtree: true, attributes: true, attributeFilter: ['style'] });
 
   // ?tz= URL param — add cities from UTC offsets or names
   if (_qpTz && STATE.cities.length === 0) {
@@ -6466,11 +6498,12 @@ init();
     const cx   = W / 2;
     const cy   = H / 2;
 
-    // Board planets (highlighted)
+    // Board planets (highlighted) — include 'earth' when any Earth city is on the board
     const boardSet = new Set(
       (STATE && STATE.cities ? STATE.cities : [])
         .filter(c => c.type === 'planet').map(c => c.planet)
     );
+    if ((STATE && STATE.cities ? STATE.cities : []).some(c => c.type === 'earth')) boardSet.add('earth');
 
     // ── Orbit rings ────────────────────────────────────────────────────────────
     _ctx.lineWidth = 0.6;

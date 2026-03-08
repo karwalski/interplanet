@@ -80,12 +80,12 @@ Contiguous set of quanta.
 Example: W = 3Q = 15 minutes.
 
 ## 3.4 Segment Types
-- TX – Node transmits presentation block
-- RX – Node receives remote TX block
-- CAUCUS – Local-only discussion
-- BUFFER – Timing slack
-- MERGE – Reintegration phase
-- PLAN_CONFIRM – Initial handshake window
+- **TX** – Transmit window. In LTX-LIVE: the host presents to participants. In LTX-ASYNC: all nodes broadcast simultaneously.
+- **RX** – Receive window. In LTX-LIVE: participants respond to the host. In LTX-ASYNC: all nodes watch/listen to the other parties' simultaneous broadcasts arriving after signal delay.
+- **CAUCUS** – Local-only discussion window; no transmissions in progress.
+- **BUFFER** – Timing slack window to absorb propagation variance and scheduling drift.
+- **MERGE** – Reintegration phase; consolidates branch artefacts into plenary record.
+- **PLAN_CONFIRM** – Initial handshake window; all nodes verify identical plan before session begins.
 
 ## 3.5 Streams
 A Session may contain multiple streams:
@@ -94,6 +94,52 @@ A Session may contain multiple streams:
 - Merge stream (optional)
 
 Each stream executes deterministically from the SessionPlan.
+
+## 3.6 Session Modes
+
+All LTX sessions declare a `mode` field in the SessionPlan. Three modes are defined:
+
+### LTX-LIVE
+
+**Sequential turn-taking.** One node transmits while the other listens and waits. When the transmission arrives at the remote node (after one-way light-travel delay), the remote node may respond in its own TX window.
+
+Structure: `PLAN_CONFIRM → TX → RX → [CAUCUS] → TX → RX → MERGE`
+
+- TX and RX segments are **directional**: the HOST transmits in TX, participants respond in RX.
+- Suitable for lower-latency scenarios (Moon, near-Earth objects, Earth-to-Earth high-latency links).
+- At Earth–Mars distances, waiting for a response requires a minimum of two one-way delay periods (~30 min each way). Each TX→RX→response cycle takes at minimum 2× the one-way delay (6–44 min). This is usable but slow.
+- At distances beyond ~20 min one-way, LTX-ASYNC is strongly preferred.
+
+### LTX-RELAY
+
+**Store-and-forward relay.** Functionally identical to LTX-LIVE from a session-plan perspective, but transmissions are routed through a DTN relay server that holds and re-delivers each bundle after the configured one-way light-travel delay.
+
+- Enables controlled testing and rehearsal without actual planetary distances.
+- The relay introduces exactly the declared `ONEWAY-ASSUMED` delay before delivery.
+- From the nodes' perspective, behaviour is indistinguishable from LTX-LIVE at the same delay.
+- Relay nodes are declared in the session plan with `role: RELAY`.
+
+### LTX-ASYNC
+
+**Parallel broadcast.** All nodes transmit simultaneously during the TX segment. There is no sequential turn-taking: every node broadcasts its prepared content at the same UTC start time. Each node then enters the RX (watching/listening) segment, during which it watches/listens to the other parties' transmissions, which arrive after signal propagation delay.
+
+Structure: `PLAN_CONFIRM → TX → RX → [CAUCUS] → TX → RX → MERGE`
+
+Key properties:
+- **TX segment** — All nodes broadcast simultaneously and independently. No node is "waiting" for another. From every node's perspective, they are presenting first.
+- **RX segment** — All nodes watch/listen to the other parties' simultaneous broadcasts, arriving after the one-way light-travel delay.
+- **No real-time response** is possible within a single TX/RX cycle. Responses are prepared and sent in the next TX window, after the content from the previous RX window has been reviewed.
+- The concepts of "host presents, participant responds" do not apply in ASYNC. Both parties present their content to each other simultaneously. Both parties review received content simultaneously.
+- From any viewer's perspective, their own TX segment appears first (they transmitted at the start of the window, regardless of physical location).
+- **Default mode** for all LTX sessions at delay > 120 s (including Earth–Mars). The ASYNC structure removes idle waiting time and maximises session efficiency.
+
+Comparison of ASYNC vs LIVE at Earth–Mars (900 s one-way):
+| Scenario | LTX-LIVE | LTX-ASYNC |
+|---|---|---|
+| Host presents 15 min | TX: 15 min | TX: 15 min (simultaneous both sides) |
+| Participant receives | Waits 15 min for signal | Receives after 15 min delay |
+| Participant responds | Waits 15 min more, then RX | Already received in RX window |
+| Total dead time per cycle | 30+ min | 0 min (TX fills the delay window) |
 
 ---
 

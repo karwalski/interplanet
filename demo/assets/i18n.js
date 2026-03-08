@@ -388,8 +388,8 @@
       'meeting.async_hdr': 'Optimal send times — message arrives at start of work day',
       'meeting.async_no_window': 'No work day found in next 3 days',
       'meeting.async_send_now': 'Send now',
-      'meeting.async_send_at': 'Send at {time} UTC',
-      'meeting.async_arrives': '→ arrives {time} UTC',
+      'meeting.async_send_at': 'Send at {time}',
+      'meeting.async_arrives': '→ arrives {time}',
 
       // Agentic negotiation (Story 16.4)
       'meeting.agent_negotiate': 'Auto-negotiate',

@@ -11,7 +11,7 @@
 <!-- Preconnect for domains used in the critical path -->
 <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
 <!-- Preload critical local assets -->
-<link rel="preload" href="planet-time.js?v=1.9.0" as="script">
+<link rel="preload" href="planet-time.js?v=1.10.0" as="script">
 <link rel="icon" type="image/x-icon" href="assets/favicon.ico">
 <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16x16.png">
@@ -22,8 +22,8 @@
       media="print" onload="this.media='all'" crossorigin="anonymous"
       referrerpolicy="no-referrer">
 <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"></noscript>
-<script src="assets/i18n.js?v=1.9.0"></script>
-<script src="planet-time.js?v=1.9.0"></script>
+<script src="assets/i18n.js?v=1.10.0"></script>
+<script src="planet-time.js?v=1.10.0"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -255,7 +255,7 @@ html.light-mode .tpl-card.selected{background:rgba(53,99,200,.06)}
       <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> InterPlanet
     </a>
     <span class="wordmark"><i class="fa-solid fa-satellite-dish" aria-hidden="true"></i> <span id="setup-heading">Space Meeting Planner</span></span>
-    <span class="ltx-badge">v1.9</span>
+    <span class="ltx-badge">v1.10</span>
   </div>
   <p id="setup-intro" style="font-size:.8rem;color:var(--text-muted);margin-bottom:1.25rem;line-height:1.55">
     Plan a meeting across Earth, Mars, or any world. Each participant runs this page and stays in sync — no live internet connection needed.
@@ -905,6 +905,7 @@ function getT(key, vars) {
     'ltx.banner.rx.host':        'AWAITING RESPONSE',
     'ltx.banner.tx.participant': 'HOST BROADCASTING',
     'ltx.banner.tx.async':       'BROADCASTING',
+    'ltx.banner.rx.async':       'WATCHING INCOMING',
     'ltx.banner.rx.participant': 'YOUR TURN TO RESPOND',
     'ltx.banner.caucus':         'LOCAL DISCUSSION',
     'ltx.banner.buffer':         'TIMING BUFFER',
@@ -914,6 +915,7 @@ function getT(key, vars) {
     'ltx.desc.tx.host':          'You are presenting — all participant nodes are receiving',
     'ltx.desc.tx.participant':   '{host} is presenting — listen and take notes',
     'ltx.desc.tx.async':         'All nodes are broadcasting simultaneously — your recording arrives at remote nodes after signal delay',
+    'ltx.desc.rx.async':         'Watching the other party\'s simultaneous broadcast — now arriving after signal delay',
     'ltx.desc.rx.host':          'Participant nodes are transmitting their responses to you',
     'ltx.desc.rx.participant':   'Transmit your response to {host} now',
     'ltx.desc.plan_confirm':     'All nodes verify they hold an identical plan before the session begins',
@@ -925,6 +927,8 @@ function getT(key, vars) {
     'ltx.nodes.tx.host':         '{host} → {participants}',
     'ltx.nodes.tx.async.host':         'You ↔ {participants}',
     'ltx.nodes.tx.async.participant':  'You ↔ {host}',
+    'ltx.nodes.rx.async.host':         '{participants} → You (delayed)',
+    'ltx.nodes.rx.async.participant':  '{host} → You (delayed)',
     'ltx.nodes.rx.host':         '{participants} → {host}',
     'ltx.nodes.caucus.multi':    'All nodes (local)',
     'ltx.nodes.caucus.single':   '{host} & {participants} (local)',
@@ -1282,10 +1286,9 @@ function viewerNodeName(cfg) {
 
 // Human-readable banner label for a segment given perspective
 function getBannerLabel(type, perspective, cfg) {
-  // In LTX-ASYNC mode, TX is simultaneous for all nodes — each node is broadcasting
-  if (type === 'TX' && cfg && cfg.mode === 'LTX-ASYNC') {
-    return getT('ltx.banner.tx.async');
-  }
+  const isAsync = cfg && cfg.mode === 'LTX-ASYNC';
+  if (type === 'TX' && isAsync) return getT('ltx.banner.tx.async');
+  if (type === 'RX' && isAsync) return getT('ltx.banner.rx.async');
   const meta = SEG_META[type] || SEG_META.BUFFER;
   return getT(meta.bannerKey[perspective] || meta.bannerKey.host);
 }
@@ -1296,9 +1299,9 @@ function getBannerDesc(type, perspective, cfg) {
   const nodes = cfg.nodes || [];
   const host  = nodes[0]?.name || 'Host';
   const parts = nodes.slice(1).map(n => n.name).join(', ') || 'Participants';
-  if (type === 'TX' && cfg && cfg.mode === 'LTX-ASYNC') {
-    return getT('ltx.desc.tx.async', { host, participants: parts });
-  }
+  const isAsync = cfg && cfg.mode === 'LTX-ASYNC';
+  if (type === 'TX' && isAsync) return getT('ltx.desc.tx.async', { host, participants: parts });
+  if (type === 'RX' && isAsync) return getT('ltx.desc.rx.async', { host, participants: parts });
   return getT(meta.descKey[perspective] || meta.descKey.host, { host, participants: parts });
 }
 
@@ -1308,14 +1311,20 @@ function getNodesLabel(type, perspective, cfg) {
   const nodes = cfg.nodes || [];
   const host  = nodes[0]?.name || cfg.txName || 'Host';
   const parts = nodes.slice(1).map(n => n.name).join(', ') || cfg.rxName || 'Remote';
+  const isAsync = cfg && cfg.mode === 'LTX-ASYNC';
 
   if (type === 'CAUCUS') {
     const key = nodes.length > 2 ? 'ltx.nodes.caucus.multi' : 'ltx.nodes.caucus.single';
     return getT(key, { host, participants: parts });
   }
 
-  if (type === 'TX' && cfg && cfg.mode === 'LTX-ASYNC') {
+  if (type === 'TX' && isAsync) {
     const key = perspective === 'participant' ? 'ltx.nodes.tx.async.participant' : 'ltx.nodes.tx.async.host';
+    return getT(key, { host, participants: parts });
+  }
+
+  if (type === 'RX' && isAsync) {
+    const key = perspective === 'participant' ? 'ltx.nodes.rx.async.participant' : 'ltx.nodes.rx.async.host';
     return getT(key, { host, participants: parts });
   }
 
@@ -2293,7 +2302,7 @@ function generateLtxICS(cfg) {
   return [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//InterPlanet//LTX v1.9//EN',
+    'PRODID:-//InterPlanet//LTX v1.10//EN',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     'BEGIN:VEVENT',
@@ -2477,6 +2486,7 @@ document.getElementById('r-node-select').addEventListener('change', function() {
     viewerEl.hidden = true;
   }
   updateNodeTimes(_cfg);
+  renderTimeline(_cfg);
 });
 
 document.getElementById('runner-ics').addEventListener('click', () => {
