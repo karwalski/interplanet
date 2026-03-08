@@ -414,9 +414,9 @@ Until native platform support arrives, all IPT-aware applications use the follow
 1. **Device runs standard UTC (Earth)** — the OS system clock, browser `Date.now()`, and all system APIs return UTC.
 2. **Application receives user's planetary location** — via user settings or URL parameter, e.g.:
    - `{ planet: 'mars', tzOffset: 0 }` — Mars Coordinated Time (MTC, equivalent to AMT+0)
-   - `{ planet: 'mars', tzOffset: 60 }` — Mars AMT+1 (one Mars timezone east of Airy crater)
+   - `{ planet: 'mars', tzOffset: 1 }` — Mars AMT+1 (one Mars timezone east of Airy crater)
    - `{ planet: 'moon', tzOffset: 0 }` — Lunar Mean Time
-3. **Application uses IPT SDK** — `planet-time.js` `getPlanetTime(planet, tzOffset, utcMs)` converts UTC to local planet time, returning `{ sol, hour, minute, second, solOfYear, marsYear }`.
+3. **Application uses IPT SDK** — `planet-time.js` `getPlanetTime(planetKey, date, tzOffsetHours)` converts UTC to local planet time, returning a `PlanetTime` object with `{ hour, minute, second, solInfo, isWorkHour, ... }`.
 4. **Display** — the application renders the converted time. The browser's `Date` object and `Intl.DateTimeFormat` are bypassed for planetary time display; the IPT SDK handles all formatting.
 
 ### SDK implementations
@@ -442,7 +442,7 @@ All SDK implementations are in the `interplanet-github` repository. Each impleme
 | TypeScript | — | (compiled from JS) | `interplanet-ltx-ts.spec.js` | Playwright E2E |
 | Python | `python/planet-time/` | `src/interplanet_time/` | `python/` ltx package | pytest |
 | Rust | `rust/` | `src/lib.rs` | `rust/` ltx crate | cargo test |
-| C | `c/` | `planet_time.c` | `c/` ltx lib | Makefile tests |
+| C | `c/planet-time/` | `src/libinterplanet.c` | `c/ltx/` | Makefile tests |
 | Go | `go/` | `planet_time.go` | `go/` ltx module | go test |
 | Swift | `swift/` | `Sources/` | `swift/` ltx target | XCTest |
 | Kotlin | `kotlin/` | `src/main/kotlin/` | `kotlin/` ltx module | JUnit 5 |
@@ -456,6 +456,7 @@ All SDK implementations are in the `interplanet-github` repository. Each impleme
 | Zig | `zig-ltx/` | `src/root.zig` | LTX-only | zig test |
 | R | `r/` | `R/` | (planet-time only) | testthat |
 
+<!-- AUDIT: `tests/e2e/interplanet-ltx-conformance.spec.js` does not exist in the repo (tests/ only contains cross_sdk_* scripts). This section needs updating when the conformance suite is created. -->
 **Conformance test suite:** All LTX implementations are validated against canonical test vectors in `tests/e2e/interplanet-ltx-conformance.spec.js`. The golden plan ID for the reference test vector is `cc8a7fc0` (nodes-before-segments JSON canonical ordering).
 
 ---

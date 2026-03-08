@@ -1,5 +1,5 @@
 # Interplanetary Timezone Systems
-## A Reference Document for Sky Colours / InterPlanet.live
+## Interplanetary Timezone Reference
 
 *Version 1.1 — February 2026*
 
@@ -216,38 +216,40 @@ The near side (Earth-facing hemisphere, LMT−6 to LMT+6) contains the mare regi
 
 **Near Side Zones (LMT−6 to LMT+6):**
 
-| Offset | Approximate Longitude | Representative Feature |
-|--------|-----------------------|----------------------|
-| LMT 0 | 0° (Sinus Medii) | Sinus Medii (prime meridian) |
-| LMT+1 | 15°E | Mare Tranquillitatis (Apollo 11 site) |
-| LMT+2 | 30°E | Mare Crisium |
-| LMT+3 | 45°E | Mare Marginis |
-| LMT+4 | 60°E | Mare Smythii |
-| LMT+5 | 75°E | Mare Australe |
-| LMT+6 | 90°E | Near-side/far-side limb (south pole region, Artemis target) |
-| LMT−1 | 15°W | Oceanus Procellarum |
-| LMT−2 | 30°W | Mare Imbrium |
-| LMT−3 | 45°W | Sinus Roris |
-| LMT−4 | 60°W | Mare Orientale (western limb) |
-| LMT−5 | 75°W | Far-side western limb |
-| LMT−6 | 90°W | Near-side/far-side limb |
+Feature assignments have been corrected against IAU Planetary Nomenclature coordinates (February 2026). A previous version of this table had a systematic off-by-one shift in the positive near-side zones (+1 to +5): each feature was listed one zone too far west. The negative near-side zones were also scrambled. Corrected below.
+
+| Offset | Centre Longitude | IAU Feature Longitude | Representative Feature |
+|--------|-----------------|----------------------|----------------------|
+| LMT 0 | 0° (Sinus Medii) | ~0°E | Sinus Medii (IAU prime meridian) |
+| LMT+1 | 15°E | ~17.5°E | Mare Serenitatis (Sea of Serenity; Apollo 17 region) |
+| LMT+2 | 30°E | ~31.4°E | Mare Tranquillitatis (Sea of Tranquility; Apollo 11 site at 23.5°E) |
+| LMT+3 | 45°E | ~51°E | Mare Fecunditatis (Sea of Fertility; Luna 16, 20 sample return) |
+| LMT+4 | 60°E | ~59.1°E | Mare Crisium (Sea of Crises; isolated circular basin) |
+| LMT+5 | 75°E | ~86°E | Mare Marginis (Sea of the Edge; nearside/far-side limb) |
+| LMT+6 | 90°E | ~87°E | Mare Smythii (Smyth's Sea; straddles near/far border) |
+| LMT−1 | 345°E (15°W) | ~351°E (~9°W) | Sinus Aestuum (Bay of Seething; near lunar centre) |
+| LMT−2 | 330°E (30°W) | ~340°E (~20°W) | Copernicus Crater (93-km rayed crater; 9.62°N 20.1°W) |
+| LMT−3 | 315°E (45°W) | ~343°E (~17°W) | Mare Imbrium (Sea of Rains; 1145-km basin; Apollo 15 site) |
+| LMT−4 | 300°E (60°W) | ~328°E (~32°W) | Sinus Iridum (Bay of Rainbows; proposed future base site) |
+| LMT−5 | 285°E (75°W) | ~313°E (~47°W) | Aristarchus Plateau (most reflective region; volcanic complex) |
+| LMT−6 | 270°E (90°W) | ~303°E (~57°W) | Oceanus Procellarum (Ocean of Storms; largest lunar mare) |
 
 **Far Side Zones (LMT±7 to LMT±12):**
 
-| Offset | Approximate Longitude | Representative Feature |
-|--------|-----------------------|----------------------|
-| LMT+7 | 105°E | Hertzsprung Basin |
-| LMT+8 | 120°E | Korolev Crater |
-| LMT+9 | 135°E | Moscoviense Basin |
-| LMT+10 | 150°E | Tsiolkovsky Crater |
-| LMT+11 | 165°E | Jules Verne Crater |
-| LMT+12 | 180° | Antimeridian (far-side centre) |
-| LMT−7 | 105°W | Mendeleev Crater |
-| LMT−8 | 120°W | Daedalus Crater |
-| LMT−9 | 135°W | Apollo Basin |
-| LMT−10 | 150°W | Poincaré Basin |
-| LMT−11 | 165°W | Planck Basin |
-| LMT−12 | 180°W | (same as +12, antimeridian) |
+| Offset | Centre Longitude | IAU Feature Longitude | Representative Feature |
+|--------|-----------------|----------------------|----------------------|
+| LMT+7 | 105°E | ~105°E | Compton Crater (160-km; near Compton-Belkovich volcanic complex) |
+| LMT+8 | 120°E | ~129°E | Tsiolkovsky Crater (far-side mare-floored crater; 185-km diameter) |
+| LMT+9 | 135°E | ~144°E | Jules Verne Crater (143-km; named by Luna 3 mission, 1959) |
+| LMT+10 | 150°E | ~146°E | Mare Moscoviense (far-side mare basin; IAU confirmed) |
+| LMT+11 | 165°E | ~202.6°E (=157.4°W) | Korolev Crater (437-km; largest feature near 165–210°E) |
+| LMT+12 | 180° | 180° | Antimeridian (far-side centre) |
+| LMT−7 | 255°E (105°W) | ~292°E (~68°W) | Grimaldi Basin (430-km dark-floored basin; western nearside limb) |
+| LMT−8 | 240°E (120°W) | ~95°E (=265°W) | Mare Orientale (930-km multi-ring impact structure; straddles limb) |
+| LMT−9 | 225°E (135°W) | — | South polar far-side region (Planck Basin area) |
+| LMT−10 | 210°E (150°W) | ~231°E (=129°W) | Hertzsprung Basin (591-km far-side basin) |
+| LMT−11 | 195°E (165°W) | ~208°E (=152°W) | Apollo Basin (537-km crater within South Pole–Aitken Basin) |
+| LMT−12 | 180°W | 180° | (same as +12, antimeridian) |
 
 ### Special Considerations
 
@@ -255,7 +257,7 @@ The near side (Earth-facing hemisphere, LMT−6 to LMT+6) contains the mare regi
 
 **Work scheduling.** The 29.53-day lunar solar day is entirely incompatible with human circadian biology. Lunar surface crews SHOULD NOT attempt to synchronise their sleep-wake cycles to the local solar day. Instead, crews follow Earth-clock shifts: the standard model is an 8-hour work shift, 8-hour personal time, 8-hour sleep — a three-shift rotation. LMT zones serve as *location designators* (telling you where on the Moon something is) rather than as scheduling references.
 
-**Key sites.** The Apollo 11 landing site (Tranquility Base, 0.67°N, 23.47°E) falls correctly within the LMT+1 zone (15–30°E). The primary Artemis III landing zone targets the **Shackleton Crater** rim (89.66°S, ~130°E). At this extreme south polar latitude, all longitudes converge and standard longitude-based timezone zones become meaningless. Shackleton Crater should be treated as a **polar exception zone** (LMT Polar South) rather than being assigned a specific LMT number. The same applies to any installation within approximately 5° of either pole.
+**Key sites.** The Apollo 11 landing site (Tranquility Base, 0.67°N, 23.47°E) falls within the **LMT+2 zone** (zone centre 30°E, covering 22.5°E–37.5°E). Note: a previous version of this document incorrectly placed Tranquility Base in LMT+1 (15°E). Mare Tranquillitatis itself spans roughly 15°E–45°E and straddles the LMT+1/LMT+2 boundary; its centre (~31.4°E) is firmly in LMT+2. The primary Artemis III landing zone targets the **Shackleton Crater** rim (89.66°S, ~130°E). At this extreme south polar latitude, all longitudes converge and standard longitude-based timezone zones become meaningless. Shackleton Crater should be treated as a **polar exception zone** (LMT Polar South) rather than being assigned a specific LMT number. The same applies to any installation within approximately 5° of either pole.
 
 **Coordinated Lunar Time (LTC / TCL).** The **IAU XXXII General Assembly** (Cape Town, August 2024) adopted resolutions establishing **Lunar Coordinate Time (TCL)** and a Lunar Celestial Reference System. The White House OSTP directive (April 2, 2024) mandated NASA develop an equivalent Coordinated Lunar Time (LTC) by December 31, 2026. In December 2025, China's Purple Mountain Observatory published **LTE440** — the first ready-to-use lunar timekeeping software, with ~0.15 ns accuracy through 2050. The Artemis Accords now have 61 signatories (January 2026).
 
@@ -277,27 +279,38 @@ The Mercurian prime meridian is defined by **Hun Kal**, a small crater approxima
 
 MMT uses the standard 24 zones of 15° longitude each. Feature names follow the IAU convention for Mercury: craters are named after deceased artists, musicians, writers, and other contributors to the arts. Larger features (planitia, montes, rupes) use names from classical mythology and the works of Shakespeare.
 
-All longitudes use **IAU 0–360°E east-positive planetocentric coordinates**. A full audit against MESSENGER/MDIS data is RECOMMENDED for production use.
+All longitudes use **IAU 0–360°E east-positive planetocentric coordinates**. Note: many older sources (including pre-MESSENGER literature and the Mariner 10-era USGS gazetteer) list Mercury crater longitudes in **west-positive planetographic** format. Convert to IAU east-positive using: `lon_IAU_E = 360° − lon_W`. A previous version of this table placed several features using their west-longitude values directly as east-positive offsets, producing systematic errors of up to 180°. Corrected below. A full audit against MESSENGER/MDIS USGS data is RECOMMENDED for production use.
 
-| Offset | Centre Longitude | Representative Feature |
-|--------|-----------------|----------------------|
-| MMT 0  | 0° (Hun Kal) | Hun Kal Crater (prime meridian) |
-| MMT+1  | 15°E | Northern plains region |
-| MMT+2  | 30°E | Intercrater plains (northern hemisphere) |
-| MMT+3  | 45°E | Odin Planitia |
-| MMT+4  | 60°E | Budh Planitia |
-| MMT+5  | 75°E | Beethoven Basin |
-| MMT+6  | 90°E | Tolstoj Basin |
-| MMT+7  | 105°E | Bach Basin |
-| MMT+8  | 120°E | Michelangelo Crater |
-| MMT+9  | 135°E | Shakespeare Crater |
-| MMT+10 | 150°E | Caloris Basin (western rim, ~152°E) |
-| MMT+11 | 165°E | **Caloris Basin (centre, 162.7°E)** — faces sun at 180° hot pole |
-| MMT+12 | 180° | Antimeridian (180° hot pole) |
+| Offset | Centre Longitude | IAU Feature Longitude | Representative Feature |
+|--------|-----------------|----------------------|----------------------|
+| MMT 0  | 0° (Hun Kal) | 0°E | Hun Kal Crater (IAU prime meridian; 1.5-km) |
+| MMT+1  | 15°E | — | Northern plains region (no prominent named feature) |
+| MMT+2  | 30°E | — | Intercrater plains (ancient heavily cratered terrain) |
+| MMT+3  | 45°E | ~50–75°E | Budh Planitia (smooth volcanic plains; Hindu deity) |
+| MMT+4  | 60°E | ~60–80°E | Budh Planitia / equatorial plains transition |
+| MMT+5  | 75°E | ~71.6°E | Haydn Crater (251-km; Austrian composer; IAU east-positive confirmed) |
+| MMT+6  | 90°E | ~87.86°E | Rembrandt Basin (715-km; youngest large multi-ring basin; MESSENGER confirmed) |
+| MMT+7  | 105°E | ~100–120°E | Caloris Basin (western rim approach; 1,550-km basin) |
+| MMT+8  | 120°E | ~130–150°E | Caloris Basin (eastern rim; centre at 162.7°E) |
+| MMT+9  | 135°E | ~135–165°E | Caloris Planitia (interior volcanic plains of Caloris Basin) |
+| MMT+10 | 150°E | ~162.7°E | **Caloris Basin (centre, 162.7°E)** — Ernst et al. 2015, Fassett et al. 2009 |
+| MMT+11 | 165°E | ~165°E | Caloris Basin (southern edge; ~165°E) |
+| MMT+12 | 180° | 180° | Antimeridian (180° hot pole) |
+| MMT−11 | 195°E | ~197°E (=163°W) | Tolstoj Basin (500-km; Leo Tolstoy; IAU confirmed) |
+| MMT−10 | 210°E | ~207.7°E (=152.3°W) | Shakespeare Crater (370-km; English playwright; IAU confirmed) |
+| MMT−9  | 225°E | ~211.1°E (=148.9°W) | Tyagaraja Crater (97-km; Carnatic music composer; IAU confirmed) |
+| MMT−8  | 240°E | ~236°E (=124°W) | Beethoven Basin (625-km; Ludwig van Beethoven; IAU confirmed) |
+| MMT−7  | 255°E | ~257°E (=103°W) | Bach Basin (225-km; J.S. Bach; southern region; IAU confirmed) |
+| MMT−6  | 270°E | ~274°E (=86°W) | Vivaldi Crater (213-km; Baroque composer; IAU confirmed) |
+| MMT−5  | 285°E | ~280.5°E (=79.5°W) | Borealis Planitia (vast northern lowland plain; IAU confirmed) |
+| MMT−4  | 300°E | ~300°E region | Tir Planitia (smooth plains; Zoroastrian deity) |
+| MMT−3  | 315°E | ~323.5°E (=36.5°W) | Homer Crater (314-km; ancient Greek poet; IAU confirmed) |
+| MMT−2  | 330°E | ~329°E (=31°W) | Kuiper Crater (62-km; prominent ray crater; Gerard Kuiper; IAU confirmed) |
+| MMT−1  | 345°E | — | Western approach to prime meridian; pending precise feature identification |
 
 ### The 3:2 Resonance and "Hot Poles"
 
-The 3:2 spin-orbit resonance has a striking geometric consequence: Mercury's perihelion passage (closest approach to the Sun, when solar heating is most intense) occurs when the sub-solar point is at one of exactly two longitudes — approximately 0° and 180°. These are called the "hot poles." The **Caloris Basin**, one of the largest impact craters in the solar system at approximately 1,550 km in diameter, is centred at **31.5°N, 162.7°E** (MESSENGER/MDIS definitive coordinates; Ernst et al. 2015, Fassett et al. 2009). This places it near the **180° hot pole** (within ~17°), which is consistent with the hypothesis that it was formed by a very large impactor arriving from a direction influenced by the resonant geometry. Caloris corresponds to the MMT+11 zone.
+The 3:2 spin-orbit resonance has a striking geometric consequence: Mercury's perihelion passage (closest approach to the Sun, when solar heating is most intense) occurs when the sub-solar point is at one of exactly two longitudes — approximately 0° and 180°. These are called the "hot poles." The **Caloris Basin**, one of the largest impact craters in the solar system at approximately 1,550 km in diameter, is centred at **31.5°N, 162.7°E** (MESSENGER/MDIS definitive coordinates; Ernst et al. 2015, Fassett et al. 2009). This places it near the **180° hot pole** (within ~17°), and spans from roughly the MMT+7 zone (western rim) to MMT+11 zone (southern edge). Caloris Basin is best associated with the MMT+10 zone (150°E centre) given its 162.7°E centroid.
 
 This means the thermal environment on Mercury's surface is strongly bimodal: the hot poles experience extreme temperature peaks during perihelion, while the "warm poles" at 90° and 270° have more moderate peak temperatures. Infrastructure placement needs to account for this.
 
@@ -431,7 +444,7 @@ Saturn's polar regions feature an eye-wall storm structure at the centres of the
 
 The proposed Saturnian work period follows the same logic as Jupiter: 2.25 Saturnian days ≈ 23.76 Earth hours, approximating an Earth day. Five such periods on, two off.
 
-The Mankovich ring seismology value (10h 33m 38s) is the RECOMMENDED default for scheduling applications. Implementations MAY offer a configuration option to use the System III value (10h 39m 22s) for compatibility with historical data products.
+The Mankovich et al. (2019) ring seismology value (10h 33m 38s) is the RECOMMENDED default per the DRAFT-STANDARD. A 2023 refinement by the same authors gives ≈10h 34m 42s (≈10.578 h); the `planet-time.js` reference implementation uses the 2023 value. Implementations MAY offer a configuration option to use the System III value (10h 39m 22s) for compatibility with historical data products. See DRAFT-STANDARD.md §11.1 for the full comparison table.
 
 ---
 
@@ -508,6 +521,6 @@ The `planet-time.js` library implements all of the above systems in a consistent
 
 ---
 
-*This document is maintained as part of the Sky Colours / InterPlanet.live project. Corrections, additions, and proposals for additional bodies are welcomed via the project repository.*
+*This document is maintained as part of the InterPlanet project. Corrections, additions, and proposals for additional bodies are welcomed via the project repository.*
 
 *All feature names used in zone designations are as listed in the IAU Planetary Nomenclature database (planetarynames.wr.usgs.gov) at time of writing. Feature names are subject to ongoing IAU review and update.*

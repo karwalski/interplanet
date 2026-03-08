@@ -21,15 +21,20 @@ astronomical terms except where the project assigns them specialised meaning.
 | **IWS** | Interplanetary Work Scheduling | The domain of scheduling human work across solar system distances |
 | **J2000** | Julian epoch 2000.0 | Astronomical reference epoch (2000-01-01T12:00:00 TT) |
 | **JDE** | Julian Ephemeris Day | Continuous day count from J2000 in TT |
+| **JMT** | Jupiter Mean Time | Jupiter timezone prefix; uses System III magnetic-field rotation (~9h 55m 29.7s) |
 | **LMT** | Lunar Mean Time | Lunar timezone prefix (proposed) |
 | **LOS** | Line of Sight | Direct radio-frequency path between two bodies (may be blocked by Sun) |
 | **LTC / TCL** | Lunar Coordinate Time | IAU-adopted lunar timescale (2024); +56.02 µs/day vs TAI |
 | **LTX** | Light-Time eXchange | The interplanetary meeting protocol defined by this project |
-| **MMT** | Mars Mean Time | General Mars timezone prefix (cf. AMT for Airy meridian) |
+| **MMT** | Mercury Mean Time | Mercury timezone prefix; prime meridian at Hun Kal Crater (IAU 2009) |
 | **MTC** | Mars Coordinated Time | Time at the Airy Mean Time meridian (Mars prime meridian clock) |
+| **NMT** | Neptune Mean Time | Neptune timezone prefix; based on Voyager 2 sidereal rotation (16.11 h) |
 | **RFC** | Request for Comments | IETF standards document |
 | **RT** | Round-Trip | Time for a signal to travel from A to B and back (2× one-way) |
+| **SMT** | Saturn Mean Time | Saturn timezone prefix; uses Mankovich et al. (2019) ring-seismology rotation (10h 33m 38s) |
 | **TT** | Terrestrial Time | Relativistic time standard used for orbital ephemeris calculations |
+| **UMT** | Uranus Mean Time | Uranus timezone prefix; uses Lamy et al. (2025) rotation rate (17.247864 h) |
+| **VMT** | Venus Mean Time | Venus timezone prefix; prime meridian at Ariadne Crater (IAU WGCCRE) |
 
 ---
 
@@ -162,7 +167,7 @@ all major calendar clients. LTX extends ICS with two custom X-properties:
 - `X-LTX-QUANTUM`: the quantum duration for the session
 
 These extensions are proposed as part of the RFC 5545 Extension for LTX
-(see `ICS for LTX.md` and `RF5545 EXTENSION.md`).
+(see `docs/RFC5545-EXTENSION.md`).
 
 ---
 
@@ -176,6 +181,15 @@ computations. The corresponding Unix timestamp is 946,728,000,000 ms.
 ### JDE (Julian Ephemeris Day)
 A continuous day count in Terrestrial Time (TT) from J2000. Used for all
 orbital element lookups in IPT's Kepler equation solver.
+
+### Jupiter Mean Time (JMT)
+The timezone prefix for Jupiter's 24-zone system, referenced to the System III
+magnetic-field rotation period (~9h 55m 29.7s). System III is used because it
+is the most stable reference frame for Jupiter, tied to the planet's deep
+interior via its magnetic field rather than the fluid atmosphere. Zone names
+reference atmospheric features (belts, zones, the Great Red Spot). JMT is
+a location-reference system; human crews on Jovian atmospheric probes or
+the Galilean moons would follow Earth-clock scheduling.
 
 ---
 
@@ -264,6 +278,12 @@ multi-party discussion at low-delay distances).
 
 ## N
 
+### Neptune Mean Time (NMT)
+The timezone prefix for Neptune's 24-zone system, based on the sidereal rotation
+period of 16.11 hours established by Voyager 2 magnetometer measurements (1989
+flyby — the only spacecraft to have visited Neptune). NMT zones are pure location
+designators; any operational scheduling follows Earth-standard shifts.
+
 ### Node (LTX)
 A participant in an LTX session. A node has:
 - `id` — unique identifier within the session (e.g. "N0", "N1")
@@ -326,7 +346,7 @@ A proposed extension to the iCalendar standard (RFC 5545) defining
 two new X-properties for LTX session events:
 - `X-LTX-PLANID` — the canonical LTX plan ID
 - `X-LTX-QUANTUM` — the session quantum in minutes
-Documented in `RF5545 EXTENSION.md` and `ICS for LTX.md`.
+Documented in `docs/RFC5545-EXTENSION.md`.
 
 ### RFC 9557 (IXDTF)
 The IETF standard extending ISO 8601 / RFC 3339 with timezone annotations
@@ -343,6 +363,14 @@ with sufficient inter-segment gap to accommodate the round-trip delay.
 ---
 
 ## S
+
+### Saturn Mean Time (SMT)
+The timezone prefix for Saturn's 24-zone system. Saturn's true interior rotation
+period (10h 33m 38s = 38,018 s) is taken from **Mankovich et al. (2019, ApJ 871:1)**,
+derived from density waves in Saturn's C ring driven by internal oscillation modes.
+This supersedes the older Voyager-era System III value (10h 39m 22s), which tracked
+magnetospheric periodicity rather than core rotation. SMT zones reference atmospheric
+features including the North Polar Hexagon and Great White Spot.
 
 ### Signal Window
 See **Async Send Window**.
@@ -366,6 +394,35 @@ An LTX session segment type. The period during which the HOST transmits
 to all PARTICIPANT nodes. Participants listen and compose replies. A TX
 segment must be long enough for the transmitted content plus the round-trip
 delay to the most distant PARTICIPANT.
+
+---
+
+## U
+
+### Uranus Mean Time (UMT)
+The timezone prefix for Uranus's 24-zone system. The rotation period used is
+**17.247864 ±0.000010 hours** (17h 14m 52.3s) from **Lamy et al. (2025,
+Nature Astronomy)**, derived from Hubble Space Telescope UV auroral observations
+spanning 2011–2022. This is a 1,000× improvement in precision over the Voyager 2
+estimate (17.24 ±0.01 h). Uranus rotates retrograde (axial tilt 97.77°). UMT zones
+are purely geographic identifiers given Uranus's extreme axial tilt and the lack of
+any near-term human operations.
+
+---
+
+## V
+
+### Venus Mean Time (VMT)
+The timezone prefix for Venus's 24-zone system. The prime meridian is anchored to
+the central peak of **Ariadne Crater** (IAU WGCCRE). All surface coordinates use
+IAU 0–360°E east-positive planetocentric convention; Venus rotates retrograde
+(solar day = 116.75 Earth days), so the Sun rises in the west. Feature naming
+follows IAU convention: craters named after historical women; large features
+(terrae, planitiae, montes) after goddesses from world mythologies. The exception
+is Maxwell Montes (named before the convention was established). Surface mapping
+is based on Magellan radar data (NASA, 1990–1994). VMT zones are location
+designators; human crews (most plausibly in high-altitude atmospheric habitats)
+follow Earth-clock scheduling.
 
 ---
 
