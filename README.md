@@ -1,7 +1,5 @@
 # InterPlanet — The Solar System Clock
 
-[![CI](https://github.com/interplanet/interplanet/actions/workflows/ci.yml/badge.svg)](https://github.com/interplanet/interplanet/actions/workflows/ci.yml)
-
 **See what time it is anywhere on Earth — and on other worlds.**
 
 InterPlanet is an open-source Solar System clock and meeting scheduler. It shows
