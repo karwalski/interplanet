@@ -1,4 +1,4 @@
-/* InterPlanet — sky.js v1.11.0 */
+/* InterPlanet — sky.js v1.12.0 */
 // ════════════════════════════════════════════════════════════════════════════
 // i18n shorthand — t() / getDayAbbr() delegates to window.I18N
 // Inline English fallbacks guard against a browser-cached i18n.js that
@@ -931,6 +931,7 @@ let STATE = {
     showWeather:true, showSunMoon:true, showPing:true, compact:false,
     reduceMotion: false,
     simpleMode: true,    // 58.8 — simple view hides advanced display toggles
+    clockView: 'digital', // 'digital' | 'analog' | 'both'
     hdtnApiUrl: 'https://dtn.interplanet.live/',
     llmApiUrl: 'https://slm.interplanet.live/',
     weatherApiUrl: 'https://api.open-meteo.com/v1',
@@ -1318,6 +1319,62 @@ function sortCities() {
 // ════════════════════════════════════════════════════════════════════════════
 // RENDER A CITY COLUMN
 // ════════════════════════════════════════════════════════════════════════════
+// ANALOGUE CLOCK HELPERS
+// ════════════════════════════════════════════════════════════════════════════
+function _makeClockSVG(id) {
+  let ticks = '';
+  for (let i = 0; i < 12; i++) {
+    const th = i * Math.PI / 6;
+    const s = Math.sin(th), c = Math.cos(th);
+    const x1 = (50 + 44*s).toFixed(1), y1 = (50 - 44*c).toFixed(1);
+    const maj = i % 3 === 0;
+    const x2 = (50 + (maj ? 37 : 41)*s).toFixed(1);
+    const y2 = (50 - (maj ? 37 : 41)*c).toFixed(1);
+    ticks += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="ck-tick${maj?' ck-tick-maj':''}"/>`;
+  }
+  return `<svg class="city-analog-clock" id="aclock-${id}" viewBox="0 0 100 100" aria-hidden="true" focusable="false">`
+    + `<circle cx="50" cy="50" r="46" class="ck-face"/>`
+    + `<circle cx="50" cy="50" r="46" class="ck-rim"/>`
+    + ticks
+    + `<text x="50" y="18" class="ck-num" text-anchor="middle" dominant-baseline="central">12</text>`
+    + `<text x="82" y="50" class="ck-num" text-anchor="middle" dominant-baseline="central">3</text>`
+    + `<text x="50" y="82" class="ck-num" text-anchor="middle" dominant-baseline="central">6</text>`
+    + `<text x="18" y="50" class="ck-num" text-anchor="middle" dominant-baseline="central">9</text>`
+    + `<g id="aclock-hr-${id}"><line x1="50" y1="54" x2="50" y2="27" class="ck-hr"/></g>`
+    + `<g id="aclock-min-${id}"><line x1="50" y1="56" x2="50" y2="18" class="ck-min"/></g>`
+    + `<g id="aclock-sec-${id}"><line x1="50" y1="60" x2="50" y2="13" class="ck-sec"/></g>`
+    + `<circle cx="50" cy="50" r="3.5" class="ck-center"/>`
+    + `</svg>`;
+}
+
+function _setClockHands(id, h24, m, fracSec) {
+  const hrG = document.getElementById(`aclock-hr-${id}`);
+  if (!hrG) return;
+  const h = h24 % 12;
+  const s = Math.floor(fracSec); // snap second hand to integer second markers
+  hrG.setAttribute('transform', `rotate(${h * 30 + m * 0.5},50,50)`);
+  const minG = document.getElementById(`aclock-min-${id}`);
+  if (minG) minG.setAttribute('transform', `rotate(${m * 6 + fracSec * 0.1},50,50)`);
+  const secG = document.getElementById(`aclock-sec-${id}`);
+  if (secG) secG.setAttribute('transform', `rotate(${s * 6},50,50)`);
+}
+
+function tickAnalogClock(id, tz, now) {
+  if ((STATE.settings.clockView || 'digital') === 'digital') return;
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hour: 'numeric', minute: 'numeric', hour12: false
+  }).formatToParts(now);
+  let h = 0, m = 0;
+  parts.forEach(p => {
+    if (p.type === 'hour')        h = +p.value;
+    else if (p.type === 'minute') m = +p.value;
+  });
+  // Fractional position within the current Earth minute (same for all tz)
+  const fracSec = (now.getTime() % 60000) / 60000 * 60;
+  _setClockHands(id, h, m, fracSec);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 function renderCity(city) {
   const wrap = document.getElementById('cities-wrap');
   const addBtn = document.getElementById('add-col');
@@ -1331,39 +1388,42 @@ function renderCity(city) {
 
   const P = city.type === 'planet' ? (PlanetTime.PLANETS[city.planet] || LOCAL_PLANETS[city.planet]) : null;
   col.innerHTML = `
-    <div class="city-sky" id="sky-${city.id}">
-      <div class="city-time-block" id="tb-${city.id}">
-        <div class="city-time-row">
-          <span class="city-time" id="time-${city.id}">--:--</span>
-          <span class="city-dow"  id="dow-${city.id}"></span>
+    <div class="city-scroll-body">
+      <div class="city-sky" id="sky-${city.id}">
+        <div class="city-time-block" id="tb-${city.id}">
+          <div class="city-time-row">
+            <span class="city-time" id="time-${city.id}">--:--</span>
+            <span class="city-dow"  id="dow-${city.id}"></span>
+          </div>
+          ${_makeClockSVG(city.id)}
         </div>
+        <div class="sky-label" id="slabel-${city.id}"></div>
       </div>
-      <div class="sky-label" id="slabel-${city.id}"></div>
-    </div>
-    <div class="city-info" id="info-${city.id}">
-      <div class="city-tz" id="tz-${city.id}"></div>
-      <div class="city-name-wrap">
-        ${city.type==='planet'
-          ? `<span class="planet-badge" id="badge-${city.id}">${P.symbol} ${P.name}</span>`
-          : `<input class="city-name-input" id="name-${city.id}" value="${(city.customName||city.city).replace(/"/g,'&quot;')}" aria-label="${(city.customName||city.city).replace(/"/g,'&quot;')} — type to search a different location" title="Type to search a different location">`
-        }
-        <span class="city-country" id="cty-${city.id}">${city.country}</span>
+      <div class="city-info" id="info-${city.id}">
+        <div class="city-tz" id="tz-${city.id}"></div>
+        <div class="city-name-wrap">
+          ${city.type==='planet'
+            ? `<span class="planet-badge" id="badge-${city.id}">${P.symbol} ${P.name}</span>`
+            : `<input class="city-name-input" id="name-${city.id}" value="${(city.customName||city.city).replace(/"/g,'&quot;')}" aria-label="${(city.customName||city.city).replace(/"/g,'&quot;')} — type to search a different location" title="Type to search a different location">`
+          }
+          <span class="city-country" id="cty-${city.id}">${city.country}</span>
+        </div>
+        ${city.type==='planet' && city.zoneId ? `<div class="planet-zone" id="zone-${city.id}">${city.zoneId} · ${city.zoneName||''}</div>` : ''}
+        ${city.type==='planet' ? `<div class="city-sky-desc" id="pdesc-${city.id}"></div>` : ''}
+        <div class="holiday-badge-wrap" id="holiday-${city.id}" style="display:none"></div>
+        ${city.type!=='planet' ? `<div class="work-indicator" id="work-${city.id}"><div class="work-dot rest"></div><span>${t('city.loading')}</span></div>` : ''}
+        ${city.type!=='planet' ? `<div class="city-weather" id="wx-${city.id}" style="display:none"></div>` : ''}
+        <div class="city-sun"  id="sun-${city.id}"  style="display:none"></div>
+        ${city.type!=='planet' ? `<div class="city-moon" id="moon-${city.id}" style="display:none"></div>` : ''}
+        <div class="city-temp-est" id="temp-${city.id}" style="display:none"></div>
+        <div class="city-ping" id="ping-${city.id}" style="display:none"></div>
+        ${city.type==='planet' ? `<div class="los-warn" id="los-${city.id}" style="display:none"></div>` : ''}
+        ${city.type==='planet' ? `<div class="hdtn-forecast" id="hdtn-${city.id}" style="display:none" aria-live="polite"></div>` : ''}
       </div>
-      ${city.type==='planet' && city.zoneId ? `<div class="planet-zone" id="zone-${city.id}">${city.zoneId} · ${city.zoneName||''}</div>` : ''}
-      ${city.type==='planet' ? `<div class="city-sky-desc" id="pdesc-${city.id}"></div>` : ''}
-      <div class="holiday-badge-wrap" id="holiday-${city.id}" style="display:none"></div>
-      ${city.type!=='planet' ? `<div class="work-indicator" id="work-${city.id}"><div class="work-dot rest"></div><span>${t('city.loading')}</span></div>` : ''}
-      ${city.type!=='planet' ? `<div class="city-weather" id="wx-${city.id}" style="display:none"></div>` : ''}
-      <div class="city-sun"  id="sun-${city.id}"  style="display:none"></div>
-      ${city.type!=='planet' ? `<div class="city-moon" id="moon-${city.id}" style="display:none"></div>` : ''}
-      <div class="city-temp-est" id="temp-${city.id}" style="display:none"></div>
-      <div class="city-ping" id="ping-${city.id}" style="display:none"></div>
-      ${city.type==='planet' ? `<div class="los-warn" id="los-${city.id}" style="display:none"></div>` : ''}
-      ${city.type==='planet' ? `<div class="hdtn-forecast" id="hdtn-${city.id}" style="display:none" aria-live="polite"></div>` : ''}
-    </div>
-    <div class="hourly-wrap" id="hw-${city.id}">
-      <div class="hourly-bar" id="hbar-${city.id}"></div>
-      <div class="hourly-labels" id="hlbl-${city.id}"></div>
+      <div class="hourly-wrap" id="hw-${city.id}">
+        <div class="hourly-bar" id="hbar-${city.id}"></div>
+        <div class="hourly-labels" id="hlbl-${city.id}"></div>
+      </div>
     </div>
     <div class="city-confirm" id="confirm-${city.id}"></div>
     <div class="city-a11y-details" id="a11y-${city.id}" tabindex="-1"></div>
@@ -1864,6 +1924,16 @@ function updatePlanetDisplay(city, now) {
     }
   }
   if (dowEl) dowEl.textContent = s.showTime ? pt.dowShort : '';
+  if ((STATE.settings.clockView || 'digital') !== 'digital') {
+    // Fractional position within the planet's current minute, so the second hand
+    // sweeps at the planet's own rate (e.g. ~1.028× slower on Mars, ~6× faster on Saturn).
+    const _pKey = isLocal ? 'earth' : city.planet;
+    const _p = PlanetTime.PLANETS[_pKey];
+    const _planetMinMs = _p.solarDayMs / 1440;
+    const _elapsed = now.getTime() - _p.epochMs + tzOff / 24 * _p.solarDayMs;
+    const fracSec = ((_elapsed % _planetMinMs) + _planetMinMs) % _planetMinMs / _planetMinMs * 60;
+    _setClockHands(city.id, pt.hour, pt.minute, fracSec);
+  }
 
   if (tzEl && s.showTZ) {
     let yearLabel;
@@ -3771,6 +3841,12 @@ function syncSettingsUI() {
   document.querySelectorAll('#detail-mode-seg .sp-seg-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.val === simpleModeVal);
   });
+
+  // Clock view segmented control
+  const cvVal = s.clockView || 'digital';
+  document.querySelectorAll('#clock-view-seg .sp-seg-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.val === cvVal);
+  });
 }
 
 let _mqlTheme = null;
@@ -3807,6 +3883,17 @@ function applySettings() {
   }
   if (s.compact) wrap.classList.add('compact');
   else wrap.classList.remove('compact');
+  const cv = s.clockView || 'digital';
+  wrap.classList.toggle('cv-digital', cv === 'digital');
+  wrap.classList.toggle('cv-analog',  cv === 'analog');
+  wrap.classList.toggle('cv-both',    cv === 'both');
+  if (cv !== 'digital') {
+    const _now = getNow();
+    STATE.cities.forEach(c => {
+      if (c.type === 'earth') tickAnalogClock(c.id, c.tz, _now);
+      else updatePlanetDisplay(c, _now);
+    });
+  }
   // Update layout icon and aria-pressed
   const layoutBtn = document.getElementById('layout-ctl');
   layoutBtn.innerHTML = s.horiz
@@ -3852,6 +3939,14 @@ function bindSettingsToggles() {
     btn.addEventListener('click', () => {
       STATE.settings.simpleMode = btn.dataset.val === 'simple';
       syncSettingsUI(); saveState();
+    });
+  });
+
+  // Clock view segmented control
+  document.querySelectorAll('#clock-view-seg .sp-seg-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      STATE.settings.clockView = btn.dataset.val;
+      syncSettingsUI(); applySettings(); saveState(); syncHash();
     });
   });
 }
@@ -5288,12 +5383,36 @@ function tick() {
         const label = ws==='work'?t('work.status_work'):ws==='marginal'?t('work.status_marginal'):t('work.status_rest');
         workEl.innerHTML = `<div class="work-dot ${dotClass}" style="background:${dotColor}"></div><span>${label}</span>`;
       }
+      tickAnalogClock(c.id, c.tz, now);
     } else if (c.type === 'planet') {
       updatePlanetDisplay(c, getNow());
     }
   });
 }
 setInterval(tick, 1000);
+
+// Analogue clock fast tick — 200ms so fast-day planets (Saturn ~441ms/s, Jupiter ~413ms/s)
+// step their second hands at the correct planet rate rather than jumping multiple markers
+// per Earth-second update. Lightweight: only recomputes fracSec + sets SVG transforms.
+setInterval(() => {
+  if ((STATE.settings.clockView || 'digital') === 'digital') return;
+  const now = getNow();
+  STATE.cities.forEach(c => {
+    if (c.type === 'earth') {
+      tickAnalogClock(c.id, c.tz, now);
+    } else {
+      const _isLocal = !PlanetTime.PLANETS[c.planet];
+      const _ptKey   = _isLocal ? 'earth' : c.planet;
+      const _tzOff   = c.tzOffset || 0;
+      const _pt      = PlanetTime.getPlanetTime(_ptKey, now, _tzOff);
+      const _p       = PlanetTime.PLANETS[_ptKey];
+      const _minMs   = _p.solarDayMs / 1440;
+      const _el      = now.getTime() - _p.epochMs + _tzOff / 24 * _p.solarDayMs;
+      const _frac    = ((_el % _minMs) + _minMs) % _minMs / _minMs * 60;
+      _setClockHands(c.id, _pt.hour, _pt.minute, _frac);
+    }
+  });
+}, 200);
 
 // Full refresh every 10 minutes (sky colour recalc)
 setInterval(() => STATE.cities.forEach(c => {

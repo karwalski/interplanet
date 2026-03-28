@@ -1,4 +1,4 @@
-/* InterPlanet — sky.css v1.0.0 */
+/* InterPlanet — sky.css v1.1.0 */
 /* ── Reset & base ─────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body {
@@ -33,6 +33,9 @@ html, body {
   cursor: default; min-width: 200px;
 }
 .city-col:last-of-type { border-right: none; }
+
+/* Scroll-body wrapper: transparent to desktop grid layout; activated in mobile vert mode */
+.city-scroll-body { display: contents; }
 
 /* sky area — holds centred time block + gradient */
 .city-sky {
@@ -1182,6 +1185,65 @@ html.light-mode .sp-input { background: rgba(0,0,0,0.06); border-color: rgba(0,0
   .splash-tour-link { display: none; }
 }
 
+/* ── Mobile vertical bars: per-column scroll with sticky city name ─────────── */
+/* When vert-forced is active on mobile, each column becomes an independent     */
+/* scroll container. City name sticks to the top as you scroll through info.   */
+/* Dragging horizontally on the city name scrolls the column container.        */
+@media (max-width: 768px) {
+  #cities-wrap.vert-forced .city-col {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden; /* scroll-body handles overflow */
+  }
+  #cities-wrap.vert-forced .city-scroll-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain; /* prevent scroll chaining to page */
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.15) transparent;
+  }
+  #cities-wrap.vert-forced .city-scroll-body::-webkit-scrollbar { width: 3px; }
+  #cities-wrap.vert-forced .city-scroll-body::-webkit-scrollbar-track { background: transparent; }
+  #cities-wrap.vert-forced .city-scroll-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+  #cities-wrap.vert-forced .city-sky {
+    flex-shrink: 0;
+    min-height: 130px; /* ensure time is always a decent visual presence */
+  }
+  #cities-wrap.vert-forced .city-info {
+    flex-shrink: 0;
+    min-height: unset;
+    max-height: unset;
+    overflow: visible; /* scroll-body handles overflow, not city-info */
+  }
+  #cities-wrap.vert-forced .hourly-wrap {
+    flex-shrink: 0;
+  }
+  /* Sticky city name: stays at top of column while info scrolls beneath */
+  #cities-wrap.vert-forced .city-name-wrap {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: rgba(0,0,0,0.5);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    /* extend to cover city-info horizontal padding */
+    margin: -0.1rem -0.75rem 0.25rem;
+    padding: 0.4rem 0.75rem 0.3rem;
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+    /* pan-x lets horizontal swipes on the sticky header scroll the city container */
+    touch-action: pan-x;
+  }
+  html.light-mode #cities-wrap.vert-forced .city-name-wrap {
+    background: rgba(245,246,250,0.82);
+    border-bottom-color: rgba(0,0,0,0.06);
+  }
+}
+
 /* ── SLM AI Assistant result panel ─────────────────────────────────────────── */
 #mp-llm-result { margin-top: .5rem; }
 .mp-llm-loading {
@@ -1763,3 +1825,47 @@ html.light-mode .info-btn:hover { color: rgba(0,0,0,0.8); border-color: rgba(0,0
 .info-pop-links a:hover { text-decoration: underline; }
 #info-pop-overlay { display:none; position:fixed; inset:0; z-index:1999; }
 #info-pop-overlay.on { display:block; }
+
+/* ── Analogue clock ──────────────────────────────────────────────────────── */
+.city-analog-clock { display: none; width: 80px; height: 80px; overflow: visible; flex-shrink: 0; }
+.ck-face { fill: rgba(255,255,255,0.07); }
+.ck-rim  { fill: none; stroke: rgba(255,255,255,0.22); stroke-width: 1.5; }
+.ck-tick { stroke: rgba(255,255,255,0.38); stroke-width: 1.2; stroke-linecap: round; fill: none; }
+.ck-tick-maj { stroke: rgba(255,255,255,0.80); stroke-width: 2.2; }
+.ck-num  { fill: rgba(255,255,255,0.82); font-size: 10px; font-family: inherit; font-weight: 600; }
+.ck-hr   { stroke: rgba(255,255,255,0.95); stroke-width: 4;   stroke-linecap: round; fill: none; }
+.ck-min  { stroke: rgba(255,255,255,0.88); stroke-width: 2.5; stroke-linecap: round; fill: none; }
+.ck-sec  { stroke: #5b8def; stroke-width: 1.5; stroke-linecap: round; fill: none; }
+.ck-center { fill: rgba(255,255,255,0.92); }
+/* Light mode overrides */
+html.light-mode .ck-face { fill: rgba(0,0,0,0.05); }
+html.light-mode .ck-rim  { stroke: rgba(0,0,0,0.18); }
+html.light-mode .ck-tick { stroke: rgba(0,0,0,0.28); }
+html.light-mode .ck-tick-maj { stroke: rgba(0,0,0,0.65); }
+html.light-mode .ck-num  { fill: rgba(0,0,0,0.75); }
+html.light-mode .ck-hr   { stroke: rgba(0,0,0,0.88); }
+html.light-mode .ck-min  { stroke: rgba(0,0,0,0.78); }
+html.light-mode .ck-sec  { stroke: #3563c8; }
+html.light-mode .ck-center { fill: rgba(0,0,0,0.85); }
+/* Show clock in analog / both modes */
+#cities-wrap.cv-analog .city-analog-clock { display: block; width: 104px; height: 104px; }
+#cities-wrap.cv-both   .city-analog-clock { display: block; }
+/* Hide digital time row in analog-only mode */
+#cities-wrap.cv-analog .city-time-row { display: none; }
+/* Both mode: stack digital + analogue centred */
+#cities-wrap.cv-both .city-time-block {
+  display: flex; flex-direction: column; align-items: center; gap: 0.4rem;
+}
+/* Horizontal layout: smaller clock to fit narrow sky strip */
+#cities-wrap.horiz.cv-both   .city-analog-clock { width: 68px; height: 68px; }
+#cities-wrap.horiz.cv-analog .city-analog-clock { width: 76px; height: 76px; }
+#cities-wrap.horiz.cv-both .city-time-block { gap: 0.2rem; }
+/* Responsive media queries — not(.vert-forced) = narrow-screen auto-horiz */
+#cities-wrap:not(.vert-forced).cv-both   .city-analog-clock { width: 60px; height: 60px; }
+#cities-wrap:not(.vert-forced).cv-analog .city-analog-clock { width: 70px; height: 70px; }
+#cities-wrap:not(.vert-forced).cv-both .city-time-block { gap: 0.15rem; }
+/* Small phones */
+@media (max-width: 480px) {
+  #cities-wrap.vert-forced.cv-analog .city-analog-clock { width: 90px; height: 90px; }
+  #cities-wrap.vert-forced.cv-both   .city-analog-clock { width: 68px; height: 68px; }
+}
