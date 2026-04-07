@@ -126,4 +126,4 @@ cd test && lua unit_test.lua
 
 ## License
 
-MIT — see `LICENSE` in the project root.
+GPL-3.0 — see `LICENSE` in the project root.

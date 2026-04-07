@@ -88,4 +88,4 @@ See [LTX Protocol](https://interplanet.live/ltx.html) for full documentation.
 
 ## License
 
-MIT
+GPL-3.0

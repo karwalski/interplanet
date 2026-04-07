@@ -7,7 +7,7 @@
     "orbital-mechanics", "light-travel", "solar-system", "scheduling"
   ],
   "author": "InterPlanet contributors",
-  "license": "MIT",
+  "license": "GPL-3.0",
   "homepage": "https://interplanet.live",
   "repository": {
     "type": "git",

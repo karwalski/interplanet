@@ -50,4 +50,4 @@ dart run bin/fixture_runner.dart ../../c/planet-time/fixtures/reference.json
 
 ## License
 
-MIT
+GPL-3.0

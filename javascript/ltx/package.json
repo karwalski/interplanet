@@ -6,7 +6,7 @@
     "interplanetary", "ltx", "light-time", "meeting", "protocol", "space", "solar-system"
   ],
   "author": "InterPlanet contributors",
-  "license": "MIT",
+  "license": "GPL-3.0",
   "homepage": "https://interplanet.live",
   "repository": {
     "type": "git",

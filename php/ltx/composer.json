@@ -3,7 +3,7 @@
   "description": "PHP LTX (Light-Time eXchange) library — port of ltx-sdk.js",
   "version": "1.0.0",
   "type": "library",
-  "license": "MIT",
+  "license": "GPL-3.0",
   "require": {
     "php": ">=8.1"
   },

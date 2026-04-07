@@ -128,4 +128,4 @@ from interplanet_ltx import LtxPlan, LtxNode, LtxSegment, LtxSegmentSpec, LtxNod
 
 ## License
 
-MIT — [interplanet.live](https://interplanet.live)
+GPL-3.0 — [interplanet.live](https://interplanet.live)

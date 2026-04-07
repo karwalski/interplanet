@@ -590,4 +590,4 @@ essential for a meeting planner.
 
 ## Licence
 
-MIT — see [LICENSE](LICENSE).
+GPL-3.0 — see [LICENSE](LICENSE).

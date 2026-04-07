@@ -220,4 +220,4 @@ libinterplanet/
 
 ## License
 
-MIT — same as the parent interplanet project.
+GPL-3.0 — same as the parent interplanet project.

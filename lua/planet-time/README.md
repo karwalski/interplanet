@@ -127,4 +127,4 @@ make fixture
 
 ## License
 
-MIT — see `LICENSE` in the project root.
+GPL-3.0 — see `LICENSE` in the project root.

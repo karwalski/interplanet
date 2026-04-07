@@ -48,4 +48,4 @@ mix run fixture_runner/fixture_runner.exs ../../c/planet-time/fixtures/reference
 
 ## License
 
-MIT
+GPL-3.0

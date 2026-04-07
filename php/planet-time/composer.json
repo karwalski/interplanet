@@ -3,7 +3,7 @@
   "description": "PHP library for interplanetary time calculations — ported from planet-time.js",
   "version": "0.1.0",
   "type": "library",
-  "license": "MIT",
+  "license": "GPL-3.0",
   "require": {
     "php": ">=8.1"
   },

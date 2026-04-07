@@ -4,7 +4,7 @@
   "description": "Planetary time, orbital mechanics, and interplanetary meeting scheduler — TypeScript native port",
   "keywords": ["interplanetary", "planet", "time", "mars", "astronomy", "orbital-mechanics", "typescript"],
   "author": "InterPlanet contributors",
-  "license": "MIT",
+  "license": "GPL-3.0",
   "homepage": "https://interplanet.live",
   "repository": { "type": "git", "url": "https://github.com/karwalski/interplanet" },
   "main": "dist/cjs/index.js",

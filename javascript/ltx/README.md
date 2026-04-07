@@ -121,4 +121,4 @@ The typed variant lives in `@interplanet/ltx` (see `typescript/ltx/`). The JS pa
 
 ## License
 
-MIT — [interplanet.live](https://interplanet.live)
+GPL-3.0 — [interplanet.live](https://interplanet.live)
