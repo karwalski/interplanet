@@ -2390,7 +2390,7 @@ function downloadBlackoutCalendar(planet) {
 
   const periods = buildConjunctionPeriods(planet, new Date(), 730);
   if (periods.length === 0) {
-    showToast(`No conjunctions found for ${planetName} in the next 2 years.`);
+    showToast(t('toast.conjunction_none', { planet: planetName }));
     return;
   }
 
@@ -6043,7 +6043,7 @@ init();
       if (!LOCAL_PLANETS.pluto) {
         _addPluto();
         try { localStorage.setItem('ee_pluto', '1'); } catch(_) {}
-        showToast('🪐 Pluto is a planet! (added to planet search)');
+        showToast('\u{1FA90} ' + t('toast.ee_pluto'));
       }
     }
   });
@@ -6270,7 +6270,7 @@ init();
     if (now.getUTCHours()   !== 23) return;
     if (now.getUTCMinutes() !== 59) return;
     if (now.getUTCSeconds() !== 59) return;
-    showToast('🕛 23:59:60 — Inserting leap second! (simulated)');
+    showToast('\u{1F55B} ' + t('toast.ee_leap_second'));
   }
   setInterval(_checkLeapSecond, 1000);
 })();
