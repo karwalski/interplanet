@@ -1,0 +1,381 @@
+m=interplanet.planettime;
+i=math:std.math;
+i=str:std.str;
+i=time:std.time;
+
+t=$orbital{l0:f64;dl:f64;om0:f64;e0:f64;a:f64};
+
+t=$helio{x:f64;y:f64;r:f64;lon:f64};
+
+t=$planetinfo{
+  pname:$str;solarday:f64;sidyr:f64;
+  daysperperiod:f64;periodsperweek:i64;workperiodsperweek:i64;
+  workhrsstart:i64;workhrsend:i64;
+  earthclocksched:bool;epoch:f64
+};
+
+t=$planettime{
+  planet:$str;hour:i64;minute:i64;second:i64;
+  localhour:f64;dayfraction:f64;daynumber:i64;
+  dayinyear:i64;yearnumber:i64;
+  periodinweek:i64;isworkperiod:bool;isworkhour:bool;
+  downame:$str;timestr:$str;timestrfull:$str;
+  solinyear:i64;solsperyear:i64
+};
+
+t=$mtc{sol:i64;hour:i64;minute:i64;second:i64;mtcstr:$str};
+
+t=$los{clear:bool;blocked:bool;degraded:bool;closestsunau:f64;edeg:f64;message:$str};
+
+t=$window{wstart:i64;wend:i64;wdur:i64};
+
+
+f=imod(a:i64;b:i64):i64{
+  <a-a/b*b
+};
+
+f=orbitalget(key:$str):$orbital{
+  if(key="mercury"){
+    <$orbital{l0:252.2507;dl:149474.0722;om0:77.4561;e0:0.20564;a:0.38710}
+  }el{if(key="venus"){
+    <$orbital{l0:181.9798;dl:58519.2130;om0:131.5637;e0:0.00677;a:0.72333}
+  }el{if(key="earth"){
+    <$orbital{l0:100.4664;dl:36000.7698;om0:102.9373;e0:0.01671;a:1.00000}
+  }el{if(key="mars"){
+    <$orbital{l0:355.4330;dl:19141.6964;om0:336.0600;e0:0.09341;a:1.52366}
+  }el{if(key="jupiter"){
+    <$orbital{l0:34.3515;dl:3036.3027;om0:14.3320;e0:0.04849;a:5.20336}
+  }el{if(key="saturn"){
+    <$orbital{l0:50.0775;dl:1223.5093;om0:93.0572;e0:0.05551;a:9.53707}
+  }el{if(key="uranus"){
+    <$orbital{l0:314.0550;dl:429.8633;om0:173.0052;e0:0.04630;a:19.1912}
+  }el{if(key="neptune"){
+    <$orbital{l0:304.3480;dl:219.8997;om0:48.1234;e0:0.00899;a:30.0690}
+  }el{
+    <$orbital{l0:100.4664;dl:36000.7698;om0:102.9373;e0:0.01671;a:1.00000}
+  }}}}}}}}
+};
+
+f=planetget(key:$str):$planetinfo{
+  let eday=86400000.0;
+  if(key="mercury"){
+    <$planetinfo{pname:"Mercury";solarday:175.9408*eday;sidyr:87.9691*eday;daysperperiod:1.0;periodsperweek:7;workperiodsperweek:5;workhrsstart:9;workhrsend:17;earthclocksched:true;epoch:946728000000.0}
+  }el{if(key="venus"){
+    <$planetinfo{pname:"Venus";solarday:116.7500*eday;sidyr:224.701*eday;daysperperiod:1.0;periodsperweek:7;workperiodsperweek:5;workhrsstart:9;workhrsend:17;earthclocksched:true;epoch:946728000000.0}
+  }el{if(key="earth"){
+    <$planetinfo{pname:"Earth";solarday:86400000.0;sidyr:365.25636*eday;daysperperiod:1.0;periodsperweek:7;workperiodsperweek:5;workhrsstart:9;workhrsend:17;earthclocksched:true;epoch:946728000000.0}
+  }el{if(key="mars"){
+    <$planetinfo{pname:"Mars";solarday:88775244.0;sidyr:686.9957*eday;daysperperiod:1.0;periodsperweek:7;workperiodsperweek:5;workhrsstart:9;workhrsend:17;earthclocksched:false;epoch:0.0-524069761536.0}
+  }el{if(key="jupiter"){
+    <$planetinfo{pname:"Jupiter";solarday:9.9250*3600000.0;sidyr:4332.589*eday;daysperperiod:2.5;periodsperweek:7;workperiodsperweek:5;workhrsstart:8;workhrsend:16;earthclocksched:false;epoch:946728000000.0}
+  }el{if(key="saturn"){
+    <$planetinfo{pname:"Saturn";solarday:10.578*3600000.0;sidyr:10759.22*eday;daysperperiod:2.25;periodsperweek:7;workperiodsperweek:5;workhrsstart:8;workhrsend:16;earthclocksched:false;epoch:946728000000.0}
+  }el{if(key="uranus"){
+    <$planetinfo{pname:"Uranus";solarday:17.2479*3600000.0;sidyr:30688.5*eday;daysperperiod:1.0;periodsperweek:7;workperiodsperweek:5;workhrsstart:8;workhrsend:16;earthclocksched:false;epoch:946728000000.0}
+  }el{if(key="neptune"){
+    <$planetinfo{pname:"Neptune";solarday:16.1100*3600000.0;sidyr:60195.0*eday;daysperperiod:1.0;periodsperweek:7;workperiodsperweek:5;workhrsstart:8;workhrsend:16;earthclocksched:false;epoch:946728000000.0}
+  }el{
+    <$planetinfo{pname:"Earth";solarday:86400000.0;sidyr:365.25636*eday;daysperperiod:1.0;periodsperweek:7;workperiodsperweek:5;workhrsstart:9;workhrsend:17;earthclocksched:true;epoch:946728000000.0}
+  }}}}}}}}
+};
+
+f=gettaiutc(utcms:f64):f64{
+  let offset=mut.10.0;
+  if(!(utcms<63072000000.0)){offset=10.0}el{};
+  if(!(utcms<78796800000.0)){offset=11.0}el{};
+  if(!(utcms<94694400000.0)){offset=12.0}el{};
+  if(!(utcms<126230400000.0)){offset=13.0}el{};
+  if(!(utcms<157766400000.0)){offset=14.0}el{};
+  if(!(utcms<189302400000.0)){offset=15.0}el{};
+  if(!(utcms<220924800000.0)){offset=16.0}el{};
+  if(!(utcms<252460800000.0)){offset=17.0}el{};
+  if(!(utcms<283996800000.0)){offset=18.0}el{};
+  if(!(utcms<315532800000.0)){offset=19.0}el{};
+  if(!(utcms<362793600000.0)){offset=20.0}el{};
+  if(!(utcms<394329600000.0)){offset=21.0}el{};
+  if(!(utcms<425865600000.0)){offset=22.0}el{};
+  if(!(utcms<489024000000.0)){offset=23.0}el{};
+  if(!(utcms<567993600000.0)){offset=24.0}el{};
+  if(!(utcms<631152000000.0)){offset=25.0}el{};
+  if(!(utcms<662688000000.0)){offset=26.0}el{};
+  if(!(utcms<709948800000.0)){offset=27.0}el{};
+  if(!(utcms<741484800000.0)){offset=28.0}el{};
+  if(!(utcms<773020800000.0)){offset=29.0}el{};
+  if(!(utcms<820454400000.0)){offset=30.0}el{};
+  if(!(utcms<867715200000.0)){offset=31.0}el{};
+  if(!(utcms<915148800000.0)){offset=32.0}el{};
+  if(!(utcms<1136073600000.0)){offset=33.0}el{};
+  if(!(utcms<1230768000000.0)){offset=34.0}el{};
+  if(!(utcms<1341100800000.0)){offset=35.0}el{};
+  if(!(utcms<1435708800000.0)){offset=36.0}el{};
+  if(!(utcms<1483228800000.0)){offset=37.0}el{};
+  <offset
+};
+
+f=tojde(utcms:f64):f64{
+  let ttms=utcms+(gettaiutc(utcms)+32.184)*1000.0;
+  <2440587.5+ttms/86400000.0
+};
+
+f=juliancenturies(utcms:f64):f64{
+  <(tojde(utcms)-2451545.0)/36525.0
+};
+
+f=keplere(mrad:f64;e:f64):f64{
+  let bige=mut.mrad;
+  lp(let i=0;i<50;i=i+1){
+    let de=(mrad-bige+e*math.sin(bige))/(1.0-e*math.cos(bige));
+    bige=bige+de;
+    if(math.fabs(de)<0.000000000001){
+      <bige
+    }el{}
+  };
+  <bige
+};
+
+f=posmod(x:f64;m:f64):f64{
+  let r=math.fmod(x;m);
+  if(r<0.0){<r+m}el{<r}
+};
+
+f=planethelioxy(key:$str;utcms:f64):$helio{
+  let okey=mut.key;
+  if(key="moon"){okey="earth"}el{};
+  let orb=orbitalget(okey);
+  let jc=juliancenturies(utcms);
+
+  let d2r=0.017453292519943295;
+  let tau=6.283185307179586;
+  let lraw=(orb.l0+orb.dl*jc)*d2r;
+  let l=posmod(lraw;tau);
+  let om=orb.om0*d2r;
+  let m=posmod(l-om;tau);
+  let e=orb.e0;
+  let a=orb.a;
+
+  let bige=keplere(m;e);
+  let v=2.0*math.atan2(
+    math.sqrt(1.0+e)*math.sin(bige/2.0);
+    math.sqrt(1.0-e)*math.cos(bige/2.0)
+  );
+  let r=a*(1.0-e*math.cos(bige));
+  let lon=posmod(v+om;tau);
+
+  <$helio{
+    x:r*math.cos(lon);y:r*math.sin(lon);r:r;lon:lon
+  }
+};
+
+f=bodydistance(keya:$str;keyb:$str;utcms:f64):f64{
+  let pa=planethelioxy(keya;utcms);
+  let pb=planethelioxy(keyb;utcms);
+  let dx=pa.x-pb.x;
+  let dy=pa.y-pb.y;
+  <math.sqrt(dx*dx+dy*dy)
+};
+
+f=lighttravelseconds(keya:$str;keyb:$str;utcms:f64):f64{
+  <bodydistance(keya;keyb;utcms)*499.00478384
+};
+
+f=checklos(keya:$str;keyb:$str;utcms:f64):$los{
+  let pa=planethelioxy(keya;utcms);
+  let pb=planethelioxy(keyb;utcms);
+  let dx=pb.x-pa.x;
+  let dy=pb.y-pa.y;
+  let d2=dx*dx+dy*dy;
+  let dist=math.sqrt(d2);
+
+  let traw=0.0-(pa.x*dx+pa.y*dy)/d2;
+  let t=mut.traw;
+  if(t<0.0){t=0.0}el{};
+  if(t>1.0){t=1.0}el{};
+  let cx=pa.x+t*dx;
+  let cy=pa.y+t*dy;
+  let closestsunau=math.sqrt(cx*cx+cy*cy);
+
+  let cosv=(0.0-pa.x*dx-pa.y*dy)/(pa.r*dist);
+  let clamp=mut.cosv;
+  if(clamp<0.0-1.0){clamp=0.0-1.0}el{};
+  if(clamp>1.0){clamp=1.0}el{};
+  let angdeg=math.acos(clamp)*57.29577951308232;
+
+  let blocked=closestsunau<0.01;
+  let degraded=(!blocked)&&(closestsunau<0.05);
+  let clear=(!blocked)&&(!degraded);
+
+  let msg=mut."Clear line of sight";
+  if(blocked){msg="Path blocked by Sun"}el{
+    if(degraded){msg="Path degraded near Sun"}el{}
+  };
+
+  <$los{
+    clear:clear;blocked:blocked;degraded:degraded;
+    closestsunau:closestsunau;edeg:angdeg;message:msg
+  }
+};
+
+f=getmtc(utcms:f64):$mtc{
+  let totalsols=(utcms-(0.0-524069761536.0))/88775244.0;
+  let sol=math.floor(totalsols) as i64;
+  let frac=totalsols-(sol as f64);
+  let h=math.floor(frac*24.0) as i64;
+  let m=math.floor((frac*24.0-(h as f64))*60.0) as i64;
+  let s=math.floor(((frac*24.0-(h as f64))*60.0-(m as f64))*60.0) as i64;
+  let hstr=mut.str.fromint(h);
+  if(h<10){hstr=str.concat("0";hstr)}el{};
+  let mstr=mut.str.fromint(m);
+  if(m<10){mstr=str.concat("0";mstr)}el{};
+  <$mtc{
+    sol:sol;hour:h;minute:m;second:s;
+    mtcstr:str.concat(hstr;str.concat(":";mstr))
+  }
+};
+
+f=padtwo(n:i64):$str{
+  let s=str.fromint(n);
+  if(n<10){<str.concat("0";s)}el{<s}
+};
+
+f=downame(idx:i64):$str{
+  if(idx=0){<"Monday"}
+  el{if(idx=1){<"Tuesday"}
+  el{if(idx=2){<"Wednesday"}
+  el{if(idx=3){<"Thursday"}
+  el{if(idx=4){<"Friday"}
+  el{if(idx=5){<"Saturday"}
+  el{if(idx=6){<"Sunday"}
+  el{<"Monday"}
+  }}}}}}
+};
+
+f=getplanettime(key:$str;utcms:f64;tzoffset:f64):$planettime{
+  let pkey=mut.key;
+  if(key="moon"){pkey="earth"}el{};
+  let p=planetget(pkey);
+
+  let passedms=utcms-p.epoch+tzoffset/24.0*p.solarday;
+  let totaldays=passedms/p.solarday;
+  let daynumber=math.floor(totaldays) as i64;
+  let dayfraction=totaldays-(daynumber as f64);
+
+  let localhour=dayfraction*24.0;
+  let h=math.floor(localhour) as i64;
+  let m=math.floor((localhour-(h as f64))*60.0) as i64;
+  let s=math.floor(((localhour-(h as f64))*60.0-(m as f64))*60.0) as i64;
+
+  let periodinweek=mut.0;
+  let isworkperiod=mut.false;
+  let isworkhour=mut.false;
+
+  if(p.earthclocksched){
+    let tp=time.toparts(utcms as u64);
+    let wd=time.weekday(utcms as u64) as i64;
+    periodinweek=imod(wd+6;7);
+    isworkperiod=periodinweek<(p.workperiodsperweek);
+    let utchour=tp.hour;
+    isworkhour=isworkperiod&&(!(utchour<(p.workhrsstart)))&&(utchour<(p.workhrsend))
+  }el{
+    let totalperiods=totaldays/p.daysperperiod;
+    let rawperiod=imod(math.floor(totalperiods) as i64;p.periodsperweek);
+    periodinweek=imod(imod(rawperiod;p.periodsperweek)+p.periodsperweek;p.periodsperweek);
+    isworkperiod=periodinweek<(p.workperiodsperweek);
+    isworkhour=isworkperiod&&(!(localhour<(p.workhrsstart as f64)))&&(localhour<(p.workhrsend as f64))
+  };
+
+  let yearlength=p.sidyr/p.solarday;
+  let yearnumber=math.floor(totaldays/yearlength) as i64;
+  let dayinyear=math.floor(totaldays-(yearnumber as f64)*yearlength) as i64;
+
+  let solinyear=mut.0;
+  let solsperyear=mut.0;
+  if(pkey="mars"){
+    solinyear=dayinyear;
+    solsperyear=math.floor(p.sidyr/p.solarday+0.5) as i64
+  }el{};
+
+  let dowindex=imod(periodinweek;7);
+  let timestring=str.concat(padtwo(h);str.concat(":";padtwo(m)));
+  let timestringfull=str.concat(timestring;str.concat(":";padtwo(s)));
+
+  <$planettime{
+    planet:p.pname;hour:h;minute:m;second:s;
+    localhour:localhour;dayfraction:dayfraction;daynumber:daynumber;
+    dayinyear:dayinyear;yearnumber:yearnumber;
+    periodinweek:periodinweek;isworkperiod:isworkperiod;isworkhour:isworkhour;
+    downame:downame(dowindex);timestr:timestring;timestrfull:timestringfull;
+    solinyear:solinyear;solsperyear:solsperyear
+  }
+};
+
+f=findmeetingwindows(planeta:$str;planetb:$str;earthdays:i64;startms:f64):@$window{
+  let step=15.0*60000.0;
+  let endms=startms+(earthdays as f64)*86400000.0;
+  let windows=mut.@($window);
+  let inwindow=mut.false;
+  let windowstart=mut.0.0;
+  let t=mut.startms;
+  lp(let lpi=0;t<endms;t=t+step){
+    let ta=getplanettime(planeta;t;0.0);
+    let tb=getplanettime(planetb;t;0.0);
+    let overlap=ta.isworkhour&&tb.isworkhour;
+    if(overlap&&(!inwindow)){
+      inwindow=true;
+      windowstart=t
+    }el{};
+    if((!overlap)&&inwindow){
+      inwindow=false;
+      let dur=math.floor((t-windowstart)/60000.0) as i64;
+      windows=windows.append($window{
+        wstart:math.floor(windowstart) as i64;
+        wend:math.floor(t) as i64;
+        wdur:dur
+      })
+    }el{}
+  };
+  if(inwindow){
+    let dur=math.floor((endms-windowstart)/60000.0) as i64;
+    windows=windows.append($window{
+      wstart:math.floor(windowstart) as i64;
+      wend:math.floor(endms) as i64;
+      wdur:dur
+    })
+  }el{};
+  <windows
+};
+
+f=formatlighttime(seconds:f64):$str{
+  if(seconds<0.001){<"<1ms"}
+  el{if(seconds<1.0){<str.concat(str.fromint(math.floor(seconds*1000.0) as i64);"ms")}
+  el{if(seconds<60.0){
+    let whole=math.floor(seconds) as i64;
+    let frac=math.floor((seconds-(whole as f64))*10.0) as i64;
+    <str.concat(str.fromint(whole);str.concat(".";str.concat(str.fromint(frac);"s")))
+  }
+  el{if(seconds<3600.0){
+    let mins=seconds/60.0;
+    let whole=math.floor(mins) as i64;
+    let frac=math.floor((mins-(whole as f64))*10.0) as i64;
+    <str.concat(str.fromint(whole);str.concat(".";str.concat(str.fromint(frac);"min")))
+  }
+  el{
+    let h=math.floor(seconds/3600.0) as i64;
+    let m=math.floor(math.fmod(seconds;3600.0)/60.0+0.5) as i64;
+    <str.concat(str.fromint(h);str.concat("h ";str.concat(str.fromint(m);"m")))
+  }}}}
+};
+
+f=isvalidplanet(key:$str):bool{
+  if(key="mercury"){<true}
+  el{if(key="venus"){<true}
+  el{if(key="earth"){<true}
+  el{if(key="mars"){<true}
+  el{if(key="jupiter"){<true}
+  el{if(key="saturn"){<true}
+  el{if(key="uranus"){<true}
+  el{if(key="neptune"){<true}
+  el{if(key="moon"){<true}
+  el{<false}
+  }}}}}}}}
+};
+

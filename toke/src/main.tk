@@ -1,0 +1,323 @@
+m=interplanet.cli;
+i=args:std.args;
+i=str:std.str;
+i=log:std.log;
+i=time:std.time;
+i=math:std.math;
+i=pt:interplanet.planettime;
+i=ltx:interplanet.ltx;
+
+f=printusage():void{
+  (log.info("interplanet — Interplanetary Time CLI (toke port)";@()));
+  (log.info("";@()));
+  (log.info("Commands:";@()));
+  (log.info("  time <planet> [--tz <offset>]   Local time on a planet";@()));
+  (log.info("  mtc                             Mars Coordinated Time";@()));
+  (log.info("  light <from> <to>               One-way light travel time";@()));
+  (log.info("  distance <from> <to>            Distance in AU and km";@()));
+  (log.info("  los <from> <to>                 Line-of-sight status";@()));
+  (log.info("  windows <a> <b> [--days <n>]    Meeting windows";@()));
+  (log.info("  planets                         List supported planets";@()));
+  (log.info("  ltx <title> <node1> [node2..]   Create LTX session plan";@()));
+  (log.info("";@()));
+  (log.info("Planets: mercury venus earth mars jupiter saturn uranus neptune moon";@()))
+};
+
+f=cmdplanets():i64{
+  (log.info("Supported planets:";@()));
+  (log.info("  mercury   — Solar day 175.9 Earth days";@()));
+  (log.info("  venus     — Solar day 116.8 Earth days";@()));
+  (log.info("  earth     — Solar day 24h";@()));
+  (log.info("  mars      — Sol 24h 39m 35s";@()));
+  (log.info("  jupiter   — Day 9.9h";@()));
+  (log.info("  saturn    — Day 10.6h";@()));
+  (log.info("  uranus    — Day 17.2h";@()));
+  (log.info("  neptune   — Day 16.1h";@()));
+  (log.info("  moon      — Tidally locked (uses Earth time)";@()));
+  <0
+};
+
+f=cmdtime(planet:$str;tz:f64):i64{
+  if(!(pt.isvalidplanet(planet))){
+    (log.error(str.concat("Unknown planet: ";planet);@()));
+    <1
+  }el{};
+  let now=time.now() as f64;
+  let result=pt.getplanettime(planet;now;tz);
+  (log.info(str.concat(result.planet;" local time:");@()));
+  (log.info(str.concat("  Time:        ";result.timestrfull);@()));
+  (log.info(str.concat("  Day:         ";result.downame);@()));
+  (log.info(str.concat("  Day number:  ";str.fromint(result.daynumber));@()));
+  (log.info(str.concat("  Year:        ";str.fromint(result.yearnumber));@()));
+  (log.info(str.concat("  Day in year: ";str.fromint(result.dayinyear));@()));
+  if(planet="mars"){
+    (log.info(str.concat("  Sol in year: ";str.fromint(result.solinyear));@()));
+    (log.info(str.concat("  Sols/year:   ";str.fromint(result.solsperyear));@()))
+  }el{};
+  let workstr=mut."no";
+  if(result.isworkhour){workstr="yes"}el{};
+  (log.info(str.concat("  Work hour:   ";workstr);@()));
+  <0
+};
+
+f=cmdmtc():i64{
+  let now=time.now() as f64;
+  let mtc=pt.getmtc(now);
+  (log.info("Mars Coordinated Time (MTC):";@()));
+  (log.info(str.concat("  MTC:  ";mtc.mtcstr);@()));
+  (log.info(str.concat("  Sol:  ";str.fromint(mtc.sol));@()));
+  (log.info(str.concat("  Time: ";str.concat(pt.padtwo(mtc.hour);str.concat(":";str.concat(pt.padtwo(mtc.minute);str.concat(":";pt.padtwo(mtc.second))))));@()));
+  <0
+};
+
+f=cmdlight(keya:$str;keyb:$str):i64{
+  if(!(pt.isvalidplanet(keya))){
+    (log.error(str.concat("Unknown planet: ";keya);@()));
+    <1
+  }el{};
+  if(!(pt.isvalidplanet(keyb))){
+    (log.error(str.concat("Unknown planet: ";keyb);@()));
+    <1
+  }el{};
+  let now=time.now() as f64;
+  let seconds=pt.lighttravelseconds(keya;keyb;now);
+  let formatted=pt.formatlighttime(seconds);
+  let distau=pt.bodydistance(keya;keyb;now);
+  let distkm=distau*149597870.7;
+  let pa=pt.planetget(keya);
+  let pb=pt.planetget(keyb);
+  (log.info(str.concat("Light travel: ";str.concat(pa.pname;str.concat(" -> ";pb.pname)));@()));
+  (log.info(str.concat("  Time:     ";formatted);@()));
+  (log.info(str.concat("  Seconds:  ";str.fromint(math.floor(seconds) as i64));@()));
+  (log.info(str.concat("  Distance: ";str.concat(str.fromint(math.floor(distau*1000.0) as i64);" mAU"));@()));
+  <0
+};
+
+f=cmddistance(keya:$str;keyb:$str):i64{
+  if(!(pt.isvalidplanet(keya))){
+    (log.error(str.concat("Unknown planet: ";keya);@()));
+    <1
+  }el{};
+  if(!(pt.isvalidplanet(keyb))){
+    (log.error(str.concat("Unknown planet: ";keyb);@()));
+    <1
+  }el{};
+  let now=time.now() as f64;
+  let distau=pt.bodydistance(keya;keyb;now);
+  let distkm=distau*149597870.7;
+  let pa=pt.planetget(keya);
+  let pb=pt.planetget(keyb);
+  (log.info(str.concat("Distance: ";str.concat(pa.pname;str.concat(" — ";pb.pname)));@()));
+  let austr=str.fromint(math.floor(distau*10000.0) as i64);
+  (log.info(str.concat("  AU:  ";austr);@()));
+  let kmm=math.floor(distkm/1000000.0) as i64;
+  (log.info(str.concat("  km:  ~";str.concat(str.fromint(kmm);" million"));@()));
+  <0
+};
+
+f=cmdlos(keya:$str;keyb:$str):i64{
+  if(!(pt.isvalidplanet(keya))){
+    (log.error(str.concat("Unknown planet: ";keya);@()));
+    <1
+  }el{};
+  if(!(pt.isvalidplanet(keyb))){
+    (log.error(str.concat("Unknown planet: ";keyb);@()));
+    <1
+  }el{};
+  let now=time.now() as f64;
+  let los=pt.checklos(keya;keyb;now);
+  let pa=pt.planetget(keya);
+  let pb=pt.planetget(keyb);
+  (log.info(str.concat("Line of sight: ";str.concat(pa.pname;str.concat(" — ";pb.pname)));@()));
+  (log.info(str.concat("  Status:   ";los.message);@()));
+  let statusstr=mut."CLEAR";
+  if(los.blocked){statusstr="BLOCKED"}el{
+    if(los.degraded){statusstr="DEGRADED"}el{}
+  };
+  (log.info(str.concat("  Signal:   ";statusstr);@()));
+  (log.info(str.concat("  Sun dist: ";str.concat(str.fromint(math.floor(los.closestsunau*1000.0) as i64);" mAU"));@()));
+  (log.info(str.concat("  Elong:    ";str.concat(str.fromint(math.floor(los.edeg) as i64);" deg"));@()));
+  <0
+};
+
+f=cmdwindows(planeta:$str;planetb:$str;days:i64):i64{
+  if(!(pt.isvalidplanet(planeta))){
+    (log.error(str.concat("Unknown planet: ";planeta);@()));
+    <1
+  }el{};
+  if(!(pt.isvalidplanet(planetb))){
+    (log.error(str.concat("Unknown planet: ";planetb);@()));
+    <1
+  }el{};
+  let now=time.now() as f64;
+  let windows=pt.findmeetingwindows(planeta;planetb;days;now);
+  let pa=pt.planetget(planeta);
+  let pb=pt.planetget(planetb);
+  (log.info(str.concat("Meeting windows: ";str.concat(pa.pname;str.concat(" & ";str.concat(pb.pname;str.concat(" (";str.concat(str.fromint(days);" days)"))))));@()));
+  if(windows.len=0){
+    (log.info("  No overlapping work windows found.";@()))
+  }el{
+    lp(let i=0;i<windows.len;i=i+1){
+      let w=windows.get(i);
+      let startstr=time.format(w.wstart as u64;"%Y-%m-%d %H:%M");
+      let endstr=time.format(w.wend as u64;"%H:%M");
+      (log.info(str.concat("  ";str.concat(startstr;str.concat(" — ";str.concat(endstr;str.concat("  (";str.concat(str.fromint(w.wdur);" min)"))))));@()))
+    }
+  };
+  (log.info(str.concat("  Total windows: ";str.fromint(windows.len as i64));@()));
+  <0
+};
+
+f=cmdltx(title:$str;nodeargs:@$str):i64{
+  let now=time.now();
+  let nodes=mut.@();
+  lp(let i=0;i<nodeargs.len;i=i+1){
+    let arg=nodeargs.get(i);
+    let parts=str.split(arg;":");
+    if(parts.len<3){
+      (log.error(str.concat("Invalid node format (name:role:location[:delay]): ";arg);@()));
+      <1
+    }el{};
+    let name=parts.get(0);
+    let role=parts.get(1);
+    let location=parts.get(2);
+    let delay=mut.0;
+    if(parts.len>3){
+      delay=str.toint(parts.get(3))|{Ok:d d as i64;Err:e 0}
+    }el{
+      if(!(location="earth")){
+        let lt=pt.lighttravelseconds("earth";location;now as f64);
+        delay=math.floor(lt) as i64
+      }el{}
+    };
+    let nid=str.concat("N";str.fromint(i));
+    nodes=nodes.append(ltx.ltxcreatenode(nid;name;role;delay;location))
+  };
+
+  let plan=ltx.ltxcreateplan(title;now as i64;3;"LTX";nodes);
+  (log.info("LTX Session Plan:";@()));
+  (log.info(str.concat("  Plan ID:   ";plan.planid);@()));
+  (log.info(str.concat("  Title:     ";plan.title);@()));
+  (log.info(str.concat("  Start:     ";plan.startiso);@()));
+  (log.info(str.concat("  Mode:      ";plan.mode);@()));
+  (log.info(str.concat("  Quantum:   ";str.concat(str.fromint(plan.quantum);" min"));@()));
+  (log.info(str.concat("  Duration:  ";str.concat(str.fromint(plan.totaldurationmin);" min"));@()));
+  (log.info("  Nodes:";@()));
+  lp(let j=0;j<plan.nodes.len;j=j+1){
+    let n=plan.nodes.get(j);
+    (log.info(str.concat("    ";str.concat(n.id;str.concat(" ";str.concat(n.name;str.concat(" (";str.concat(n.role;str.concat(", ";str.concat(n.location;str.concat(", delay=";str.concat(str.fromint(n.delay);"s)"))))))))));@()))
+  };
+  (log.info("  Segments:";@()));
+  lp(let k=0;k<plan.segments.len;k=k+1){
+    let seg=plan.segments.get(k);
+    let startstr=ltx.ltxformatutc(seg.startms);
+    let endstr=ltx.ltxformatutc(seg.endms);
+    (log.info(str.concat("    ";str.concat(seg.segtype;str.concat("  ";str.concat(startstr;str.concat("-";str.concat(endstr;str.concat("  (";str.concat(str.fromint(seg.durationmin);" min)"))))))));@()))
+  };
+  <0
+};
+
+f=main():i64{
+  let count=args.count() as i64;
+  if(count<2){
+    (printusage());
+    <0
+  }el{};
+  let cmd=args.get(1 as u64)|{Ok:v v;Err:e ""};
+
+  if(cmd="--help"||cmd="help"){
+    (printusage());
+    <0
+  }el{};
+
+  if(cmd="planets"){
+    <cmdplanets()
+  }el{};
+
+  if(cmd="time"){
+    if(count<3){
+      (log.error("Usage: interplanet time <planet> [--tz <offset>]";@()));
+      <1
+    }el{};
+    let planet=args.get(2 as u64)|{Ok:v str.lower(v);Err:e ""};
+    let tz=mut.0.0;
+    if(count>4){
+      let tzflag=args.get(3 as u64)|{Ok:v v;Err:e ""};
+      if(tzflag="--tz"){
+        let tzval=args.get(4 as u64)|{Ok:v v;Err:e "0"};
+        tz=str.toint(tzval)|{Ok:n n as f64;Err:e 0.0}
+      }el{}
+    }el{};
+    <cmdtime(planet;tz)
+  }el{};
+
+  if(cmd="mtc"){
+    <cmdmtc()
+  }el{};
+
+  if(cmd="light"||cmd="light-travel"){
+    if(count<4){
+      (log.error("Usage: interplanet light <from> <to>";@()));
+      <1
+    }el{};
+    let keya=args.get(2 as u64)|{Ok:v str.lower(v);Err:e ""};
+    let keyb=args.get(3 as u64)|{Ok:v str.lower(v);Err:e ""};
+    <cmdlight(keya;keyb)
+  }el{};
+
+  if(cmd="distance"){
+    if(count<4){
+      (log.error("Usage: interplanet distance <from> <to>";@()));
+      <1
+    }el{};
+    let keya=args.get(2 as u64)|{Ok:v str.lower(v);Err:e ""};
+    let keyb=args.get(3 as u64)|{Ok:v str.lower(v);Err:e ""};
+    <cmddistance(keya;keyb)
+  }el{};
+
+  if(cmd="los"){
+    if(count<4){
+      (log.error("Usage: interplanet los <from> <to>";@()));
+      <1
+    }el{};
+    let keya=args.get(2 as u64)|{Ok:v str.lower(v);Err:e ""};
+    let keyb=args.get(3 as u64)|{Ok:v str.lower(v);Err:e ""};
+    <cmdlos(keya;keyb)
+  }el{};
+
+  if(cmd="windows"){
+    if(count<4){
+      (log.error("Usage: interplanet windows <a> <b> [--days <n>]";@()));
+      <1
+    }el{};
+    let planeta=args.get(2 as u64)|{Ok:v str.lower(v);Err:e ""};
+    let planetb=args.get(3 as u64)|{Ok:v str.lower(v);Err:e ""};
+    let days=mut.7;
+    if(count>5){
+      let dflag=args.get(4 as u64)|{Ok:v v;Err:e ""};
+      if(dflag="--days"){
+        let dval=args.get(5 as u64)|{Ok:v v;Err:e "7"};
+        days=str.toint(dval)|{Ok:n n as i64;Err:e 7}
+      }el{}
+    }el{};
+    <cmdwindows(planeta;planetb;days)
+  }el{};
+
+  if(cmd="ltx"){
+    if(count<4){
+      (log.error("Usage: interplanet ltx <title> <node1:role:location> [node2...]";@()));
+      <1
+    }el{};
+    let title=args.get(2 as u64)|{Ok:v v;Err:e "Session"};
+    let nodeargs=mut.@($str);
+    lp(let i=3;i<count;i=i+1){
+      let narg=args.get(i as u64)|{Ok:v v;Err:e ""};
+      nodeargs=nodeargs.append(narg)
+    };
+    <cmdltx(title;nodeargs)
+  }el{};
+
+  (log.error(str.concat("Unknown command: ";cmd);@()));
+  (printusage());
+  <1
+};

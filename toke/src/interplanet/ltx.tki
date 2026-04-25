@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0",
+  "module": "interplanet.ltx",
+  "version": "1.0.0",
+  "exports": [
+    {"kind": "type", "name": "ltxnode", "fields": [{"name": "id", "type": "str"}, {"name": "name", "type": "str"}, {"name": "role", "type": "str"}, {"name": "delay", "type": "i64"}, {"name": "location", "type": "str"}]},
+    {"kind": "type", "name": "ltxsegment", "fields": [{"name": "segtype", "type": "str"}, {"name": "quanta", "type": "i64"}, {"name": "startms", "type": "i64"}, {"name": "endms", "type": "i64"}, {"name": "durationmin", "type": "i64"}]},
+    {"kind": "type", "name": "ltxplan", "fields": [{"name": "version", "type": "i64"}, {"name": "title", "type": "str"}, {"name": "startiso", "type": "str"}, {"name": "startms", "type": "i64"}, {"name": "quantum", "type": "i64"}, {"name": "mode", "type": "str"}, {"name": "nodes", "type": "@"}, {"name": "segments", "type": "@"}, {"name": "planid", "type": "str"}, {"name": "totaldurationmin", "type": "i64"}]},
+    {"kind": "func", "name": "ltxcreatenode", "params": ["str", "str", "str", "i64", "str"], "return": "ltxnode"},
+    {"kind": "func", "name": "ltxdefaultsegments", "params": [], "return": "@"},
+    {"kind": "func", "name": "ltxtotalmin", "params": ["@", "i64"], "return": "i64"},
+    {"kind": "func", "name": "ltxcomputesegments", "params": ["@", "i64", "i64"], "return": "@"},
+    {"kind": "func", "name": "ltxhash32", "params": ["str"], "return": "i64"},
+    {"kind": "func", "name": "ltxmakeplanid", "params": ["str", "i64", "@"], "return": "str"},
+    {"kind": "func", "name": "ltxcreateplan", "params": ["str", "i64", "i64", "str", "@"], "return": "ltxplan"},
+    {"kind": "func", "name": "ltxformathms", "params": ["i64"], "return": "str"},
+    {"kind": "func", "name": "ltxformatutc", "params": ["i64"], "return": "str"}
+  ]
+}

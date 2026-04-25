@@ -1,0 +1,33 @@
+{
+  "schema_version": "1.0",
+  "module": "interplanet.planettime",
+  "version": "1.0.0",
+  "exports": [
+    {"kind": "type", "name": "orbital", "fields": [{"name": "l0", "type": "f64"}, {"name": "dl", "type": "f64"}, {"name": "om0", "type": "f64"}, {"name": "e0", "type": "f64"}, {"name": "a", "type": "f64"}]},
+    {"kind": "type", "name": "helio", "fields": [{"name": "x", "type": "f64"}, {"name": "y", "type": "f64"}, {"name": "r", "type": "f64"}, {"name": "lon", "type": "f64"}]},
+    {"kind": "type", "name": "planetinfo", "fields": [{"name": "pname", "type": "str"}, {"name": "solarday", "type": "f64"}, {"name": "sidyr", "type": "f64"}, {"name": "daysperperiod", "type": "f64"}, {"name": "periodsperweek", "type": "i64"}, {"name": "workperiodsperweek", "type": "i64"}, {"name": "workhrsstart", "type": "i64"}, {"name": "workhrsend", "type": "i64"}, {"name": "earthclocksched", "type": "bool"}, {"name": "epoch", "type": "f64"}]},
+    {"kind": "type", "name": "planettime", "fields": [{"name": "planet", "type": "str"}, {"name": "hour", "type": "i64"}, {"name": "minute", "type": "i64"}, {"name": "second", "type": "i64"}, {"name": "localhour", "type": "f64"}, {"name": "dayfraction", "type": "f64"}, {"name": "daynumber", "type": "i64"}, {"name": "dayinyear", "type": "i64"}, {"name": "yearnumber", "type": "i64"}, {"name": "periodinweek", "type": "i64"}, {"name": "isworkperiod", "type": "bool"}, {"name": "isworkhour", "type": "bool"}, {"name": "downame", "type": "str"}, {"name": "timestr", "type": "str"}, {"name": "timestrfull", "type": "str"}, {"name": "solinyear", "type": "i64"}, {"name": "solsperyear", "type": "i64"}]},
+    {"kind": "type", "name": "mtc", "fields": [{"name": "sol", "type": "i64"}, {"name": "hour", "type": "i64"}, {"name": "minute", "type": "i64"}, {"name": "second", "type": "i64"}, {"name": "mtcstr", "type": "str"}]},
+    {"kind": "type", "name": "los", "fields": [{"name": "clear", "type": "bool"}, {"name": "blocked", "type": "bool"}, {"name": "degraded", "type": "bool"}, {"name": "closestsunau", "type": "f64"}, {"name": "edeg", "type": "f64"}, {"name": "message", "type": "str"}]},
+    {"kind": "type", "name": "window", "fields": [{"name": "wstart", "type": "i64"}, {"name": "wend", "type": "i64"}, {"name": "wdur", "type": "i64"}]},
+    {"kind": "func", "name": "imod", "params": ["i64", "i64"], "return": "i64"},
+    {"kind": "func", "name": "orbitalget", "params": ["str"], "return": "orbital"},
+    {"kind": "func", "name": "planetget", "params": ["str"], "return": "planetinfo"},
+    {"kind": "func", "name": "gettaiutc", "params": ["f64"], "return": "f64"},
+    {"kind": "func", "name": "tojde", "params": ["f64"], "return": "f64"},
+    {"kind": "func", "name": "juliancenturies", "params": ["f64"], "return": "f64"},
+    {"kind": "func", "name": "keplere", "params": ["f64", "f64"], "return": "f64"},
+    {"kind": "func", "name": "posmod", "params": ["f64", "f64"], "return": "f64"},
+    {"kind": "func", "name": "planethelioxy", "params": ["str", "f64"], "return": "helio"},
+    {"kind": "func", "name": "bodydistance", "params": ["str", "str", "f64"], "return": "f64"},
+    {"kind": "func", "name": "lighttravelseconds", "params": ["str", "str", "f64"], "return": "f64"},
+    {"kind": "func", "name": "checklos", "params": ["str", "str", "f64"], "return": "los"},
+    {"kind": "func", "name": "getmtc", "params": ["f64"], "return": "mtc"},
+    {"kind": "func", "name": "padtwo", "params": ["i64"], "return": "str"},
+    {"kind": "func", "name": "downame", "params": ["i64"], "return": "str"},
+    {"kind": "func", "name": "getplanettime", "params": ["str", "f64", "f64"], "return": "planettime"},
+    {"kind": "func", "name": "findmeetingwindows", "params": ["str", "str", "i64", "f64"], "return": "@"},
+    {"kind": "func", "name": "formatlighttime", "params": ["f64"], "return": "str"},
+    {"kind": "func", "name": "isvalidplanet", "params": ["str"], "return": "bool"}
+  ]
+}

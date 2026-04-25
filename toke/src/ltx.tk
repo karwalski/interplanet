@@ -1,0 +1,152 @@
+m=interplanet.ltx;
+i=str:std.str;
+i=math:std.math;
+i=time:std.time;
+i=pt:interplanet.planettime;
+
+t=$ltxnode{id:$str;name:$str;role:$str;delay:i64;location:$str};
+
+t=$ltxsegment{segtype:$str;quanta:i64;startms:i64;endms:i64;durationmin:i64};
+
+t=$ltxplan{
+  version:i64;title:$str;startiso:$str;startms:i64;
+  quantum:i64;mode:$str;
+  nodes:@$ltxnode;segments:@$ltxsegment;
+  planid:$str;totaldurationmin:i64
+};
+
+f=ltxcreatenode(id:$str;name:$str;role:$str;delay:i64;location:$str):$ltxnode{
+  <$ltxnode{id:id;name:name;role:role;delay:delay;location:location}
+};
+
+f=ltxdefaultsegments():@$ltxsegment{
+  let segs=mut.@($ltxsegment);
+  let empty=$ltxsegment{segtype:"";quanta:0;startms:0;endms:0;durationmin:0};
+  segs=segs.append($ltxsegment{segtype:"PLANCONFIRM";quanta:2;startms:0;endms:0;durationmin:0});
+  segs=segs.append($ltxsegment{segtype:"TX";quanta:2;startms:0;endms:0;durationmin:0});
+  segs=segs.append($ltxsegment{segtype:"RX";quanta:2;startms:0;endms:0;durationmin:0});
+  segs=segs.append($ltxsegment{segtype:"CAUCUS";quanta:2;startms:0;endms:0;durationmin:0});
+  segs=segs.append($ltxsegment{segtype:"TX";quanta:2;startms:0;endms:0;durationmin:0});
+  segs=segs.append($ltxsegment{segtype:"RX";quanta:2;startms:0;endms:0;durationmin:0});
+  segs=segs.append($ltxsegment{segtype:"BUFFER";quanta:1;startms:0;endms:0;durationmin:0});
+  <segs
+};
+
+f=ltxtotalmin(segs:@$ltxsegment;quantum:i64):i64{
+  let total=mut.0;
+  lp(let i=0;i<segs.len;i=i+1){
+    total=total+segs.get(i).quanta
+  };
+  <total*quantum
+};
+
+f=ltxcomputesegments(segs:@$ltxsegment;startms:i64;quantum:i64):@$ltxsegment{
+  let qms=quantum*60000;
+  let result=mut.@($ltxsegment);
+  let cursor=mut.startms;
+  lp(let i=0;i<segs.len;i=i+1){
+    let seg=segs.get(i);
+    let dur=seg.quanta*qms;
+    let endms=cursor+dur;
+    let durmin=seg.quanta*quantum;
+    result=result.append($ltxsegment{
+      segtype:seg.segtype;quanta:seg.quanta;
+      startms:cursor;endms:endms;durationmin:durmin
+    });
+    cursor=endms
+  };
+  <result
+};
+
+f=ltxhash32(s:$str):i64{
+  let mask=2147483647;
+  let h=mut.0;
+  lp(let i=0;i<(str.len(s) as i64);i=i+1){
+    let ch=str.slice(s;i as u64;(i+1) as u64)|{Ok:c c;Err:e ""};
+    let code=mut.0;
+    if(str.len(ch)>0){
+      let bytes=str.bytes(ch);
+      if(bytes.len>0){code=bytes.get(0) as i64}el{}
+    }el{};
+    h=(h-h/mask*mask)*31+code;
+    h=h-h/mask*mask
+  };
+  <h
+};
+
+f=ltxmakeplanid(title:$str;startms:i64;nodes:@$ltxnode):$str{
+  let tp=time.toparts(startms as u64);
+  let datestr=str.concat(str.fromint(tp.year);str.concat(
+    pt.padtwo(tp.month);pt.padtwo(tp.day)
+  ));
+
+  let hostname=mut."HOST";
+  if((nodes.len as i64)>0){
+    let n0=nodes.get(0).name;
+    if(str.len(n0)>8){
+      hostname=str.slice(n0;0 as u64;8 as u64)|{Ok:s str.upper(s);Err:e "HOST"}
+    }el{
+      hostname=str.upper(n0)
+    }
+  }el{};
+
+  let remotenames=mut."";
+  lp(let i=1;i<nodes.len;i=i+1){
+    let n=nodes.get(i).name;
+    let short=mut.n;
+    if(str.len(n)>4){
+      short=str.slice(n;0 as u64;4 as u64)|{Ok:s str.upper(s);Err:e "NODE"}
+    }el{
+      short=str.upper(n)
+    };
+    if(i>1){
+      remotenames=str.concat(remotenames;str.concat("-";short))
+    }el{
+      remotenames=short
+    }
+  };
+
+  let canonical=str.concat(title;str.concat("-";str.concat(datestr;str.concat("-";str.fromint(nodes.len as i64)))));
+  let hash=ltxhash32(canonical);
+  let hashstr=str.fromint(hash);
+
+  <str.concat("LTX-";str.concat(datestr;str.concat("-";str.concat(hostname;str.concat("-";str.concat(remotenames;str.concat("-v2-";hashstr)))))))
+};
+
+f=ltxcreateplan(title:$str;startms:i64;quantum:i64;mode:$str;nodes:@$ltxnode):$ltxplan{
+  let segs=ltxdefaultsegments();
+  let computed=ltxcomputesegments(segs;startms;quantum);
+  let totalmin=ltxtotalmin(segs;quantum);
+  let planid=ltxmakeplanid(title;startms;nodes);
+
+  let tp=time.toparts(startms as u64);
+  let startiso=str.concat(str.fromint(tp.year);str.concat("-";str.concat(
+    pt.padtwo(tp.month);str.concat("-";str.concat(
+      pt.padtwo(tp.day);str.concat("T";str.concat(
+        pt.padtwo(tp.hour);str.concat(":";str.concat(
+          pt.padtwo(tp.min);":00Z"
+        ))
+      ))
+    ))
+  )));
+
+  <$ltxplan{
+    version:2;title:title;startiso:startiso;startms:startms;
+    quantum:quantum;mode:mode;
+    nodes:nodes;segments:computed;
+    planid:planid;totaldurationmin:totalmin
+  }
+};
+
+f=ltxformathms(seconds:i64):$str{
+  let h=seconds/3600;
+  let rem=seconds-seconds/3600*3600;
+  let m=rem/60;
+  let s=rem-rem/60*60;
+  <str.concat(pt.padtwo(h);str.concat(":";str.concat(pt.padtwo(m);str.concat(":";pt.padtwo(s)))))
+};
+
+f=ltxformatutc(ms:i64):$str{
+  let tp=time.toparts(ms as u64);
+  <str.concat(pt.padtwo(tp.hour);str.concat(":";str.concat(pt.padtwo(tp.min);str.concat(":";pt.padtwo(tp.sec)))))
+};
