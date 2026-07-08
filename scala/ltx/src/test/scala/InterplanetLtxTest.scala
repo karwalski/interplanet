@@ -20,8 +20,8 @@ object InterplanetLtxTest:
 
     // ── Constants ────────────────────────────────────────────────────────────
 
-    check(VERSION == "1.0.0",              "VERSION should be 1.0.0")
-    check(DEFAULT_QUANTUM == 3,            "DEFAULT_QUANTUM should be 3")
+    check(VERSION == "1.1.0",              "VERSION should be 1.1.0")
+    check(DEFAULT_QUANTUM == 5,            "DEFAULT_QUANTUM should be 5")
     check(DEFAULT_API_BASE.contains("interplanet.app"), "DEFAULT_API_BASE should contain interplanet.app")
     check(SEG_TYPES.contains("TX"),        "SEG_TYPES should contain TX")
     check(SEG_TYPES.contains("RX"),        "SEG_TYPES should contain RX")
@@ -98,9 +98,9 @@ object InterplanetLtxTest:
 
     val startMs = 1705327200000L  // 2024-01-15T14:00:00Z
     check(segs.head.startMs == startMs,      "first segment startMs should match")
-    val q3ms = 3L * 60L * 1000L             // 3 minutes in ms
-    check(segs.head.endMs == startMs + 2L * q3ms, "first segment endMs should match (q=2)")
-    check(segs.head.durMin == 6,             "PLAN_CONFIRM durMin should be 6 min (q=2, quantum=3)")
+    val q5ms = 5L * 60L * 1000L             // 5 minutes in ms
+    check(segs.head.endMs == startMs + 2L * q5ms, "first segment endMs should match (q=2)")
+    check(segs.head.durMin == 10,            "PLAN_CONFIRM durMin should be 10 min (q=2, quantum=5)")
 
     // Segments are contiguous
     check(segs(1).startMs == segs.head.endMs, "segments should be contiguous")
@@ -108,15 +108,15 @@ object InterplanetLtxTest:
 
     // Total duration
     val totalDurMs = segs.last.endMs - segs.head.startMs
-    val expectedDurMs = 13L * q3ms  // 13 quanta * 3 min
-    check(totalDurMs == expectedDurMs,       "total duration should be 13 quanta * 3 min")
+    val expectedDurMs = 13L * q5ms  // 13 quanta * 5 min
+    check(totalDurMs == expectedDurMs,       "total duration should be 13 quanta * 5 min")
 
     // ── totalMin ─────────────────────────────────────────────────────────────
 
-    check(InterplanetLtx.totalMin(plan) == 39, "totalMin should be 39 (13 quanta * 3 min)")
+    check(InterplanetLtx.totalMin(plan) == 65, "totalMin should be 65 (13 quanta * 5 min)")
 
-    val planQ5 = plan.copy(quantum = 5)
-    check(InterplanetLtx.totalMin(planQ5) == 65, "totalMin with quantum=5 should be 65")
+    val planQ3 = plan.copy(quantum = 3)
+    check(InterplanetLtx.totalMin(planQ3) == 39, "totalMin with quantum=3 should be 39")
 
     // ── makePlanId ───────────────────────────────────────────────────────────
 
@@ -126,8 +126,8 @@ object InterplanetLtxTest:
     check(planId.contains("EARTHHQ"),          "planId should contain EARTHHQ")
     check(planId.contains("MARS"),             "planId should contain MARS")
     check(planId.contains("-v2-"),             "planId should contain -v2-")
-    check(planId == "LTX-20240115-EARTHHQ-MARS-v2-cc8a7fc0",
-          s"planId golden value: expected LTX-20240115-EARTHHQ-MARS-v2-cc8a7fc0, got $planId")
+    check(planId == "LTX-20240115-EARTHHQ-MARS-v2-9d02c042",
+          s"planId golden value: expected LTX-20240115-EARTHHQ-MARS-v2-9d02c042, got $planId")
 
     // planId hash part is 8 hex chars
     val hashPart = planId.split("-").last
@@ -182,7 +182,7 @@ object InterplanetLtxTest:
     check(p.v == 2,                          "parsed v should be 2")
     check(p.title == "LTX Session",          "parsed title should match")
     check(p.start == "2024-01-15T14:00:00Z", "parsed start should match")
-    check(p.quantum == 3,                    "parsed quantum should match")
+    check(p.quantum == 5,                    "parsed quantum should match")
     check(p.mode == "LTX",                   "parsed mode should match")
     check(p.nodes.size == 2,                 "parsed nodes size should be 2")
     check(p.nodes.head.name == "Earth HQ",   "parsed first node name should match")

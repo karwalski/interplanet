@@ -20,6 +20,14 @@ export interface KeyBundle {
   keys: NIK[];
   timestamp: string;
   bundleSig: string;
+  /**
+   * Global-scope freshness fields (Story 70.4, LTX-SECURITY.md §11.1).
+   * When present, both are covered by bundleSig; legacy bundles without them
+   * verify via the keys-only signature payload.
+   */
+  issuedAt?: string;
+  seq?: number;
+  senderNodeId?: string;
 }
 
 /** A signed revocation notice for a compromised or retired node key. */
@@ -47,14 +55,39 @@ export function createKeyBundle(
   planId: string,
   nikArray: NIK[],
   hostPrivateKeyB64: string,
+  freshness?: { senderNodeId: string; seq: number; issuedAt?: string },
 ): KeyBundle {
-  const keysStr = canonicalJSON(nikArray);
   const rawSeed = Buffer.from(hostPrivateKeyB64, 'base64url');
   const pkcs8Header = Buffer.from('302e020100300506032b657004220420', 'hex');
   const pkcs8Der = Buffer.concat([pkcs8Header, rawSeed]);
   const privKey = nodeCrypto.createPrivateKey({ key: pkcs8Der, format: 'der', type: 'pkcs8' });
-  const sigBytes = nodeCrypto.sign(null, Buffer.from(keysStr, 'utf8'), privKey);
 
+  if (freshness) {
+    // Global-scope form (Story 70.4): issuedAt and seq are signature-covered.
+    const issuedAt = freshness.issuedAt ?? new Date().toISOString();
+    const signedPayload = canonicalJSON({
+      issuedAt,
+      keys: nikArray,
+      planId,
+      senderNodeId: freshness.senderNodeId,
+      seq: freshness.seq,
+    });
+    const sigBytes = nodeCrypto.sign(null, Buffer.from(signedPayload, 'utf8'), privKey);
+    return {
+      type: 'KEY_BUNDLE',
+      planId,
+      keys: nikArray,
+      timestamp: issuedAt,
+      issuedAt,
+      seq: freshness.seq,
+      senderNodeId: freshness.senderNodeId,
+      bundleSig: sigBytes.toString('base64url'),
+    };
+  }
+
+  // Legacy form: signature covers the keys array only.
+  const keysStr = canonicalJSON(nikArray);
+  const sigBytes = nodeCrypto.sign(null, Buffer.from(keysStr, 'utf8'), privKey);
   return {
     type: 'KEY_BUNDLE',
     planId,
@@ -75,18 +108,50 @@ export function createKeyBundle(
 export function verifyAndCacheKeys(
   keyBundle: KeyBundle,
   bootstrapNIK: NIK,
+  freshness?: {
+    tracker: import('./sequence.js').GlobalSequenceTracker;
+    nowMs: number;
+    maxAgeDays?: number;
+  },
 ): Map<string, NIK> | null {
   if (keyBundle.type !== 'KEY_BUNDLE') return null;
 
-  const keysStr = canonicalJSON(keyBundle.keys);
+  const signedPayload = keyBundle.issuedAt !== undefined
+    ? canonicalJSON({
+        issuedAt: keyBundle.issuedAt,
+        keys: keyBundle.keys,
+        planId: keyBundle.planId,
+        senderNodeId: keyBundle.senderNodeId,
+        seq: keyBundle.seq,
+      })
+    : canonicalJSON(keyBundle.keys); // legacy form
   const rawPub = Buffer.from(bootstrapNIK.publicKey, 'base64url');
   const spkiHeader = Buffer.from('302a300506032b6570032100', 'hex');
   const spkiDer = Buffer.concat([spkiHeader, rawPub]);
   const pubKey = nodeCrypto.createPublicKey({ key: spkiDer, format: 'der', type: 'spki' });
   const sigBytes = Buffer.from(keyBundle.bundleSig, 'base64url');
-  const valid = nodeCrypto.verify(null, Buffer.from(keysStr, 'utf8'), pubKey, sigBytes);
+  const valid = nodeCrypto.verify(null, Buffer.from(signedPayload, 'utf8'), pubKey, sigBytes);
 
   if (!valid) return null;
+
+  // Global-scope freshness enforcement (Story 70.4, LTX-SECURITY.md §11).
+  if (freshness) {
+    if (keyBundle.issuedAt === undefined ||
+        keyBundle.seq === undefined ||
+        keyBundle.senderNodeId === undefined) {
+      return null; // freshness demanded but bundle lacks the covered fields
+    }
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { checkIssuedAt } = require('./sequence.js') as typeof import('./sequence.js');
+    const age = checkIssuedAt(keyBundle.issuedAt, {
+      nowMs: freshness.nowMs,
+      ...(freshness.maxAgeDays !== undefined ? { maxAgeDays: freshness.maxAgeDays } : {}),
+    });
+    if (!age.accepted) return null;
+    const seqRes = freshness.tracker.recordSeq(
+      keyBundle.senderNodeId, 'KEY_BUNDLE', keyBundle.seq);
+    if (!seqRes.accepted) return null;
+  }
 
   const cache = new Map<string, NIK>();
   for (const nik of keyBundle.keys) {

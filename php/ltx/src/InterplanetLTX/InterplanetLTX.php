@@ -11,7 +11,7 @@ namespace InterplanetLTX;
 class InterplanetLTX
 {
     const VERSION         = '1.0.0';
-    const DEFAULT_QUANTUM = 3;
+    const DEFAULT_QUANTUM = 5;
     const DEFAULT_SEG_COUNT = 7;
     const DEFAULT_API_BASE  = 'https://interplanet.live/api/ltx.php';
 

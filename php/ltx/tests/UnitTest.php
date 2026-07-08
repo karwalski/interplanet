@@ -27,7 +27,7 @@ function section(string $name): void {
 section('Constants');
 check('VERSION not empty',              strlen(LTX::VERSION) > 0);
 check('VERSION is 1.0.0',              LTX::VERSION === '1.0.0');
-check('DEFAULT_QUANTUM == 3',          LTX::DEFAULT_QUANTUM === 3);
+check('DEFAULT_QUANTUM == 5',          LTX::DEFAULT_QUANTUM === 5);
 check('DEFAULT_SEG_COUNT == 7',        LTX::DEFAULT_SEG_COUNT === 7);
 check('DEFAULT_API_BASE has https',    str_starts_with(LTX::DEFAULT_API_BASE, 'https://'));
 check('DEFAULT_SEGMENTS[0] PLAN_CONFIRM', LTX::DEFAULT_SEGMENTS[0]['type'] === 'PLAN_CONFIRM');
@@ -43,7 +43,7 @@ $plan = LTX::createPlan(null, '2026-03-15T14:00:00Z', 0);
 check('v == 2',                        $plan->v === 2);
 check('title == LTX Session',          $plan->title === 'LTX Session');
 check('start preserved',               $plan->start === '2026-03-15T14:00:00Z');
-check('quantum == 3',                  $plan->quantum === 3);
+check('quantum == 5',                  $plan->quantum === 5);
 check('mode == LTX',                   $plan->mode === 'LTX');
 check('node_count == 2',              count($plan->nodes) === 2);
 check('nodes[0].id == N0',             $plan->nodes[0]->id === 'N0');
@@ -88,8 +88,8 @@ check('segs[6].type BUFFER',           $segs[6]->type === 'BUFFER');
 check('segs[0].q == 2',               $segs[0]->q === 2);
 check('segs[0].startMs > 0',          $segs[0]->startMs > 0);
 check('segs[0].endMs > startMs',       $segs[0]->endMs > $segs[0]->startMs);
-check('segs[0].durMin == 6',           $segs[0]->durMin === 6);
-check('segs[6].durMin == 3',           $segs[6]->durMin === 3);
+check('segs[0].durMin == 10',          $segs[0]->durMin === 10);
+check('segs[6].durMin == 5',           $segs[6]->durMin === 5);
 /* Contiguous segments */
 for ($i = 0; $i < count($segs) - 1; $i++) {
     check("segs[$i] contiguous",       $segs[$i]->endMs === $segs[$i + 1]->startMs);
@@ -98,7 +98,7 @@ for ($i = 0; $i < count($segs) - 1; $i++) {
 /* ── totalMin ──────────────────────────────────────────────────────── */
 section('totalMin');
 $total = LTX::totalMin($plan);
-check('totalMin == 39',               $total === 39);
+check('totalMin == 65',               $total === 65);
 $segSum = array_sum(array_map(fn($s) => $s->durMin, $segs));
 check('totalMin matches seg sum',      $segSum === $total);
 
@@ -163,7 +163,7 @@ check('ICS has DTEND',               str_contains($ics, 'DTEND:'));
 check('ICS has SUMMARY',             str_contains($ics, 'SUMMARY:'));
 check('ICS has LTX:1',              str_contains($ics, 'LTX:1'));
 check('ICS has LTX-PLANID',         str_contains($ics, 'LTX-PLANID:'));
-check('ICS has LTX-QUANTUM:PT3M',   str_contains($ics, 'LTX-QUANTUM:PT3M'));
+check('ICS has LTX-QUANTUM:PT5M',   str_contains($ics, 'LTX-QUANTUM:PT5M'));
 check('ICS has LTX-NODE',           str_contains($ics, 'LTX-NODE:'));
 check('ICS has CRLF',               str_contains($ics, "\r\n"));
 

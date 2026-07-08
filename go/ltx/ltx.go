@@ -24,10 +24,11 @@ import (
 
 const (
 	// VERSION is the library version.
-	VERSION = "1.0.0"
+	VERSION = "1.1.0"
 
-	// DEFAULT_QUANTUM is the default quantum size in minutes.
-	DEFAULT_QUANTUM = 3
+	// DEFAULT_QUANTUM is the default quantum size in minutes
+	// (LTX-SPECIFICATION.md §3.2).
+	DEFAULT_QUANTUM = 5
 
 	// DEFAULT_API_BASE is the default API base URL.
 	DEFAULT_API_BASE = "https://interplanet.live/api/ltx.php"
@@ -87,9 +88,12 @@ type LtxNode struct {
 }
 
 // LtxSegmentTemplate is a segment specification (type + quantum multiplier).
+// Speaker and Label are v3 attributed-segment fields (LTX-SPECIFICATION.md §3.4.1).
 type LtxSegmentTemplate struct {
-	Type string `json:"type"`
-	Q    int    `json:"q"`
+	Type    string `json:"type"`
+	Q       int    `json:"q"`
+	Speaker string `json:"speaker,omitempty"`
+	Label   string `json:"label,omitempty"`
 }
 
 // LtxSegment is a computed timed segment.
@@ -109,15 +113,20 @@ type LtxNodeURL struct {
 	URL    string
 }
 
-// LtxPlan is the full session plan.
+// LtxPlan is the full session plan. The Delays, PlanVersion and PrevPlanHash
+// fields are v3 extensions (LTX-SPECIFICATION.md §4.4) and MUST be absent on
+// v2 plans — the frozen v2 planId hash is insertion-order-sensitive.
 type LtxPlan struct {
-	V        int                  `json:"v"`
-	Title    string               `json:"title"`
-	Start    string               `json:"start"`
-	Mode     string               `json:"mode"`
-	Quantum  int                  `json:"quantum"`
-	Nodes    []LtxNode            `json:"nodes"`
-	Segments []LtxSegmentTemplate `json:"segments"`
+	V            int                  `json:"v"`
+	Title        string               `json:"title"`
+	Start        string               `json:"start"`
+	Mode         string               `json:"mode"`
+	Quantum      int                  `json:"quantum"`
+	Nodes        []LtxNode            `json:"nodes"`
+	Segments     []LtxSegmentTemplate `json:"segments"`
+	Delays       map[string]int       `json:"delays,omitempty"`
+	PlanVersion  int                  `json:"planVersion,omitempty"`
+	PrevPlanHash string               `json:"prevPlanHash,omitempty"`
 }
 
 // CreatePlanOpts holds options for CreatePlan.
@@ -299,7 +308,13 @@ func EscapeIcsText(s string) string {
 
 // ── Plan ID ──────────────────────────────────────────────────────────────────
 
-// MakePlanID computes the deterministic plan ID: "LTX-YYYYMMDD-HOST-NODE-v2-XXXXXXXX"
+// MakePlanID computes the deterministic plan ID.
+//
+// v2 plans use the FROZEN legacy 32-bit polynomial hash over the ordered JSON
+// serialisation ("LTX-YYYYMMDD-HOST-NODE-v2-XXXXXXXX") — kept byte-identical
+// for compatibility (LTX-SPECIFICATION.md §4.3). Plans with V >= 3 hash
+// SHA-256 over RFC 8785 canonical JSON, first 8 hex digits, "-v3-" infix
+// (§4.5) so the two id spaces stay disjoint.
 func MakePlanID(plan LtxPlan) string {
 	startMs := parseISOMs(plan.Start)
 	date := time.UnixMilli(startMs).UTC().Format("20060102")
@@ -324,6 +339,14 @@ func MakePlanID(plan LtxPlan) string {
 			parts = append(parts, s)
 		}
 		nodeStr = strings.Join(parts, "-")
+		if len(nodeStr) > 16 {
+			nodeStr = nodeStr[:16]
+		}
+	}
+
+	if plan.V >= 3 {
+		digest := sha256.Sum256([]byte(CanonicalJSON(plan)))
+		return fmt.Sprintf("LTX-%s-%s-%s-v3-%s", date, hostStr, nodeStr, fmt.Sprintf("%x", digest[:4]))
 	}
 
 	h := planHashHex(plan)
@@ -643,8 +666,10 @@ type nodeJSONOrdered struct {
 }
 
 type segJSONOrdered struct {
-	Type string `json:"type"`
-	Q    int    `json:"q"`
+	Type    string `json:"type"`
+	Q       int    `json:"q"`
+	Speaker string `json:"speaker,omitempty"`
+	Label   string `json:"label,omitempty"`
 }
 
 // planToJSON serialises a plan to compact JSON with exact key order:
@@ -662,7 +687,7 @@ func planToJSON(plan LtxPlan) ([]byte, error) {
 	}
 	segs := make([]segJSONOrdered, 0, len(plan.Segments))
 	for _, s := range plan.Segments {
-		segs = append(segs, segJSONOrdered{Type: s.Type, Q: s.Q})
+		segs = append(segs, segJSONOrdered{Type: s.Type, Q: s.Q, Speaker: s.Speaker, Label: s.Label})
 	}
 	ordered := planJSONOrdered{
 		V:        plan.V,
@@ -767,12 +792,24 @@ func httpGet(endpoint string) (string, error) {
 
 // CanonicalJSON serialises any Go value to a deterministic JSON string with
 // object keys sorted lexicographically at every nesting level.
-// Arrays are preserved in their original order.
+// Arrays are preserved in their original order. Structs and pointers are
+// round-tripped through encoding/json so their tagged fields are sorted too.
 func CanonicalJSON(v interface{}) string {
 	if v == nil {
 		return "null"
 	}
 	rv := reflect.ValueOf(v)
+	if rv.Kind() == reflect.Ptr || rv.Kind() == reflect.Struct {
+		data, err := json.Marshal(v)
+		if err != nil {
+			return "null"
+		}
+		var generic interface{}
+		if err := json.Unmarshal(data, &generic); err != nil {
+			return "null"
+		}
+		return CanonicalJSON(generic)
+	}
 	switch rv.Kind() {
 	case reflect.Map:
 		keys := make([]string, 0, rv.Len())

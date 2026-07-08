@@ -223,6 +223,10 @@ local function json_decode(s)
   return parse_value()
 end
 
+-- Exposed JSON helpers (used by the v1.1 conformance tests and tooling).
+M.json_encode = json_encode
+M.json_decode = json_decode
+
 -- ── Story 26.3: ICS text escaping ────────────────────────────────────────────
 
 --- Escape a string for RFC 5545 TEXT property values.
@@ -344,8 +348,10 @@ local function parse_iso8601(s)
       s:match("(%d%d%d%d)(%d%d)(%d%d)T(%d%d)(%d%d)(%d%d)")
   end
   if not year then return 0 end
-  -- Use os.time with UTC correction
-  local utc_offset = os.time() - os.time(os.date("*t", os.time()))
+  -- Use os.time with UTC correction: os.time interprets the table as LOCAL
+  -- time, so subtract the local-vs-UTC offset (negative east of Greenwich).
+  local now = os.time()
+  local utc_offset = os.time(os.date("!*t", now)) - now
   local t = os.time({
     year = tonumber(year), month = tonumber(mon),  day = tonumber(day),
     hour = tonumber(h),    min   = tonumber(m),    sec = tonumber(sec),
@@ -431,7 +437,56 @@ end
 
 -- ── Plan ID ──────────────────────────────────────────────────────────────────
 
+-- Serialise a JSON number the way JSON.stringify does (ints without ".0").
+local function plan_json_num(v)
+  if math.type(v) == "integer" then return tostring(v) end
+  if type(v) == "number" and v == math.floor(v) then
+    return string.format("%d", v)
+  end
+  return tostring(v)
+end
+
+--- Serialise a plan in the cross-port schema key order:
+-- v, title, start, quantum, mode, nodes (id,name,role,delay,location),
+-- segments (type,q[,speaker][,label]). This byte sequence is the FROZEN
+-- input of the legacy v2 planId polynomial hash (LTX-SPECIFICATION.md §4.3)
+-- and matches JSON.stringify of the reference implementation.
+function M.plan_schema_json(c)
+  local parts = {
+    '"v":' .. plan_json_num(c.v or 2),
+    '"title":' .. json_encode(tostring(c.title or "")),
+    '"start":' .. json_encode(tostring(c.start or "")),
+    '"quantum":' .. plan_json_num(c.quantum or 0),
+    '"mode":' .. json_encode(tostring(c.mode or "")),
+  }
+  local nodes = {}
+  for _, n in ipairs(c.nodes or {}) do
+    nodes[#nodes + 1] = '{"id":' .. json_encode(n.id or "")
+      .. ',"name":' .. json_encode(n.name or "")
+      .. ',"role":' .. json_encode(n.role or "")
+      .. ',"delay":' .. plan_json_num(n.delay or 0)
+      .. ',"location":' .. json_encode(n.location or "") .. '}'
+  end
+  parts[#parts + 1] = '"nodes":[' .. table.concat(nodes, ",") .. ']'
+  local segs = {}
+  for _, s in ipairs(c.segments or {}) do
+    local seg = '{"type":' .. json_encode(s.type or "")
+      .. ',"q":' .. plan_json_num(s.q or 0)
+    if s.speaker ~= nil then seg = seg .. ',"speaker":' .. json_encode(s.speaker) end
+    if s.label ~= nil then seg = seg .. ',"label":' .. json_encode(s.label) end
+    segs[#segs + 1] = seg .. '}'
+  end
+  parts[#parts + 1] = '"segments":[' .. table.concat(segs, ",") .. ']'
+  return '{' .. table.concat(parts, ",") .. '}'
+end
+
 --- Compute the deterministic plan ID string for a config.
+--
+-- v2 plans use the FROZEN legacy 32-bit polynomial hash over the fixed
+-- schema-order JSON (LTX-SPECIFICATION.md §4.3). v3 plans (v >= 3) hash
+-- SHA-256 over the RFC 8785 canonical JSON (§4.5); the "-v3-" infix keeps
+-- the two id spaces disjoint.
+--
 -- @param cfg table
 -- @return string  e.g. "LTX-20260101-EARTHHQ-MARSHA-v2-a3b2c1d0"
 function M.make_plan_id(cfg)
@@ -451,8 +506,15 @@ function M.make_plan_id(cfg)
     node_str = "RX"
   end
 
-  -- DJB-style polynomial hash of canonical JSON
-  local raw = json_encode(c)
+  if (c.v or 2) >= 3 then
+    local security = require("src.security")
+    local digest = security.sha256_hex(security.canonical_json(c))
+    return string.format("LTX-%s-%s-%s-v3-%s", date, host_str, node_str,
+      digest:sub(1, 8))
+  end
+
+  -- FROZEN v2 path: polynomial hash of the schema-order JSON.
+  local raw = M.plan_schema_json(c)
   local h = 0
   for k = 1, #raw do
     h = (31 * h + string.byte(raw, k)) % (2^32)

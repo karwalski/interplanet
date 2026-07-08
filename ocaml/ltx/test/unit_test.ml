@@ -75,8 +75,8 @@ let v001_plan =
 (* ── Section 1: Constants ────────────────────────────────────────────────── *)
 
 let () =
-  check     "version = 1.0.0"           Constants.version          "1.0.0";
-  check_int "default_quantum = 3"       Constants.default_quantum  3;
+  check     "version = 1.1.0"           Constants.version          "1.1.0";
+  check_int "default_quantum = 5"       Constants.default_quantum  5;
   check_contains "api_base contains interplanet.live"
                   Constants.default_api_base "interplanet.live";
   check_int "default_segments count = 7"
@@ -107,7 +107,7 @@ let default_plan = Interplanet_ltx.create_plan ()
 let () =
   check_int "default plan v = 2"         default_plan.Models.v       2;
   check     "default plan title"         default_plan.Models.title   "LTX Session";
-  check_int "default plan quantum = 3"   default_plan.Models.quantum 3;
+  check_int "default plan quantum = 5"   default_plan.Models.quantum 5;
   check     "default plan mode = LTX"    default_plan.Models.mode    "LTX";
   check_int "default plan nodes = 2"
     (List.length default_plan.Models.nodes) 2;
@@ -168,7 +168,7 @@ let () =
 (* ── Section 6: total_min ────────────────────────────────────────────────── *)
 
 let () =
-  check_int "default plan total_min = 39"   (Interplanet_ltx.total_min default_plan) 39;
+  check_int "default plan total_min = 65"   (Interplanet_ltx.total_min default_plan) 65;
   check_int "v001 plan total_min = 45"      (Interplanet_ltx.total_min v001_plan)    45;
   check_int "custom plan total_min = 130"   (Interplanet_ltx.total_min custom_plan)  130;
   let q1_plan = Interplanet_ltx.create_plan ~quantum:1 () in

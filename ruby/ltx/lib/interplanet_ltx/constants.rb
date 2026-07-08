@@ -5,7 +5,7 @@
 
 module InterplanetLtx
   VERSION           = '1.0.0'
-  DEFAULT_QUANTUM   = 3
+  DEFAULT_QUANTUM   = 5
   DEFAULT_SEG_COUNT = 7
   DEFAULT_API_BASE  = 'https://interplanet.live/api/ltx.php'
 

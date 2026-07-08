@@ -14,7 +14,7 @@ fun main() {
     val plan = InterplanetLTX.createPlan("Test Meeting", listOf(node1, node2))
 
     println("── Constants ────────────────────────────────")
-    check("VERSION is 1.0.0", InterplanetLTX.VERSION == "1.0.0")
+    check("VERSION is 1.1.0", InterplanetLTX.VERSION == "1.1.0")
     check("DEFAULT_QUANTUM is 5", InterplanetLTX.DEFAULT_QUANTUM == 5)
     check("DEFAULT_SEGMENTS not empty", InterplanetLTX.DEFAULT_SEGMENTS.isNotEmpty())
     check("DEFAULT_SEGMENTS has SPEAK", InterplanetLTX.DEFAULT_SEGMENTS.any { it.type == "SPEAK" })
@@ -288,5 +288,8 @@ fun main() {
     check("checkSeq gap: Gap=true", gr5.gap)
     check("checkSeq gap: GapSize=2", gr5.gapSize == 2)
 
-        println("\n$passed passed  $failed failed")
+    runV11Tests()
+
+    println("\n$passed passed  $failed failed")
+    if (failed > 0) kotlin.system.exitProcess(1)
 }

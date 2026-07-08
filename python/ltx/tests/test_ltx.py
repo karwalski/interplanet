@@ -35,7 +35,8 @@ class TestConstants(unittest.TestCase):
         self.assertIn('MERGE', SEG_TYPES)
 
     def test_default_quantum(self):
-        self.assertEqual(DEFAULT_QUANTUM, 3)
+        # LTX-SPECIFICATION.md §3.2: default quantum is 5 (bug B12 fix)
+        self.assertEqual(DEFAULT_QUANTUM, 5)
 
     def test_default_segments_count(self):
         self.assertEqual(len(DEFAULT_SEGMENTS), 7)
@@ -182,7 +183,7 @@ class TestTotalMin(unittest.TestCase):
     def test_total_min_default(self):
         plan = create_plan(start='2026-01-01T12:00:00Z')
         # DEFAULT_SEGMENTS has q: 2,2,2,2,2,2,1 = 13 quanta × 3 min = 39 min
-        self.assertEqual(total_min(plan), 39)
+        self.assertEqual(total_min(plan), 65)  # 13 quanta × 5 min (B12: default quantum 5)
 
     def test_total_min_custom_quantum(self):
         plan = create_plan(quantum=5, start='2026-01-01T12:00:00Z')
@@ -334,7 +335,7 @@ class TestGenerateICS(unittest.TestCase):
         self.assertIn('LTX-PLANID:', self.ics)
 
     def test_ltx_quantum(self):
-        self.assertIn('LTX-QUANTUM:PT3M', self.ics)
+        self.assertIn('LTX-QUANTUM:PT5M', self.ics)
 
     def test_ltx_segment_template(self):
         self.assertIn('LTX-SEGMENT-TEMPLATE:', self.ics)
@@ -1825,6 +1826,986 @@ class TestBCBConfidentiality(unittest.TestCase):
         enc1 = encrypt_window({'x': 1}, key)
         enc2 = encrypt_window({'x': 1}, key)
         self.assertNotEqual(enc1['nonce'], enc2['nonce'])
+
+class TestSessionStateMachine(unittest.TestCase):
+    """Epic 68 — session state machine (_session.py)."""
+
+    PLAN = {
+        'v': 2, 'title': 'SM Test', 'start': '2026-08-01T12:00:00.000Z',
+        'quantum': 5, 'mode': 'LTX-ASYNC',
+        'nodes': [
+            {'id': 'N0', 'name': 'Earth HQ',  'role': 'HOST',        'delay': 0,   'location': 'earth'},
+            {'id': 'N1', 'name': 'Mars Hab',  'role': 'PARTICIPANT', 'delay': 900, 'location': 'mars'},
+            {'id': 'N2', 'name': 'Luna Base', 'role': 'PARTICIPANT', 'delay': 2,   'location': 'moon'},
+        ],
+        'segments': [{'type': 'PLAN_CONFIRM', 'q': 2}, {'type': 'TX', 'q': 2}],
+    }
+    T0 = 1_000_000
+
+    def _locked_active(self):
+        from interplanet_ltx import create_session, transition
+        pid = 'PLAN-A'
+        ctx = create_session(self.PLAN, pid)
+        ctx, _ = transition(ctx, {'type': 'START_LOCK', 'nowMs': self.T0})
+        ctx, _ = transition(ctx, {'type': 'PLAN_CONFIRM', 'nowMs': self.T0 + 1, 'nodeId': 'N1', 'planId': pid})
+        ctx, _ = transition(ctx, {'type': 'PLAN_CONFIRM', 'nowMs': self.T0 + 2, 'nodeId': 'N2', 'planId': pid})
+        ctx, _ = transition(ctx, {'type': 'SESSION_START', 'nowMs': self.T0 + 3})
+        return ctx
+
+    def test_draft_and_lock_timeout(self):
+        from interplanet_ltx import create_session, lock_timeout_ms
+        ctx = create_session(self.PLAN, 'PLAN-A')
+        self.assertEqual(ctx['state'], 'DRAFT')
+        self.assertEqual(ctx['lockTimeoutMs'], 2 * 900 * 1000)
+        self.assertEqual(lock_timeout_ms(self.PLAN), 2 * 900 * 1000)
+
+    def test_full_lock_path(self):
+        ctx = self._locked_active()
+        self.assertEqual(ctx['state'], 'ACTIVE')
+        self.assertEqual(ctx['lock'], 'FULL')
+
+    def test_audit_effect_on_transition(self):
+        from interplanet_ltx import create_session, transition
+        ctx = create_session(self.PLAN, 'PLAN-A')
+        _, effects = transition(ctx, {'type': 'START_LOCK', 'nowMs': self.T0})
+        self.assertEqual(effects[0]['kind'], 'audit')
+        self.assertEqual(effects[0]['entry']['to'], 'LOCKING')
+        self.assertEqual(effects[0]['entry']['type'], 'state_transition')
+
+    def test_mismatch_recorded(self):
+        from interplanet_ltx import create_session, transition
+        ctx = create_session(self.PLAN, 'PLAN-A')
+        ctx, _ = transition(ctx, {'type': 'START_LOCK', 'nowMs': self.T0})
+        ctx, effects = transition(ctx, {'type': 'PLAN_CONFIRM', 'nowMs': self.T0 + 1,
+                                        'nodeId': 'N1', 'planId': 'PLAN-B'})
+        self.assertEqual(ctx['state'], 'LOCKING')
+        self.assertIn('N1', ctx['mismatched'])
+        self.assertTrue(any(e.get('code') == 'PLANID_MISMATCH' for e in effects))
+
+    def test_timeout_quorum_degraded_and_recovery(self):
+        from interplanet_ltx import create_session, transition
+        pid = 'PLAN-A'
+        ctx = create_session(self.PLAN, pid, quorum=1)
+        ctx, _ = transition(ctx, {'type': 'START_LOCK', 'nowMs': self.T0})
+        ctx, _ = transition(ctx, {'type': 'PLAN_CONFIRM', 'nowMs': self.T0 + 1, 'nodeId': 'N2', 'planId': pid})
+        # 1 ms before timeout: no change
+        pre, _ = transition(ctx, {'type': 'TICK', 'nowMs': self.T0 + 2 * 900 * 1000 - 1})
+        self.assertEqual(pre['state'], 'LOCKING')
+        # at timeout: quorum lock, DEGRADED, subset ordered by ascending delay
+        ctx, effects = transition(ctx, {'type': 'TICK', 'nowMs': self.T0 + 2 * 900 * 1000})
+        self.assertEqual(ctx['state'], 'DEGRADED')
+        self.assertEqual(ctx['lock'], 'QUORUM')
+        self.assertEqual(ctx['subset'], ['N0', 'N2'])
+        self.assertTrue(any(e['kind'] == 'escalate' for e in effects))
+        # late confirm recovers to full LOCKED
+        ctx, _ = transition(ctx, {'type': 'PLAN_CONFIRM', 'nowMs': self.T0 + 2_000_000,
+                                  'nodeId': 'N1', 'planId': pid})
+        self.assertEqual(ctx['state'], 'LOCKED')
+        self.assertEqual(ctx['lock'], 'FULL')
+
+    def test_delay_violation_thresholds(self):
+        from interplanet_ltx import transition
+        ctx = self._locked_active()
+        # deviation 120 s: silent
+        c1, e1 = transition(ctx, {'type': 'DELAY_MEASURED', 'nowMs': self.T0 + 10,
+                                  'nodeId': 'N1', 'measuredDelayS': 1020})
+        self.assertEqual(c1['state'], 'ACTIVE')
+        self.assertEqual(e1, [])
+        # deviation 121 s: warn
+        c2, e2 = transition(ctx, {'type': 'DELAY_MEASURED', 'nowMs': self.T0 + 10,
+                                  'nodeId': 'N1', 'measuredDelayS': 1021})
+        self.assertEqual(c2['state'], 'ACTIVE')
+        self.assertTrue(any(e.get('code') == 'DELAY_VIOLATION' for e in e2))
+        # deviation 301 s: DEGRADED
+        c3, _ = transition(ctx, {'type': 'DELAY_MEASURED', 'nowMs': self.T0 + 10,
+                                 'nodeId': 'N1', 'measuredDelayS': 1201})
+        self.assertEqual(c3['state'], 'DEGRADED')
+
+    def test_eok_override_and_resume(self):
+        from interplanet_ltx import transition
+        ctx = self._locked_active()
+        hold, _ = transition(ctx, {'type': 'EOK_OVERRIDE', 'nowMs': self.T0 + 10,
+                                   'verified': True, 'reason': 'storm'})
+        self.assertEqual(hold['state'], 'EMERGENCY_HOLD')
+        self.assertEqual(hold['resumeState'], 'ACTIVE')
+        rej, eff = transition(ctx, {'type': 'EOK_OVERRIDE', 'nowMs': self.T0 + 10, 'verified': False})
+        self.assertEqual(rej['state'], 'ACTIVE')
+        self.assertTrue(any(e.get('code') == 'OVERRIDE_REJECTED' for e in eff))
+        back, _ = transition(hold, {'type': 'HOST_DECISION', 'nowMs': self.T0 + 20, 'decision': 'resume'})
+        self.assertEqual(back['state'], 'ACTIVE')
+
+    def test_amendment_flow(self):
+        from interplanet_ltx import transition
+        ctx = self._locked_active()
+        ctx, _ = transition(ctx, {'type': 'AMENDMENT_PROPOSED', 'nowMs': self.T0 + 10,
+                                  'planId': 'PLAN-V3', 'planVersion': 2,
+                                  'affectedNodeIds': ['N1']})
+        self.assertIsNotNone(ctx['pendingAmendment'])
+        self.assertEqual(ctx['pendingAmendment']['timeoutMs'], 2 * 900 * 1000)
+        # bad version gap rejected
+        _, eff = transition(ctx, {'type': 'AMENDMENT_PROPOSED', 'nowMs': self.T0 + 11,
+                                  'planId': 'x', 'planVersion': 4, 'affectedNodeIds': ['N1']})
+        self.assertTrue(any(e.get('code') == 'AMENDMENT_REJECTED' for e in eff))
+        ctx, eff = transition(ctx, {'type': 'AMENDMENT_CONFIRMED', 'nowMs': self.T0 + 20,
+                                    'nodeId': 'N1', 'planId': 'PLAN-V3'})
+        self.assertIsNone(ctx['pendingAmendment'])
+        self.assertEqual(ctx['planVersion'], 2)
+        self.assertEqual(ctx['planId'], 'PLAN-V3')
+        self.assertEqual(ctx['sessionRootPlanId'], 'PLAN-A')
+
+    def test_complete_and_ignore_after(self):
+        from interplanet_ltx import transition
+        ctx = self._locked_active()
+        done, _ = transition(ctx, {'type': 'SESSION_END', 'nowMs': self.T0 + 100})
+        self.assertEqual(done['state'], 'COMPLETE')
+        same, eff = transition(done, {'type': 'SESSION_END', 'nowMs': self.T0 + 101})
+        self.assertEqual(same['state'], 'COMPLETE')
+        self.assertTrue(any(e.get('code') == 'INVALID_EVENT' for e in eff))
+
+    def test_transition_deterministic(self):
+        from interplanet_ltx import create_session, transition
+        ctx = create_session(self.PLAN, 'PLAN-A')
+        ctx, _ = transition(ctx, {'type': 'START_LOCK', 'nowMs': self.T0})
+        ev = {'type': 'TICK', 'nowMs': self.T0 + 2 * 900 * 1000}
+        a = transition(ctx, ev)
+        b = transition(ctx, ev)
+        self.assertEqual(a, b)
+
+
+class TestAmendmentChains(unittest.TestCase):
+    """Epic 68.3 — amendment chains (_amend.py)."""
+
+    PLAN = {
+        'v': 2, 'title': 'Chain Test', 'start': '2026-08-01T12:00:00.000Z',
+        'quantum': 5, 'mode': 'LTX',
+        'nodes': [
+            {'id': 'N0', 'name': 'Earth HQ', 'role': 'HOST', 'delay': 0, 'location': 'earth'},
+            {'id': 'N1', 'name': 'Mars Hab-01', 'role': 'PARTICIPANT', 'delay': 860, 'location': 'mars'},
+        ],
+        'segments': [{'type': 'PLAN_CONFIRM', 'q': 2}, {'type': 'TX', 'q': 2},
+                     {'type': 'RX', 'q': 2}, {'type': 'BUFFER', 'q': 1}],
+    }
+
+    def setUp(self):
+        from interplanet_ltx import generate_nik, sign_plan
+        try:
+            res = generate_nik()
+        except ImportError:
+            self.skipTest('cryptography/PyNaCl not installed')
+        self.nik = res['nik']
+        self.priv = res['private_key_b64']
+        self.cache = {self.nik['nodeId']: self.nik}
+        self.signed_root = sign_plan(self.PLAN, self.priv)
+
+    def test_plan_hash_stable_and_order_insensitive(self):
+        from interplanet_ltx import plan_hash
+        self.assertRegex(plan_hash(self.PLAN), r'^[0-9a-f]{64}$')
+        self.assertEqual(plan_hash({'b': 1, 'a': 2}), plan_hash({'a': 2, 'b': 1}))
+
+    def test_create_amendment_fields(self):
+        from interplanet_ltx import create_amendment, plan_hash, make_plan_id
+        amd = create_amendment(self.signed_root, {'title': 'Amended'}, self.priv)
+        self.assertEqual(amd['plan']['v'], 3)
+        self.assertEqual(amd['plan']['planVersion'], 2)
+        self.assertEqual(amd['plan']['prevPlanHash'], plan_hash(self.PLAN))
+        self.assertNotIn('planVersion', self.PLAN)   # original untouched
+        self.assertIn('-v3-', make_plan_id(amd['plan']))
+
+    def test_chain_verification(self):
+        from interplanet_ltx import create_amendment, verify_amendment_chain
+        amd1 = create_amendment(self.signed_root, {'title': 'Amended'}, self.priv)
+        amd2 = create_amendment(amd1, {'quantum': 4}, self.priv)
+        self.assertTrue(verify_amendment_chain([self.signed_root, amd1, amd2], self.cache)['valid'])
+        self.assertTrue(verify_amendment_chain([self.signed_root], self.cache)['valid'])
+        self.assertFalse(verify_amendment_chain([], self.cache)['valid'])
+        # skipped link
+        self.assertFalse(verify_amendment_chain([self.signed_root, amd2], self.cache)['valid'])
+
+    def test_tamper_and_wrong_signer_rejected(self):
+        import copy
+        from interplanet_ltx import create_amendment, verify_amendment_chain, generate_nik
+        amd1 = create_amendment(self.signed_root, {'title': 'Amended'}, self.priv)
+        tampered = copy.deepcopy(amd1)
+        tampered['plan']['title'] = 'EVIL'
+        self.assertFalse(verify_amendment_chain([self.signed_root, tampered], self.cache)['valid'])
+        evil = generate_nik()
+        amd_evil = create_amendment(self.signed_root, {'title': 'hijack'}, evil['private_key_b64'])
+        self.assertFalse(verify_amendment_chain([self.signed_root, amd_evil], self.cache)['valid'])
+
+    def test_insert_buffer_via_amendment(self):
+        from interplanet_ltx import insert_buffer_via_amendment, verify_amendment_chain
+        drifted = insert_buffer_via_amendment(self.signed_root, -1, 2, self.priv)
+        segs = drifted['plan']['segments']
+        self.assertEqual(len(segs), len(self.PLAN['segments']) + 1)
+        self.assertEqual(segs[-1], {'type': 'BUFFER', 'q': 2})
+        self.assertTrue(verify_amendment_chain([self.signed_root, drifted], self.cache)['valid'])
+        mid = insert_buffer_via_amendment(self.signed_root, 1, 1, self.priv)
+        self.assertEqual(mid['plan']['segments'][2], {'type': 'BUFFER', 'q': 1})
+
+
+class TestRegistersAndMerge(unittest.TestCase):
+    """Epic 69 — registers (_registers.py) and merge (_merge.py)."""
+
+    SID = 'SID'
+
+    def setUp(self):
+        from interplanet_ltx import generate_nik
+        try:
+            host = generate_nik()
+            mars = generate_nik()
+        except ImportError:
+            self.skipTest('cryptography/PyNaCl not installed')
+        self.host_priv = host['private_key_b64']
+        self.mars_priv = mars['private_key_b64']
+        self.cache = {'N0': host['nik'], 'N1': mars['nik']}
+
+    def _mk(self, etype, content, node_id, seq, ts, priv):
+        from interplanet_ltx import create_register_entry
+        return create_register_entry(etype, content, self.SID, node_id, seq, ts, priv)
+
+    def _fixture(self):
+        q1 = self._mk('question', {'text': 'Water?', 'urgency': 'high'}, 'N1', 1,
+                      '2026-08-01T12:01:00.000Z', self.mars_priv)
+        qr = self._mk('question_response', {'qid': 'QST-N1-1', 'response': 'OK', 'version': 2},
+                      'N0', 1, '2026-08-01T12:05:00.000Z', self.host_priv)
+        a1 = self._mk('action', {'description': 'Fix filters', 'owner': 'N1'}, 'N0', 2,
+                      '2026-08-01T12:06:00.000Z', self.host_priv)
+        au = self._mk('action_update', {'aid': 'ACT-N0-2', 'status': 'DONE', 'version': 2},
+                      'N1', 2, '2026-08-01T12:08:00.000Z', self.mars_priv)
+        return q1, qr, a1, au
+
+    def test_entry_sign_verify_tamper(self):
+        from interplanet_ltx import verify_register_entry
+        q1, _, _, _ = self._fixture()
+        self.assertEqual(q1['entryId'], 'QST-N1-1')
+        self.assertTrue(verify_register_entry(q1, self.cache)['valid'])
+        bad = dict(q1, content={'text': 'EVIL'})
+        self.assertFalse(verify_register_entry(bad, self.cache)['valid'])
+        self.assertEqual(verify_register_entry(q1, {})['reason'], 'key_not_in_cache')
+
+    def test_reducers_and_determinism(self):
+        from interplanet_ltx import reduce_questions, reduce_actions
+        q1, qr, a1, au = self._fixture()
+        entries = [q1, qr, a1, au]
+        qs = reduce_questions(entries)
+        self.assertEqual(qs['byId']['QST-N1-1']['status'], 'ANSWERED')
+        self.assertEqual(qs['byId']['QST-N1-1']['response'], 'OK')
+        acts = reduce_actions(entries)
+        self.assertEqual(acts['byId']['ACT-N0-2']['status'], 'DONE')
+        for shuffled in ([au, q1, a1, qr], [qr, au, q1, a1]):
+            self.assertEqual(reduce_questions(shuffled), qs)
+            self.assertEqual(reduce_actions(shuffled), acts)
+
+    def test_conflict_lowest_node_wins(self):
+        from interplanet_ltx import reduce_questions
+        q1, _, _, _ = self._fixture()
+        ra = self._mk('question_response', {'qid': 'QST-N1-1', 'response': 'A', 'version': 5},
+                      'N0', 7, '2026-08-01T13:00:00.000Z', self.host_priv)
+        rb = self._mk('question_response', {'qid': 'QST-N1-1', 'response': 'B', 'version': 5},
+                      'N1', 7, '2026-08-01T13:00:00.000Z', self.mars_priv)
+        reg1 = reduce_questions([q1, ra, rb])
+        reg2 = reduce_questions([q1, rb, ra])
+        self.assertEqual(reg1['byId']['QST-N1-1']['response'], 'A')
+        self.assertEqual(reg1['byId'], reg2['byId'])
+        self.assertIn(rb['entryId'], reg1['superseded'])
+
+    def test_merge_symmetric_and_snapshot(self):
+        from interplanet_ltx import (merge_logs, entries_root, run_merge_segment,
+                                     verify_register_entry)
+        q1, qr, a1, au = self._fixture()
+        side_a = [q1, a1, qr]
+        side_b = [q1, a1, au]
+        m1 = merge_logs(side_a, side_b, self.cache)
+        m2 = merge_logs(side_b, side_a, self.cache)
+        self.assertEqual(m1['entries'], m2['entries'])
+        self.assertEqual(len(m1['entries']), 4)
+        self.assertEqual(entries_root(m1['entries']), entries_root(m2['entries']))
+        self.assertEqual(m1['rejected'], [])
+        res = run_merge_segment(side_a, side_b, self.cache, self.SID, 'N0', 30,
+                                '2026-08-01T15:00:00.000Z', self.host_priv)
+        snap = res['snapshot']
+        self.assertEqual(snap['type'], 'merge_snapshot')
+        self.assertTrue(snap['entryId'].startswith('MRG-'))
+        self.assertEqual(snap['content']['mergedRoot'], entries_root(res['merged']['entries']))
+        self.assertTrue(verify_register_entry(snap, self.cache)['valid'])
+
+    def test_merge_rejects_tampered(self):
+        from interplanet_ltx import merge_logs
+        q1, qr, a1, au = self._fixture()
+        evil = dict(au, content=dict(au['content'], status='REJECTED'))
+        m = merge_logs([q1, a1], [evil], self.cache)
+        self.assertEqual(len(m['rejected']), 1)
+
+    def test_partition_recovery(self):
+        from interplanet_ltx import (order_entries, recover_partition, MerkleLog)
+        q1, qr, a1, au = self._fixture()
+        shared = order_entries([q1, a1])
+        extended = shared + order_entries([au])
+        log = MerkleLog()
+        for e in extended:
+            log.append(e)
+        head = log.sign_tree_head(self.mars_priv, 'N1')
+        rec = recover_partition(shared, extended, head, self.cache['N1'], self.cache)
+        self.assertEqual(rec['action'], 'accept_extension')
+        self.assertEqual(len(rec['entries']), 3)
+        # diverged sides → deterministic merge
+        rec2 = recover_partition(order_entries([q1, a1, qr]), extended, head,
+                                 self.cache['N1'], self.cache)
+        self.assertEqual(rec2['action'], 'merged')
+        self.assertEqual(len(rec2['entries']), 4)
+        # lying head → divergent
+        bad = dict(head, treeSize=head['treeSize'] + 1)
+        rec3 = recover_partition(shared, extended, bad, self.cache['N1'], self.cache)
+        self.assertEqual(rec3['action'], 'divergent')
+        # wrong signer → divergent
+        rec4 = recover_partition(shared, extended, head, self.cache['N0'], self.cache)
+        self.assertEqual(rec4['action'], 'divergent')
+
+
+class TestCborCodec(unittest.TestCase):
+    """Story 70.5 — deterministic CBOR (_cbor.py, RFC 8949 §4.2.1 profile)."""
+
+    # RFC 8949 Appendix A vector subset (value, hex)
+    VECTORS = [
+        (0, '00'),
+        (10, '0a'),
+        (24, '1818'),
+        (100, '1864'),
+        (1000, '1903e8'),
+        (1000000, '1a000f4240'),
+        (-1, '20'),
+        (-19, '32'),
+        ('', '60'),
+        ('a', '6161'),
+        ('IETF', '6449455446'),
+        ([1, 2, 3], '83010203'),
+        ({'a': 1, 'b': [2, 3]}, 'a26161016162820203'),
+        (True, 'f5'),
+        (False, 'f4'),
+        (None, 'f6'),
+    ]
+
+    def test_rfc8949_appendix_a_vectors(self):
+        from interplanet_ltx import encode_cbor
+        for value, expected_hex in self.VECTORS:
+            self.assertEqual(encode_cbor(value).hex(), expected_hex,
+                             f'vector {value!r}')
+
+    def test_round_trips(self):
+        from interplanet_ltx import CborTag, decode_cbor, encode_cbor
+        for value, _ in self.VECTORS:
+            self.assertEqual(decode_cbor(encode_cbor(value)), value)
+        nested = {'x': [1, {'y': b'\x01\x02'}], 'z': None}
+        decoded = decode_cbor(encode_cbor(nested))
+        self.assertEqual(decoded['x'][0], 1)
+        self.assertEqual(decoded['x'][1]['y'], b'\x01\x02')
+        self.assertIsNone(decoded['z'])
+        tagged = CborTag(18, ['Signature1', b'', 5])
+        self.assertEqual(decode_cbor(encode_cbor(tagged)), tagged)
+
+    def test_bool_encodes_as_simple_value_not_int(self):
+        # Python bool is an int subclass — must hit major 7, not major 0.
+        from interplanet_ltx import encode_cbor
+        self.assertEqual(encode_cbor(True).hex(), 'f5')
+        self.assertNotEqual(encode_cbor(True).hex(), '01')
+
+    def test_int_map_keys_and_numeric_string_keys(self):
+        from interplanet_ltx import encode_cbor
+        # {1: -19} — COSE protected header
+        self.assertEqual(encode_cbor({1: -19}).hex(), 'a10132')
+        # Numeric-looking string keys encode as ints (TS Object.entries parity)
+        self.assertEqual(encode_cbor({'1': -19}), encode_cbor({1: -19}))
+        # Non-canonical numeric strings stay strings
+        self.assertNotEqual(encode_cbor({'01': 1}), encode_cbor({1: 1}))
+
+    def test_map_keys_sorted_by_encoded_bytes(self):
+        from interplanet_ltx import encode_cbor
+        # int key 4 (0x04) sorts before text key 'a' (0x6161)
+        self.assertEqual(encode_cbor({'a': 2, 4: 1}).hex(), 'a20401616102')
+
+    def test_bstr_map_key_decodes_to_base64url(self):
+        from interplanet_ltx import decode_cbor
+        # {h'01': 2} → key becomes base64url('\x01') = 'AQ'
+        self.assertEqual(decode_cbor(bytes.fromhex('a1410102')), {'AQ': 2})
+
+    def test_float_encode_rejected(self):
+        from interplanet_ltx import encode_cbor
+        with self.assertRaises(ValueError):
+            encode_cbor(1.5)
+
+    def test_float_and_simple_decode_rejected(self):
+        from interplanet_ltx import decode_cbor
+        with self.assertRaises(ValueError):
+            decode_cbor(bytes.fromhex('f93c00'))  # half float 1.0
+        with self.assertRaises(ValueError):
+            decode_cbor(bytes.fromhex('f7'))      # simple value 'undefined'
+
+    def test_indefinite_length_rejected(self):
+        from interplanet_ltx import decode_cbor
+        with self.assertRaises(ValueError):
+            decode_cbor(bytes.fromhex('9f01ff'))  # indefinite array
+
+    def test_trailing_bytes_rejected(self):
+        from interplanet_ltx import decode_cbor
+        with self.assertRaises(ValueError):
+            decode_cbor(bytes.fromhex('0000'))
+
+    def test_truncation_rejected(self):
+        from interplanet_ltx import decode_cbor
+        for hexstr in ('62', '1903', '8201', ''):
+            with self.assertRaises(ValueError):
+                decode_cbor(bytes.fromhex(hexstr))
+
+
+class TestCoseSign1(unittest.TestCase):
+    """Story 70.5 — COSE_Sign1 plan signing (_cose.py)."""
+
+    PLAN = {
+        'v': 2, 'title': 'COSE Test', 'start': '2026-08-01T12:00:00.000Z',
+        'quantum': 5, 'mode': 'LTX',
+        'nodes': [
+            {'id': 'N0', 'name': 'Earth HQ', 'role': 'HOST', 'delay': 0, 'location': 'earth'},
+            {'id': 'N1', 'name': 'Mars Hab-01', 'role': 'PARTICIPANT', 'delay': 860, 'location': 'mars'},
+        ],
+        'segments': [{'type': 'PLAN_CONFIRM', 'q': 2}],
+    }
+
+    def setUp(self):
+        from interplanet_ltx import generate_nik
+        try:
+            from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey  # noqa: F401
+        except ImportError:
+            self.skipTest('cryptography package not installed')
+        res = generate_nik()
+        self.nik = res['nik']
+        self.priv = res['private_key_b64']
+        self.cache = {self.nik['nodeId']: self.nik}
+
+    def test_sign_and_verify_round_trip(self):
+        from interplanet_ltx import sign_plan_cose, verify_plan_cose
+        env = sign_plan_cose(self.PLAN, self.priv)
+        self.assertEqual(env['plan'], self.PLAN)
+        self.assertIsInstance(env['coseSign1CborB64'], str)
+        self.assertNotIn('=', env['coseSign1CborB64'])  # no padding
+        self.assertEqual(verify_plan_cose(env, self.cache), {'valid': True})
+
+    def test_cose_structure_and_kid(self):
+        import base64
+        from interplanet_ltx import (
+            CborTag, COSE_SIGN1_TAG, COSE_ALG_ED25519, decode_cbor, sign_plan_cose,
+        )
+        from interplanet_ltx import canonical_json
+        env = sign_plan_cose(self.PLAN, self.priv)
+        decoded = decode_cbor(
+            base64.urlsafe_b64decode(env['coseSign1CborB64'] + '=='))
+        self.assertIsInstance(decoded, CborTag)
+        self.assertEqual(decoded.tag, COSE_SIGN1_TAG)
+        protected, unprotected, payload, signature = decoded.value
+        self.assertEqual(decode_cbor(protected), {1: COSE_ALG_ED25519})
+        # kid = first 16 bytes of SHA-256(raw pub) → b64url == NIK nodeId
+        kid_b64 = base64.urlsafe_b64encode(unprotected[4]).rstrip(b'=').decode()
+        self.assertEqual(kid_b64, self.nik['nodeId'])
+        self.assertEqual(payload.decode('utf-8'), canonical_json(self.PLAN))
+        self.assertEqual(len(signature), 64)
+
+    def test_tampered_signature_rejected(self):
+        import base64
+        from interplanet_ltx import sign_plan_cose, verify_plan_cose
+        env = sign_plan_cose(self.PLAN, self.priv)
+        raw = bytearray(base64.urlsafe_b64decode(env['coseSign1CborB64'] + '=='))
+        raw[-1] ^= 0x01  # flip a signature bit
+        tampered = {
+            'plan': self.PLAN,
+            'coseSign1CborB64':
+                base64.urlsafe_b64encode(bytes(raw)).rstrip(b'=').decode(),
+        }
+        self.assertEqual(verify_plan_cose(tampered, self.cache),
+                         {'valid': False, 'reason': 'signature_invalid'})
+
+    def test_payload_mismatch_rejected(self):
+        from interplanet_ltx import sign_plan_cose, verify_plan_cose
+        env = sign_plan_cose(self.PLAN, self.priv)
+        swapped = {'plan': dict(self.PLAN, title='EVIL'),
+                   'coseSign1CborB64': env['coseSign1CborB64']}
+        self.assertEqual(verify_plan_cose(swapped, self.cache),
+                         {'valid': False, 'reason': 'payload_mismatch'})
+
+    def test_missing_envelope_and_unknown_key(self):
+        from interplanet_ltx import generate_nik, sign_plan_cose, verify_plan_cose
+        self.assertEqual(verify_plan_cose({}, self.cache),
+                         {'valid': False, 'reason': 'missing_cose_sign1'})
+        env = sign_plan_cose(self.PLAN, self.priv)
+        stranger = generate_nik()['nik']
+        self.assertEqual(
+            verify_plan_cose(env, {stranger['nodeId']: stranger}),
+            {'valid': False, 'reason': 'key_not_in_cache'})
+
+    def test_garbage_cbor_rejected(self):
+        from interplanet_ltx import verify_plan_cose
+        env = {'plan': self.PLAN, 'coseSign1CborB64': 'AAAA'}  # trailing bytes
+        self.assertEqual(verify_plan_cose(env, self.cache),
+                         {'valid': False, 'reason': 'cbor_decode_failed'})
+
+    def test_verify_plan_any_dispatch(self):
+        from interplanet_ltx import sign_plan, sign_plan_cose, verify_plan_any
+        cose_env = sign_plan_cose(self.PLAN, self.priv)
+        self.assertTrue(verify_plan_any(cose_env, self.cache)['valid'])
+        json_env = sign_plan(self.PLAN, self.priv)
+        self.assertTrue(verify_plan_any(json_env, self.cache)['valid'])
+        self.assertEqual(verify_plan_any({'plan': self.PLAN}, self.cache),
+                         {'valid': False, 'reason': 'unknown_envelope'})
+
+
+class TestBIBEd25519(unittest.TestCase):
+    """Story 70.5 — LTX-native Ed25519 BIB (_bib.py additions)."""
+
+    BUNDLE = {'type': 'STATE_UPDATE', 'planId': 'PLAN-1', 'seq': 7,
+              'payload': {'phase': 'TX'}}
+
+    def setUp(self):
+        from interplanet_ltx import generate_nik
+        try:
+            from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey  # noqa: F401
+        except ImportError:
+            self.skipTest('cryptography package not installed')
+        res = generate_nik()
+        self.nik = res['nik']
+        self.priv = res['private_key_b64']
+
+    def test_round_trip(self):
+        from interplanet_ltx import add_bib_ed25519, verify_bib_ed25519
+        signed = add_bib_ed25519(self.BUNDLE, self.priv)
+        self.assertEqual(signed['bib']['securityContext'], 'ltx-ed25519')
+        self.assertEqual(signed['bib']['targetBlockNumber'], 0)
+        self.assertNotIn('bib', self.BUNDLE)  # input not mutated
+        self.assertEqual(verify_bib_ed25519(signed, self.nik), {'valid': True})
+
+    def test_tamper_rejected(self):
+        from interplanet_ltx import add_bib_ed25519, verify_bib_ed25519
+        signed = add_bib_ed25519(self.BUNDLE, self.priv)
+        tampered = dict(signed, seq=8)
+        self.assertEqual(verify_bib_ed25519(tampered, self.nik),
+                         {'valid': False, 'reason': 'signature_invalid'})
+
+    def test_hmac_verifier_rejects_ed25519_bib(self):
+        # Context-confusion defence, direction 1: Ed25519 BIB → verify_bib
+        from interplanet_ltx import add_bib_ed25519, generate_bib_key, verify_bib
+        signed = add_bib_ed25519(self.BUNDLE, self.priv)
+        self.assertEqual(verify_bib(signed, generate_bib_key()),
+                         {'valid': False, 'reason': 'context_mismatch'})
+
+    def test_ed25519_verifier_rejects_hmac_bib(self):
+        # Context-confusion defence, direction 2: HMAC BIB → verify_bib_ed25519
+        from interplanet_ltx import add_bib, generate_bib_key, verify_bib_ed25519
+        signed = add_bib(self.BUNDLE, generate_bib_key())
+        self.assertEqual(verify_bib_ed25519(signed, self.nik),
+                         {'valid': False, 'reason': 'context_mismatch'})
+
+    def test_missing_bib(self):
+        from interplanet_ltx import verify_bib_ed25519
+        self.assertEqual(verify_bib_ed25519(dict(self.BUNDLE), self.nik),
+                         {'valid': False, 'reason': 'missing_bib'})
+
+
+class TestGlobalSequenceTracker(unittest.TestCase):
+    """Story 70.5 — global freshness scope (_security.py, LTX-SECURITY.md §11)."""
+
+    def test_next_seq_scoped_per_sender_and_msg_type(self):
+        from interplanet_ltx import GlobalSequenceTracker
+        t = GlobalSequenceTracker()
+        self.assertEqual(t.next_seq('N0', 'KEY_BUNDLE'), 1)
+        self.assertEqual(t.next_seq('N0', 'KEY_BUNDLE'), 2)
+        self.assertEqual(t.next_seq('N0', 'KEY_REVOCATION'), 1)  # independent
+        self.assertEqual(t.next_seq('N1', 'KEY_BUNDLE'), 1)      # independent
+
+    def test_record_seq_replay_and_gap(self):
+        from interplanet_ltx import GlobalSequenceTracker
+        t = GlobalSequenceTracker()
+        self.assertEqual(t.record_seq('N0', 'KEY_BUNDLE', 1),
+                         {'accepted': True, 'gap': False, 'gapSize': 0})
+        self.assertEqual(t.record_seq('N0', 'KEY_BUNDLE', 1),
+                         {'accepted': False, 'gap': False, 'gapSize': 0,
+                          'reason': 'replay'})
+        gap = t.record_seq('N0', 'KEY_BUNDLE', 5)
+        self.assertEqual(gap, {'accepted': True, 'gap': True, 'gapSize': 3})
+        self.assertEqual(t.last_seen_seq('N0', 'KEY_BUNDLE'), 5)
+        self.assertEqual(t.last_seen_seq('N0', 'KEY_REVOCATION'), 0)
+
+    def test_snapshot_keys(self):
+        from interplanet_ltx import GlobalSequenceTracker
+        t = GlobalSequenceTracker()
+        t.next_seq('N0', 'KEY_BUNDLE')
+        t.record_seq('N1', 'KEY_BUNDLE', 3)
+        self.assertEqual(t.snapshot(), {
+            'ltx_gseq_N0_KEY_BUNDLE': 1,
+            'ltx_gseq_N1_KEY_BUNDLE_rx': 3,
+        })
+
+    def test_check_issued_at(self):
+        from interplanet_ltx import ISSUED_AT_MAX_AGE_DAYS, check_issued_at
+        self.assertEqual(ISSUED_AT_MAX_AGE_DAYS, 30)
+        from datetime import datetime, timezone
+        now_ms = int(datetime(2026, 7, 1, tzinfo=timezone.utc).timestamp() * 1000)
+        # fresh (Z suffix accepted)
+        self.assertEqual(check_issued_at('2026-06-25T00:00:00.000Z', now_ms),
+                         {'accepted': True})
+        # expired (> 30 days old)
+        self.assertEqual(check_issued_at('2026-05-01T00:00:00.000Z', now_ms),
+                         {'accepted': False, 'reason': 'expired'})
+        # custom window
+        self.assertEqual(
+            check_issued_at('2026-05-01T00:00:00.000Z', now_ms, max_age_days=90),
+            {'accepted': True})
+        # future-dated (> 1 day ahead)
+        self.assertEqual(check_issued_at('2026-07-03T00:00:00.000Z', now_ms),
+                         {'accepted': False, 'reason': 'future_dated'})
+        # within the 1-day future tolerance
+        self.assertEqual(check_issued_at('2026-07-01T12:00:00.000Z', now_ms),
+                         {'accepted': True})
+        # garbage
+        for bad in ('not-a-date', '', None, 12345):
+            self.assertEqual(check_issued_at(bad, now_ms),
+                             {'accepted': False, 'reason': 'invalid_issued_at'})
+
+
+class TestKeyBundleFreshness(unittest.TestCase):
+    """Story 70.5 — freshness-aware KEY_BUNDLE (_keydist.py, port of TS 70.4)."""
+
+    ISSUED = '2026-06-20T00:00:00.000Z'
+
+    def setUp(self):
+        from datetime import datetime, timezone
+        from interplanet_ltx import generate_nik
+        try:
+            from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey  # noqa: F401
+        except ImportError:
+            self.skipTest('cryptography package not installed')
+        host = generate_nik()
+        mars = generate_nik()
+        self.host_nik = host['nik']
+        self.host_priv = host['private_key_b64']
+        self.mars_nik = mars['nik']
+        self.niks = [self.host_nik, self.mars_nik]
+        self.now_ms = int(
+            datetime(2026, 7, 1, tzinfo=timezone.utc).timestamp() * 1000)
+
+    def _fresh_bundle(self, seq=1, issued_at=None):
+        from interplanet_ltx import create_key_bundle
+        return create_key_bundle(
+            'PLAN-1', self.niks, self.host_priv,
+            sender_node_id=self.host_nik['nodeId'], seq=seq,
+            issued_at=issued_at or self.ISSUED)
+
+    def test_fresh_bundle_fields_and_verify(self):
+        from interplanet_ltx import GlobalSequenceTracker, verify_and_cache_keys
+        bundle = self._fresh_bundle()
+        self.assertEqual(bundle['issuedAt'], self.ISSUED)
+        self.assertEqual(bundle['timestamp'], self.ISSUED)
+        self.assertEqual(bundle['seq'], 1)
+        self.assertEqual(bundle['senderNodeId'], self.host_nik['nodeId'])
+        cache = verify_and_cache_keys(
+            bundle, self.host_nik,
+            tracker=GlobalSequenceTracker(), now_ms=self.now_ms)
+        self.assertIsNotNone(cache)
+        self.assertIn(self.mars_nik['nodeId'], cache)
+
+    def test_replay_rejected(self):
+        from interplanet_ltx import GlobalSequenceTracker, verify_and_cache_keys
+        bundle = self._fresh_bundle()
+        tracker = GlobalSequenceTracker()
+        first = verify_and_cache_keys(bundle, self.host_nik,
+                                      tracker=tracker, now_ms=self.now_ms)
+        self.assertIsNotNone(first)
+        replay = verify_and_cache_keys(bundle, self.host_nik,
+                                       tracker=tracker, now_ms=self.now_ms)
+        self.assertIsNone(replay)
+
+    def test_issued_at_tamper_rejected(self):
+        from interplanet_ltx import GlobalSequenceTracker, verify_and_cache_keys
+        bundle = self._fresh_bundle()
+        tampered = dict(bundle, issuedAt='2026-06-30T00:00:00.000Z')
+        self.assertIsNone(verify_and_cache_keys(
+            tampered, self.host_nik,
+            tracker=GlobalSequenceTracker(), now_ms=self.now_ms))
+
+    def test_stale_bundle_rejected(self):
+        from interplanet_ltx import GlobalSequenceTracker, verify_and_cache_keys
+        stale = self._fresh_bundle(issued_at='2026-05-01T00:00:00.000Z')
+        # Signature is valid, but issuedAt is 61 days before now_ms.
+        self.assertIsNotNone(verify_and_cache_keys(stale, self.host_nik))
+        self.assertIsNone(verify_and_cache_keys(
+            stale, self.host_nik,
+            tracker=GlobalSequenceTracker(), now_ms=self.now_ms))
+
+    def test_legacy_bundle_passes_without_enforcement(self):
+        from interplanet_ltx import create_key_bundle, verify_and_cache_keys
+        legacy = create_key_bundle('PLAN-1', self.niks, self.host_priv)
+        self.assertNotIn('issuedAt', legacy)
+        cache = verify_and_cache_keys(legacy, self.host_nik)
+        self.assertIsNotNone(cache)
+        self.assertIn(self.host_nik['nodeId'], cache)
+
+    def test_legacy_bundle_rejected_under_enforcement(self):
+        from interplanet_ltx import (
+            GlobalSequenceTracker, create_key_bundle, verify_and_cache_keys,
+        )
+        legacy = create_key_bundle('PLAN-1', self.niks, self.host_priv)
+        self.assertIsNone(verify_and_cache_keys(
+            legacy, self.host_nik,
+            tracker=GlobalSequenceTracker(), now_ms=self.now_ms))
+
+
+class TestConferenceModeEpic71(unittest.TestCase):
+    """Epic 71 conference mode — pair_delay, compute_segments_for,
+    build_conference_agenda, prime_time_report, upgrade_plan_to_v3 and the
+    per-attendee ICS export (Story 71.4)."""
+
+    def setUp(self):
+        self.conf_plan = {
+            'v': 2, 'title': 'Solar System Summit',
+            'start': '2026-08-01T12:00:00.000Z', 'quantum': 5, 'mode': 'LTX-ASYNC',
+            'nodes': [
+                {'id': 'N0', 'name': 'Earth HQ',    'role': 'HOST',        'delay': 0,    'location': 'earth'},
+                {'id': 'N1', 'name': 'Mars Hab',    'role': 'PARTICIPANT', 'delay': 900,  'location': 'mars'},
+                {'id': 'N2', 'name': 'Luna Base',   'role': 'PARTICIPANT', 'delay': 2,    'location': 'moon'},
+                {'id': 'N3', 'name': 'Jupiter Obs', 'role': 'PARTICIPANT', 'delay': 2600, 'location': 'jupiter'},
+            ],
+            'segments': [
+                {'type': 'PLAN_CONFIRM', 'q': 2},
+                {'type': 'TX', 'q': 3, 'speaker': 'N0', 'label': 'Opening Address'},
+                {'type': 'TX', 'q': 4, 'speaker': 'N1', 'label': 'Mars Field Report'},
+                {'type': 'RX', 'q': 2},
+            ],
+        }
+
+    # ── pair_delay ─────────────────────────────────────────────────────────
+
+    def test_pair_delay_host_row(self):
+        self.assertEqual(ltx.pair_delay(self.conf_plan, 'N0', 'N1'), 900)
+
+    def test_pair_delay_symmetric(self):
+        self.assertEqual(ltx.pair_delay(self.conf_plan, 'N1', 'N0'), 900)
+
+    def test_pair_delay_sum_fallback(self):
+        self.assertEqual(ltx.pair_delay(self.conf_plan, 'N1', 'N3'), 3500)
+
+    def test_pair_delay_self_zero(self):
+        self.assertEqual(ltx.pair_delay(self.conf_plan, 'N1', 'N1'), 0)
+
+    def test_pair_delay_matrix_wins(self):
+        v3 = ltx.upgrade_plan_to_v3(self.conf_plan, delays={'N1|N3': 700})
+        self.assertEqual(ltx.pair_delay(v3, 'N3', 'N1'), 700)
+        self.assertEqual(ltx.pair_delay(v3, 'N1', 'N3'), 700)
+
+    def test_pair_delay_unknown_node_raises(self):
+        with self.assertRaises(ValueError):
+            ltx.pair_delay(self.conf_plan, 'N0', 'N9')
+
+    def test_pair_delay_dataclass_input(self):
+        plan = create_plan(delay=860)
+        self.assertEqual(ltx.pair_delay(plan, 'N0', 'N1'), 860)
+
+    # ── compute_segments_for ───────────────────────────────────────────────
+
+    def test_speaker_sees_transmit(self):
+        host_view = ltx.compute_segments_for(self.conf_plan, 'N0')
+        self.assertEqual(host_view[1]['perspective'], 'transmit')
+        self.assertEqual(host_view[1]['arrivalOffsetS'], 0)
+
+    def test_viewer_sees_receive_with_shift(self):
+        mars_view = ltx.compute_segments_for(self.conf_plan, 'N1')
+        self.assertEqual(mars_view[1]['perspective'], 'receive')
+        self.assertEqual(mars_view[1]['arrivalOffsetS'], 900)
+        # Base start of segment 1 is 12:10:00Z; +900 s = 12:25:00Z.
+        self.assertEqual(mars_view[1]['start'], '2026-08-01T12:25:00Z')
+        self.assertEqual(mars_view[1]['end'], '2026-08-01T12:40:00Z')
+
+    def test_own_segment_unshifted(self):
+        mars_view = ltx.compute_segments_for(self.conf_plan, 'N1')
+        self.assertEqual(mars_view[2]['perspective'], 'transmit')
+        self.assertEqual(mars_view[2]['arrivalOffsetS'], 0)
+        self.assertEqual(mars_view[2]['start'], '2026-08-01T12:25:00Z')
+
+    def test_unattributed_neutral(self):
+        mars_view = ltx.compute_segments_for(self.conf_plan, 'N1')
+        self.assertEqual(mars_view[0]['perspective'], 'neutral')
+        self.assertEqual(mars_view[3]['perspective'], 'neutral')
+        self.assertNotIn('speaker', mars_view[0])
+
+    def test_label_carried(self):
+        mars_view = ltx.compute_segments_for(self.conf_plan, 'N1')
+        self.assertEqual(mars_view[1]['label'], 'Opening Address')
+
+    def test_unknown_viewer_raises(self):
+        with self.assertRaises(ValueError):
+            ltx.compute_segments_for(self.conf_plan, 'N9')
+
+    def test_dataclass_input(self):
+        plan = create_plan(delay=600)
+        segs = ltx.compute_segments_for(plan, 'N1')
+        self.assertEqual(len(segs), len(plan.segments))
+        self.assertTrue(all(s['perspective'] == 'neutral' for s in segs))
+
+    # ── build_conference_agenda ────────────────────────────────────────────
+
+    def test_rotation_invariant(self):
+        for n in range(3, 6):
+            nodes = [
+                {'id': f'N{i}', 'name': f'Node {i}',
+                 'role': 'HOST' if i == 0 else 'PARTICIPANT',
+                 'delay': i * 100, 'location': 'earth'}
+                for i in range(n)
+            ]
+            agenda = ltx.build_conference_agenda(nodes, cycles=n, block_q=2)
+            tx = [s for s in agenda if s['type'] == 'TX']
+            self.assertEqual(len(tx), n * n, f'N={n} block count')
+            openers = {tx[c * n]['speaker'] for c in range(n)}
+            self.assertEqual(len(openers), n, f'N={n} openers distinct')
+            per_node = {}
+            for s in tx:
+                per_node[s['speaker']] = per_node.get(s['speaker'], 0) + 1
+            self.assertTrue(all(v == n for v in per_node.values()),
+                            f'N={n} equal blocks')
+
+    def test_fixed_keeps_plan_order(self):
+        agenda = ltx.build_conference_agenda(
+            self.conf_plan['nodes'], cycles=2, fairness='fixed')
+        tx = [s for s in agenda if s['type'] == 'TX']
+        self.assertEqual(tx[0]['speaker'], 'N0')
+        self.assertEqual(tx[4]['speaker'], 'N0')
+
+    def test_observers_excluded(self):
+        nodes = self.conf_plan['nodes'] + [
+            {'id': 'N4', 'name': 'Press', 'role': 'OBSERVER',
+             'delay': 0, 'location': 'earth'}]
+        agenda = ltx.build_conference_agenda(nodes)
+        speakers = {s.get('speaker') for s in agenda if s['type'] == 'TX'}
+        self.assertNotIn('N4', speakers)
+
+    def test_labels_applied(self):
+        agenda = ltx.build_conference_agenda(
+            self.conf_plan['nodes'], labels={'N1': 'Mars Field Report'})
+        self.assertTrue(any(s.get('label') == 'Mars Field Report' for s in agenda))
+
+    def test_agenda_framing_defaults(self):
+        agenda = ltx.build_conference_agenda(self.conf_plan['nodes'])
+        self.assertEqual(agenda[0], {'type': 'PLAN_CONFIRM', 'q': 2})
+        self.assertEqual(agenda[-2]['type'], 'MERGE')
+        self.assertEqual(agenda[-1]['type'], 'BUFFER')
+
+    def test_no_presenting_nodes_raises(self):
+        with self.assertRaises(ValueError):
+            ltx.build_conference_agenda(
+                [{'id': 'N0', 'name': 'Press', 'role': 'OBSERVER'}])
+
+    def test_agenda_dataclass_nodes(self):
+        nodes = [LtxNode(id='N0', name='Earth HQ', role='HOST'),
+                 LtxNode(id='N1', name='Mars Hab', role='PARTICIPANT', delay=900)]
+        agenda = ltx.build_conference_agenda(nodes)
+        tx = [s for s in agenda if s['type'] == 'TX']
+        self.assertEqual([s['speaker'] for s in tx], ['N0', 'N1'])
+
+    # ── prime_time_report ──────────────────────────────────────────────────
+
+    def test_rotation_openings_fair(self):
+        agenda = ltx.build_conference_agenda(
+            self.conf_plan['nodes'], cycles=4, block_q=2)
+        plan = {**self.conf_plan, 'segments': agenda}
+        report = ltx.prime_time_report(plan)
+        self.assertEqual(len(report), 4)
+        self.assertTrue(all(r['openings'] == 1 for r in report))
+        self.assertTrue(all(0 < r['score'] <= 1 for r in report))
+
+    def test_fixed_openings_unfair(self):
+        agenda = ltx.build_conference_agenda(
+            self.conf_plan['nodes'], cycles=4, fairness='fixed')
+        report = ltx.prime_time_report({**self.conf_plan, 'segments': agenda})
+        n0 = next(r for r in report if r['nodeId'] == 'N0')
+        self.assertEqual(n0['openings'], 4)
+        # Fixed order: N0 always presents first, so it tops the report.
+        self.assertEqual(report[0]['nodeId'], 'N0')
+
+    # ── upgrade_plan_to_v3 ─────────────────────────────────────────────────
+
+    def test_upgrade_v3_flag(self):
+        v3 = ltx.upgrade_plan_to_v3(self.conf_plan, delays={'N0|N1': 900})
+        self.assertEqual(v3['v'], 3)
+        self.assertEqual(v3['planVersion'], 1)
+        self.assertEqual(v3['delays'], {'N0|N1': 900})
+
+    def test_upgrade_non_mutating(self):
+        before = json.dumps(self.conf_plan, sort_keys=True)
+        ltx.upgrade_plan_to_v3(self.conf_plan, delays={'N0|N1': 900})
+        self.assertEqual(json.dumps(self.conf_plan, sort_keys=True), before)
+        self.assertEqual(self.conf_plan['v'], 2)
+        self.assertNotIn('delays', self.conf_plan)
+
+    def test_v3_plan_id_infix(self):
+        v2_id = make_plan_id(self.conf_plan)
+        v3 = ltx.upgrade_plan_to_v3(self.conf_plan, delays={'N0|N1': 900})
+        v3_id = make_plan_id(v3)
+        self.assertIn('-v3-', v3_id)
+        self.assertIn('-v2-', v2_id)
+        # v2 planId unchanged post-upgrade (frozen hash).
+        self.assertEqual(make_plan_id(self.conf_plan), v2_id)
+
+    def test_upgrade_dataclass_input(self):
+        plan = create_plan(delay=860)
+        v3 = ltx.upgrade_plan_to_v3(plan, delays={'N0|N1': 860})
+        self.assertEqual(v3['v'], 3)
+        self.assertEqual(plan.v, 2)  # dataclass untouched
+
+    # ── _plan_as_dict freeze (v2 planId compatibility) ─────────────────────
+
+    def test_plan_as_dict_no_speaker_key_when_unset(self):
+        from interplanet_ltx._core import _plan_as_dict
+        plan = create_plan(delay=860)
+        d = _plan_as_dict(plan)
+        for seg in d['segments']:
+            self.assertNotIn('speaker', seg)
+            self.assertNotIn('label', seg)
+            self.assertEqual(list(seg.keys()), ['type', 'q'])
+
+    def test_plan_as_dict_includes_speaker_label_when_set(self):
+        from interplanet_ltx._core import _plan_as_dict
+        plan = create_plan(segments=[{'type': 'TX', 'q': 2}])
+        plan.segments[0].speaker = 'N1'
+        plan.segments[0].label = 'Mars'
+        d = _plan_as_dict(plan)
+        self.assertEqual(list(d['segments'][0].keys()),
+                         ['type', 'q', 'speaker', 'label'])
+
+    # ── per-attendee ICS (Story 71.3) ──────────────────────────────────────
+
+    def test_no_arg_ics_single_vevent_and_stable(self):
+        plan = create_plan(start='2026-08-01T12:34:56Z', delay=860)
+        ics1 = generate_ics(plan)
+        ics2 = generate_ics(plan)
+        self.assertEqual(ics1.count('BEGIN:VEVENT'), 1)
+
+        def strip_stamp(s):
+            return '\r\n'.join(l for l in s.split('\r\n')
+                               if not l.startswith('DTSTAMP:'))
+        self.assertEqual(strip_stamp(ics1), strip_stamp(ics2))
+
+    def test_viewer_ics_event_per_segment(self):
+        ics = generate_ics(self.conf_plan, viewer_node_id='N1')
+        self.assertEqual(ics.count('BEGIN:VEVENT'),
+                         len(self.conf_plan['segments']))
+
+    def test_viewer_ics_properties(self):
+        ics = generate_ics(self.conf_plan, viewer_node_id='N1')
+        self.assertIn('LTX-VIEWER:N1', ics)
+        self.assertIn('Mars Field Report — you present', ics)
+        self.assertIn(
+            'Opening Address — Earth HQ, arriving after 15 min light-time', ics)
+        self.assertIn('LTX-SPEAKER:N0', ics)
+
+    def test_viewer_ics_pair_delay_lines(self):
+        v3 = ltx.upgrade_plan_to_v3(self.conf_plan, delays={'N1|N3': 700})
+        ics = generate_ics(v3, viewer_node_id='N1')
+        self.assertIn('LTX-DELAY;PAIR=N1|N3:ONEWAY-ASSUMED=700', ics)
+
 
 if __name__ == '__main__':
     unittest.main()

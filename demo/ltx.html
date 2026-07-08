@@ -11,7 +11,7 @@
 <!-- Preconnect for domains used in the critical path -->
 <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
 <!-- Preload critical local assets -->
-<link rel="preload" href="planet-time.js?v=1.16.0" as="script">
+<link rel="preload" href="planet-time.js?v=1.17.0" as="script">
 <link rel="icon" type="image/x-icon" href="assets/favicon.ico">
 <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16x16.png">
@@ -22,8 +22,8 @@
       media="print" onload="this.media='all'" crossorigin="anonymous"
       referrerpolicy="no-referrer">
 <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"></noscript>
-<script src="assets/i18n.js?v=1.16.0"></script>
-<script src="planet-time.js?v=1.16.0"></script>
+<script src="assets/i18n.js?v=1.17.0"></script>
+<script src="planet-time.js?v=1.17.0"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -169,6 +169,8 @@ html.light-mode .buffer-idle-tips{background:rgba(0,0,0,.03)}
 
 /* Timeline */
 .tl-row{display:flex;align-items:center;gap:.55rem;padding:.4rem .55rem;border-radius:8px;font-size:.77rem;transition:background .2s}
+.tl-arrival{font-size:.68rem;color:#ff9800;white-space:nowrap}
+html.light-mode .tl-arrival{color:#b26a00}
 .tl-row.current{background:rgba(255,255,255,.08);font-weight:700}
 .tl-row.done{opacity:.4}
 .tl-badge{font-size:.63rem;font-weight:700;letter-spacing:.05em;padding:.12rem .38rem;border-radius:4px;color:#fff;min-width:100px;text-align:center;flex-shrink:0}
@@ -332,6 +334,11 @@ html.light-mode .tpl-card.selected{background:rgba(53,99,200,.06)}
     <p class="hint" id="setup-delay-hint" style="margin-top:.5rem">
       Typical one-way delays: Earth→Mars 180–1350 s · Earth→Moon ~1.3 s · Earth→Jupiter 2640–2880 s
     </p>
+    <details id="pair-delay-wrap" hidden>
+      <summary id="pair-delay-summary" class="hint" style="cursor:pointer"></summary>
+      <p class="hint" id="pair-delay-hint" style="margin:.4rem 0 .5rem"></p>
+      <div id="pair-delay-list" role="list" aria-label="Between-site signal delays"></div>
+    </details>
   </div>
 
   <!-- Segment builder -->
@@ -1064,6 +1071,108 @@ const DEFAULT_NODES = [
   { id:'N1', name:'Mars Hab-01', role:'PARTICIPANT',  delay:900, location:'mars'  },
 ];
 
+// ── Epic 71 helpers: canonical JSON, sync SHA-256, pair delays, rotation ─────
+
+// RFC 8785-style canonical JSON (sorted keys, no whitespace) — mirrors SDK.
+function _canonicalJSON(obj) {
+  if (obj === null || typeof obj !== 'object') return JSON.stringify(obj);
+  if (Array.isArray(obj)) return '[' + obj.map(_canonicalJSON).join(',') + ']';
+  return '{' + Object.keys(obj).sort().map(k =>
+    JSON.stringify(k) + ':' + _canonicalJSON(obj[k])).join(',') + '}';
+}
+
+// Compact synchronous SHA-256 (hex) for v3 plan ids — demo has no async paths.
+function _sha256Hex(str) {
+  const K = [0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+             0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+             0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+             0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+             0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+             0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+             0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+             0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+  let H = [0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+  const utf8 = unescape(encodeURIComponent(str));
+  const len = utf8.length, bitLen = len * 8;
+  const withPad = len + 9;
+  const blocks = Math.ceil(withPad / 64);
+  const m = new Uint8Array(blocks * 64);
+  for (let i = 0; i < len; i++) m[i] = utf8.charCodeAt(i);
+  m[len] = 0x80;
+  for (let i = 0; i < 4; i++) m[m.length - 1 - i] = (bitLen >>> (8 * i)) & 0xff;
+  const w = new Array(64);
+  const rr = (x, n) => (x >>> n) | (x << (32 - n));
+  for (let b = 0; b < blocks; b++) {
+    const off = b * 64;
+    for (let t = 0; t < 16; t++) {
+      w[t] = (m[off+t*4]<<24) | (m[off+t*4+1]<<16) | (m[off+t*4+2]<<8) | m[off+t*4+3];
+    }
+    for (let t = 16; t < 64; t++) {
+      const s0 = rr(w[t-15],7) ^ rr(w[t-15],18) ^ (w[t-15]>>>3);
+      const s1 = rr(w[t-2],17) ^ rr(w[t-2],19) ^ (w[t-2]>>>10);
+      w[t] = (w[t-16] + s0 + w[t-7] + s1) | 0;
+    }
+    let [a,bb,c,d,e,f,g,h] = H;
+    for (let t = 0; t < 64; t++) {
+      const S1 = rr(e,6) ^ rr(e,11) ^ rr(e,25);
+      const ch = (e & f) ^ (~e & g);
+      const t1 = (h + S1 + ch + K[t] + w[t]) | 0;
+      const S0 = rr(a,2) ^ rr(a,13) ^ rr(a,22);
+      const mj = (a & bb) ^ (a & c) ^ (bb & c);
+      const t2 = (S0 + mj) | 0;
+      h = g; g = f; f = e; e = (d + t1) | 0; d = c; c = bb; bb = a; a = (t1 + t2) | 0;
+    }
+    H = [ (H[0]+a)|0, (H[1]+bb)|0, (H[2]+c)|0, (H[3]+d)|0,
+          (H[4]+e)|0, (H[5]+f)|0, (H[6]+g)|0, (H[7]+h)|0 ];
+  }
+  return H.map(x => (x >>> 0).toString(16).padStart(8, '0')).join('');
+}
+
+// One-way delay between two nodes (LTX-SPECIFICATION.md §3.7): v3 pair matrix
+// wins; fallback = sum of HOST-relative delays (HOST pairs → node delay).
+function pairDelaySecs(cfg, idA, idB) {
+  if (idA === idB) return 0;
+  const key = [idA, idB].sort().join('|');
+  if (cfg.delays && typeof cfg.delays[key] === 'number') return cfg.delays[key];
+  const nodes = cfg.nodes || [];
+  const a = nodes.find(n => n.id === idA);
+  const b = nodes.find(n => n.id === idB);
+  if (!a || !b) return 0;
+  const hostId = nodes[0]?.id;
+  if (idA === hostId) return b.delay || 0;
+  if (idB === hostId) return a.delay || 0;
+  return (a.delay || 0) + (b.delay || 0);
+}
+
+// Fair rotation agenda (LTX-SPECIFICATION.md §14.4): across N cycles with N
+// presenting nodes, each node opens exactly once. Mirrors SDK buildConferenceAgenda.
+function buildRotationSegments(nodes, opts) {
+  opts = opts || {};
+  const presenting = nodes.filter(n => n.role !== 'OBSERVER');
+  const cycles = opts.cycles || presenting.length;
+  const blockQ = opts.blockQ || 3;
+  const labels = opts.labels || {};
+  const segs = [{ type: 'PLAN_CONFIRM', q: 2 }];
+  const n = presenting.length;
+  for (let c = 0; c < cycles; c++) {
+    for (let i = 0; i < n; i++) {
+      const node = presenting[(c + i) % n];
+      const seg = { type: 'TX', q: blockQ, speaker: node.id };
+      if (labels[node.id]) seg.label = labels[node.id];
+      segs.push(seg);
+    }
+  }
+  segs.push({ type: 'MERGE', q: 2 }, { type: 'BUFFER', q: 1 });
+  return segs;
+}
+
+const _ROUNDTABLE_NODES = [
+  {id:'N0',name:'Earth Mission',  role:'HOST',        delay:0,    location:'earth'},
+  {id:'N1',name:'Mars Colony',    role:'PARTICIPANT', delay:900,  location:'mars'},
+  {id:'N2',name:'Lunar Base',     role:'PARTICIPANT', delay:2,    location:'moon'},
+  {id:'N3',name:'Jupiter Station',role:'PARTICIPANT', delay:2700, location:'other'},
+];
+
 const TEMPLATES = [
   {
     id: 'earth-mars-standard',
@@ -1201,6 +1310,19 @@ const TEMPLATES = [
         {type:'CAUCUS', q:6},
         {type:'MERGE',  q:4},
       ],
+    },
+  },
+  {
+    id: 'fair-roundtable',
+    name: 'Fair Rotation Roundtable',
+    desc: '4 sites × 4 cycles · Every site opens exactly once (fair rotation)',
+    cfg: {
+      v:2, title:'Fair Rotation Roundtable', quantum:5, mode:'LTX-ASYNC',
+      nodes: _ROUNDTABLE_NODES,
+      segments: buildRotationSegments(_ROUNDTABLE_NODES, {
+        cycles: 4, blockQ: 2,
+        labels: { N0:'Earth Update', N1:'Mars Update', N2:'Lunar Update', N3:'Jupiter Update' },
+      }),
     },
   },
   {
@@ -1413,6 +1535,62 @@ function getCfgNodes() {
   return nodes.length ? nodes : DEFAULT_NODES.slice();
 }
 
+// ── Between-site pair delays (Epic 71 · LTX-SPECIFICATION.md §3.7.2) ─────────
+// Edited pairs are stored here and emitted as a v3 `delays` matrix; untouched
+// pairs use the safe automatic estimate (sum of each site's delay from host).
+
+let _pairDelays = {};   // "N1|N2" → seconds (only user-edited pairs)
+
+function renderPairDelayEditor() {
+  const wrap = document.getElementById('pair-delay-wrap');
+  const list = document.getElementById('pair-delay-list');
+  if (!wrap || !list) return;
+  const nodes = getCfgNodes();
+  const remote = nodes.slice(1);
+  if (remote.length < 2) { wrap.hidden = true; _pairDelays = {}; return; }
+  wrap.hidden = false;
+  document.getElementById('pair-delay-summary').textContent = getT('ltx.setup.pair_delays');
+  document.getElementById('pair-delay-hint').textContent = getT('ltx.setup.pair_delays_hint');
+  list.innerHTML = '';
+  // Drop stored pairs whose nodes no longer exist.
+  const validIds = new Set(nodes.map(n => n.id));
+  Object.keys(_pairDelays).forEach(k => {
+    const [a, b] = k.split('|');
+    if (!validIds.has(a) || !validIds.has(b)) delete _pairDelays[k];
+  });
+  for (let i = 0; i < remote.length; i++) {
+    for (let j = i + 1; j < remote.length; j++) {
+      const a = remote[i], b = remote[j];
+      const key = [a.id, b.id].sort().join('|');
+      const fallback = (a.delay || 0) + (b.delay || 0);
+      const row = document.createElement('div');
+      row.className = 'node-row';
+      row.setAttribute('role', 'listitem');
+      const lbl = document.createElement('span');
+      lbl.className = 'node-delay-lbl';
+      lbl.style.flex = '1';
+      lbl.textContent = `${a.name} ↔ ${b.name}`;
+      const inp = document.createElement('input');
+      inp.type = 'number';
+      inp.className = 'node-delay-inp pair-delay-inp';
+      inp.min = 0; inp.max = 86400; inp.step = 1;
+      inp.dataset.pairKey = key;
+      inp.value = String(_pairDelays[key] !== undefined ? _pairDelays[key] : fallback);
+      inp.setAttribute('aria-label', `One-way delay between ${a.name} and ${b.name} (seconds)`);
+      inp.addEventListener('input', () => {
+        const v = parseInt(inp.value);
+        if (Number.isFinite(v) && v >= 0 && v !== fallback) _pairDelays[key] = v;
+        else delete _pairDelays[key];
+      });
+      const unit = document.createElement('span');
+      unit.className = 'node-delay-lbl';
+      unit.textContent = getT('ltx.setup.one_way');
+      row.appendChild(lbl); row.appendChild(inp); row.appendChild(unit);
+      list.appendChild(row);
+    }
+  }
+}
+
 // ── Segment computation ───────────────────────────────────────────────────────
 
 function computeSegs(cfg) {
@@ -1438,6 +1616,12 @@ function makePlanId(cfg) {
   const nodeStr  = nodes.length > 1
     ? nodes.slice(1).map(n => n.name.replace(/\s+/g,'').toUpperCase().slice(0,4)).join('-').slice(0,16)
     : (cfg.rxName || 'RX').replace(/\s+/g,'').toUpperCase().slice(0,8);
+  if ((cfg.v || 2) >= 3) {
+    // v3: SHA-256 over canonical JSON (LTX-SPECIFICATION.md §4.5) — matches SDKs.
+    const digest = _sha256Hex(_canonicalJSON(cfg));
+    return `LTX-${date}-${hostStr}-${nodeStr}-v3-${digest.slice(0,8)}`;
+  }
+  // FROZEN v2 path (LTX-SPECIFICATION.md §4.3).
   const raw = JSON.stringify(cfg);
   let h = 0;
   for (let i = 0; i < raw.length; i++) h = (Math.imul(31, h) + raw.charCodeAt(i)) >>> 0;
@@ -1523,7 +1707,7 @@ function makeNodeRow(node, idx) {
   rm.className = 'node-rm';
   rm.setAttribute('aria-label', `Remove node ${node.name}`);
   rm.innerHTML = '<i class="fa-solid fa-xmark" aria-hidden="true"></i>';
-  rm.addEventListener('click', () => row.remove());
+  rm.addEventListener('click', () => { row.remove(); renderPairDelayEditor(); });
 
   row.appendChild(delayInp);
   row.appendChild(delayLbl);
@@ -1551,7 +1735,7 @@ function cfgFromForm() {
     segs.push({ type, q });
   });
   if (!segs.length) { alert('Add at least one segment.'); return null; }
-  return {
+  const cfg = {
     v:        2,
     title:    document.getElementById('f-title').value.trim() || 'LTX Meeting',
     start:    startISO,
@@ -1560,6 +1744,20 @@ function cfgFromForm() {
     nodes:    getCfgNodes(),
     segments: segs,
   };
+  // User-edited between-site delays make the plan v3 (delays is a v3-only
+  // field — LTX-SPECIFICATION.md §4.4; never injected into a v2 plan).
+  const validIds = new Set(cfg.nodes.map(n => n.id));
+  const delays = {};
+  Object.keys(_pairDelays).sort().forEach(k => {
+    const [a, b] = k.split('|');
+    if (validIds.has(a) && validIds.has(b)) delays[k] = _pairDelays[k];
+  });
+  if (Object.keys(delays).length) {
+    cfg.v = 3;
+    cfg.delays = delays;
+    cfg.planVersion = 1;
+  }
+  return cfg;
 }
 
 // ── Populate form from config ─────────────────────────────────────────────────
@@ -1584,6 +1782,8 @@ function populateForm(cfg) {
   nl.innerHTML = '';
   (c.nodes || DEFAULT_NODES).forEach((n, i) => nl.appendChild(makeNodeRow(n, i)));
   if (c.segments?.length) renderSegList(c.segments);
+  _pairDelays = Object.assign({}, c.delays || {});
+  renderPairDelayEditor();
 }
 
 // ── Segment list UI ───────────────────────────────────────────────────────────
@@ -2018,10 +2218,20 @@ function renderTimeline(cfg) {
       ? _getMultiTlNodes(seg.type, idx, cfg, seg)
       : getNodesLabel(seg.type, perspective, cfg, seg);
     const agendaTag = seg.label ? ` <span class="tl-agenda">${seg.label}</span>` : '';
+    // Viewer-perspective arrival (LTX-SPECIFICATION.md §14.3): another node's
+    // attributed segment reaches this viewer after the pair light-time.
+    let arrivalTag = '';
+    if (seg.speaker && _viewerNodeId && seg.speaker !== _viewerNodeId && seg.type === 'TX') {
+      const shiftS = pairDelaySecs(cfg, seg.speaker, _viewerNodeId);
+      if (shiftS > 0) {
+        const arrive = new Date(seg.start.getTime() + shiftS * 1000);
+        arrivalTag = ` <span class="tl-arrival">${getT('ltx.tl.arrives_at', { time: fmtUTC(arrive) })}</span>`;
+      }
+    }
     row.innerHTML =
       `<span class="tl-badge" style="background:${meta.color}">${label}</span>` +
       `<span class="tl-time">${fmtUTC(seg.start)}</span>` +
-      `<span class="tl-nodes">${nodesStr}${agendaTag}</span>` +
+      `<span class="tl-nodes">${nodesStr}${agendaTag}${arrivalTag}</span>` +
       `<span class="tl-dur">${seg.durMin}m</span>`;
     tl.appendChild(row);
   });
@@ -2366,7 +2576,7 @@ function generateLtxICS(cfg) {
   return [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//InterPlanet//LTX v1.12//EN',
+    'PRODID:-//InterPlanet//LTX v1.1//EN',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     'BEGIN:VEVENT',
@@ -2489,6 +2699,15 @@ document.getElementById('node-add').addEventListener('click', () => {
   nl.appendChild(makeNodeRow(
     { id:`N${idx}`, name:'', role:'PARTICIPANT', delay:0, location:'earth' }, idx
   ));
+  renderPairDelayEditor();
+});
+
+// Node names/delays feed the pair-delay editor labels and fallbacks.
+document.getElementById('node-list').addEventListener('input', e => {
+  if (e.target.classList.contains('node-name-inp') ||
+      e.target.classList.contains('node-delay-inp')) {
+    renderPairDelayEditor();
+  }
 });
 
 document.querySelectorAll('.mode-btn').forEach(btn => {

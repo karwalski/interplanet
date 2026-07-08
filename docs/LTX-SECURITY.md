@@ -1,8 +1,17 @@
 # LTX Security Architecture
 
-**Document status:** v1.0
-**Companion to:** LTX-SPECIFICATION.md v1.0
+**Document status:** v1.1 — 2026-07-07
+**Companion to:** LTX-SPECIFICATION.md v1.1
 **Classification:** Documentation artefact — reviewed before code implementation
+
+**Changelog v1.0 → v1.1**
+- §16.1 rule 7 removed (redundant: lexicographic key ordering already places `nodes` before `segments`).
+- §11 rewritten: freshness scopes split into session scope (keyed to the session *root* planId, surviving plan amendments) and global scope for session-independent bundles (KEY_BUNDLE, KEY_REVOCATION, release manifests) with a mandatory `issuedAt` max-age window — closes cross-session replay.
+- New §7.6: amendment-chain security (LTX-SPECIFICATION §6.4).
+- New §9.6: register and state-transition audit entry types.
+- §8.2: LTX-native Ed25519 BIB context added alongside HMAC.
+- §7: clarified that both the TRANSITIONAL JSON envelope and the CBOR COSE_Sign1 path use algorithm ID **-19 (Ed25519, RFC 9864)**; implementation comments reading "-19 = EdDSA" should read "-19 = Ed25519" (the polymorphic EdDSA identifier is the deprecated -8).
+- Draft statuses refreshed as of July 2026 (§2, §14, §21, §23, §25): bpsec-cose at -16; bp-safe revived as -01; sbam -00 expired unadopted.
 **Keywords:** LTX, interplanetary communication, BPSec, DTKA, COSE, Ed25519,
 delay-tolerant networking, session security, zero-interactive cryptography
 
@@ -123,14 +132,14 @@ Bundle Protocol v7 (RFC 9171). Defines BCBs and BIBs.
 **BCB** — Bundle Confidentiality Block (BPSec, RFC 9172 §3.8). A security block
 that provides encryption of a target block within a DTN bundle.
 
-**BP-SAFE** — Bundle Protocol Security Associations with Few Exchanges
-(`draft-sipos-dtn-bp-safe-00`). An individual submission by Brian Sipos (June 2025,
-expired December 2025). NOT an adopted IETF working group document. Its purpose —
-negotiating scoped security associations — remains important, but no standardised
-alternative exists yet. See §14.
+**BP-SAFE** — Bundle Protocol (BP) Security Associations with Few Exchanges
+(`draft-sipos-dtn-bp-safe`). An individual submission by Brian Sipos. Version -00
+(June 2025) expired December 2025; **revived as -01 on 10 April 2026** (expires
+12 October 2026), intended status Standards Track. Still NOT an adopted IETF
+working group document. See §14.
 
-**BPSec COSE Context** — `draft-ietf-dtn-bpsec-cose`. At version -15 (March 2026),
-authored by Brian Sipos. WG state: "Consensus: Waiting for Write-Up." Defines
+**BPSec COSE Context** — `draft-ietf-dtn-bpsec-cose`. At version **-16 (June 2026)**,
+authored by Brian Sipos; Standards Track, still pre-RFC. Defines
 Security Context ID 3 (unified COSE-based context for both BIB and BCB). As of v15,
 EdDSA (-19) is permitted but has been removed from the mandatory interoperability
 profile; the mandatory profile uses ES-P384 (-51) / ES-P512 (-52) for ECC integrity
@@ -153,7 +162,7 @@ Birrane). The draft was never adopted as a DTN working group item. See §6 for
 current alternatives.
 
 **HOST** — The LTX node with role HOST; reference clock and session plan authority.
-Defined in LTX-SPECIFICATION.md §2.2.
+Defined in LTX-SPECIFICATION.md §3.1.
 
 **LTX Bundle** — A DTN bundle carrying an LTX payload (SessionPlan, TX window
 package, readiness signal, action register entry, etc.).
@@ -164,8 +173,13 @@ bound to an LTX node for the scope of a session.
 **SessionPlan** — The canonical JSON document defining the structure, timing, and
 participants of an LTX session. Defined in LTX-SPECIFICATION.md §4.
 
-**planId** — The deterministic SHA-256-derived session plan identifier. Defined in
-LTX-SPECIFICATION.md §4.2.
+**planId** — The deterministic session plan identifier. v2 plans use the frozen
+polynomial-hash form; v3 plans use SHA-256 over canonical JSON. Defined in
+LTX-SPECIFICATION.md §4.3 and §4.5.
+
+**sessionRootPlanId** — The planId of the first (unamended) plan of a session.
+Remains the session identity — and the freshness scope key (§11) — across plan
+amendments (LTX-SPECIFICATION §6.4).
 
 **Merkle Root** — The root hash of a Merkle tree over the audit log entries. Allows
 O(log n) inclusion and consistency proofs. See §9.
@@ -624,6 +638,32 @@ The `ltx:sig` field is computed over the `ltx:plan` value in canonical JSON form
 (not over the outer envelope). Implementations MUST migrate to COSE_Sign1 at the
 earliest opportunity; the JSON fallback is TRANSITIONAL status only.
 
+> **Algorithm ID in both envelopes.** The TRANSITIONAL JSON envelope and the CBOR
+> COSE_Sign1 envelope both use algorithm ID **-19 (Ed25519, per RFC 9864)**. The
+> shipped JSON envelope is byte-frozen: its protected header is the canonical JSON
+> of `{"alg": -19}` and MUST NOT change. Implementation comments describing -19 as
+> "EdDSA" should read "Ed25519" — the polymorphic EdDSA identifier is the
+> deprecated **-8** and MUST NOT be used in either envelope.
+
+## 7.6 Amendment-Chain Security
+
+Plan amendments (LTX-SPECIFICATION §6.4) form a hash chain of independently signed
+plans:
+
+- Each amendment carries `planVersion` (monotonic, +1 per amendment) and
+  `prevPlanHash = SHA-256(canonicalJSON(predecessor plan))`. The hash input is the
+  RFC 8785 canonical JSON of §16 — **never** the legacy v2 polynomial hash, which is
+  neither order-stable nor collision-resistant.
+- Every link MUST be signed by the HOST NIK under §7.2. Verification of a chain
+  checks, per link: HOST signature validity, `planVersion` increment of exactly 1,
+  and `prevPlanHash` equality with the recomputed predecessor hash.
+- A node accepts an amendment only if the chain verifiably terminates at the plan
+  the node last locked. Chains that skip links, fork, or carry non-HOST signatures
+  are rejected and logged (LTX-SPECIFICATION §5.5).
+- Freshness continuity: sequence numbers remain scoped to the **sessionRootPlanId**
+  (§2, §11) across amendments. An amendment MUST NOT reset any replay window.
+- Each accepted amendment is recorded as an `amendment` audit-log entry (§9.6).
+
 ---
 
 ## 8. Bundle Integrity — BPSec BIBs
@@ -648,7 +688,7 @@ key is acceptable.
 Asymmetric signatures via COSE. Provides non-repudiation; relay nodes can verify
 BIBs using pre-positioned public keys without holding a shared secret.
 
-> **Implementation warning:** As of March 2026, **no production DTN stack implements
+> **Implementation warning:** As of July 2026, **no production DTN stack implements
 > Context ID 3**. ION, HDTN, and BSL all implement Context IDs 1 and 2 only.
 > Adding Context ID 3 support requires integration of a COSE library and PKI
 > infrastructure; this work has not been done in any released DTN implementation.
@@ -666,9 +706,20 @@ BIBs using pre-positioned public keys without holding a shared secret.
 > Security (document 734x5r2, February 2025) that profiles RFC 9172 and references
 > the COSE context draft but defines no EdDSA-specific specification.
 
-**Recommended approach for LTX v1.0 security implementation:**
+**LTX-native Ed25519 BIB context.** In addition to the two standard contexts, LTX
+defines an application-layer BIB variant signed with the originating node's NIK
+(Ed25519, alg -19) instead of an HMAC. Identifier: `securityContext: "ltx-ed25519"`
+(HMAC default: `"ltx-hmac-sha256"`). It provides per-bundle non-repudiation without
+a pre-shared pairwise key and verifies against the pre-positioned NIC set (§6.4).
+It is an LTX application construct, not a registered BPSec context; bundles crossing
+a standards-conformant BPSec boundary still require Context ID 1 protection at the
+relay layer. Receivers MUST reject a BIB whose declared context does not match its
+verification method (context-confusion defence).
+
+**Recommended approach for LTX v1.1 security implementation:**
 Use Context ID 1 (HMAC-SHA2) for relay-layer bundle integrity (symmetric key per
-session) and COSE_Sign1 envelopes (§7) for SessionPlan and artefact non-repudiation.
+session), the LTX-native Ed25519 BIB where per-bundle non-repudiation is required,
+and COSE_Sign1 envelopes (§7) for SessionPlan and artefact non-repudiation.
 Migrate BIBs to Context ID 3 once the draft achieves RFC status and implementations
 are available.
 
@@ -783,6 +834,30 @@ Each entry is individually signed by the originating node's NIK. The leaf hash i
 computed over the serialised entry bytes (after signature is set). This allows
 per-entry attribution independent of the tree structure.
 
+### 9.6 Audit Entry Types
+
+The `type` field of a leaf entry (§9.5) takes one of the following registered values.
+All types share the §9.5 envelope (entryId, sessionId = sessionRootPlanId, nodeId,
+seq, content, timestamp, sig); unknown types MUST be preserved and flagged, never
+dropped.
+
+| Type | entryId prefix | Emitted by | Content |
+|------|----------------|-----------|---------|
+| `question` | `QST-` | Submitting node | text, urgency, intendedWindow (LTX-SPECIFICATION §9) |
+| `question_response` | `QST-` (references qid) | Responding node | response text, referenced qid, object version |
+| `action` | `ACT-` | Proposing node | description, owner, dueTimeUTC, originWindow (LTX-SPECIFICATION §10) |
+| `action_update` | `ACT-` (references aid) | Updating node | status/detail delta, incremented object version |
+| `amendment` | `AMD-` | Each accepting node | new planId, planVersion, prevPlanHash (§7.6) |
+| `state_transition` | `STA-` | Local session engine | from-state, to-state, triggering event (LTX-SPECIFICATION §5.2) |
+| `merge_snapshot` | `MRG-` | HOST | merged tree head, resolved register states (LTX-SPECIFICATION §8.4) |
+| `decision` | `DEC-` | HOST or steward | recorded decision text |
+
+Register state (questions, actions) is always a deterministic reduction over the
+ordered, verified log — LTX-SPECIFICATION §8.2. Signatures make each register entry
+individually attributable; the Merkle tree makes the register history tamper-evident
+as a whole. Entries losing a §8.2 conflict resolution remain in the log flagged
+`superseded`.
+
 ---
 
 ## 10. Per-Window Artefact Integrity
@@ -825,26 +900,55 @@ Upon receipt of a TX window package, the receiving node MUST:
 
 ## 11. Freshness Markers
 
-### 11.1 Per-Node Sequence Numbers
+### 11.1 Freshness Scopes
 
-Every LTX bundle originating from a node MUST include a freshness marker:
+Two scopes exist. Every LTX bundle type belongs to exactly one.
+
+**Session scope** — all bundles belonging to a session (SessionPlan distribution,
+TX window packages, readiness signals, register entries, overrides):
 
 ```json
 {
-  "planId": "<session-plan-id>",
+  "planId": "<sessionRootPlanId>",
   "nodeId": "<originating-node-id>",
   "seq":    42
 }
 ```
 
-Sequence numbers are scoped to `(planId, nodeId)`. They MUST start at 1 and increment
-monotonically per bundle.
+Sequence numbers are scoped to `(sessionRootPlanId, nodeId)`. They MUST start at 1
+and increment monotonically per bundle. The scope key is the session **root**
+planId: plan amendments (§7.6) MUST NOT reset or fork the sequence space.
+
+**Global scope** — session-independent bundles: `KEY_BUNDLE`, `KEY_REVOCATION`,
+release manifests (§17). These exist outside any planId, so a per-session scope
+cannot protect them — a KEY_BUNDLE captured in one session could otherwise be
+replayed before a later one. Global-scope bundles carry:
+
+```json
+{
+  "senderNodeId": "<originating-node-id>",
+  "msgType":      "KEY_BUNDLE",
+  "seq":          7,
+  "issuedAt":     "<ISO 8601 UTC>"
+}
+```
+
+- Sequence numbers are scoped to `(senderNodeId, msgType)`, monotonic from 1,
+  persisted independently of any session state.
+- `issuedAt` is REQUIRED and MUST be covered by the bundle signature. Receivers
+  MUST reject global-scope bundles older than the configured max age
+  (RECOMMENDED default: 30 days — chosen to exceed the longest conjunction
+  blackout so legitimately delayed bundles survive, while bounding the replay
+  window for an attacker who has captured a bundle and suppressed its delivery).
 
 ### 11.2 Replay Detection
 
-Receiving nodes MUST maintain a freshness window per `(planId, nodeId)` pair:
+Receiving nodes MUST maintain a freshness window per scope key (`(sessionRootPlanId,
+nodeId)` or `(senderNodeId, msgType)`):
 - Track the highest sequence number seen
 - Reject (and log) any bundle whose sequence number is not greater than the highest seen
+- For global-scope bundles, additionally reject (and log) any bundle whose
+  `issuedAt` exceeds the max-age window
 - The freshness window MUST be persisted across restarts
 
 ### 11.3 Sequence Number Gaps
@@ -938,12 +1042,15 @@ session Merkle audit log and the final session artefact package.
 
 ### 14.1 Status of BP-SAFE
 
-`draft-sipos-dtn-bp-safe-00` ("Bundle Protocol Security Associations with Few
-Exchanges") is an **individual submission** by Brian Sipos, submitted June 4, 2025
-and **expired December 6, 2025**. It was **never adopted** by the IETF DTN working
-group and has no RFC stream assignment. Its design — negotiating scoped SAs to
-amortise asymmetric-key operation costs — remains conceptually important, but
-LTX implementations MUST NOT treat BP-SAFE as an established standard.
+`draft-sipos-dtn-bp-safe` ("Bundle Protocol (BP) Security Associations with Few
+Exchanges") is an **individual submission** by Brian Sipos. Version -00 (June 2025)
+expired December 2025; the draft was **revived as -01 on 10 April 2026** (expires
+12 October 2026, intended status Standards Track). It has still **not been adopted**
+by the IETF DTN working group and has no RFC stream assignment. Its design —
+negotiating scoped SAs to amortise asymmetric-key operation costs — remains
+conceptually important and is now under active revision again, but LTX
+implementations MUST NOT treat BP-SAFE as an established standard. Monitor for WG
+adoption (R21, §23).
 
 ### 14.2 Interim Security Association Approach
 
@@ -1020,11 +1127,15 @@ canonical form. Deviation causes signature verification failure.
 5. **String escaping:** only mandatory JSON escape sequences; no unnecessary Unicode
    escapes
 6. **Array ordering:** preserved as specified (arrays are not sorted)
-7. **Top-level key ordering:** `"nodes"` MUST appear before `"segments"` in the
-   SessionPlan root object (existing conformance requirement)
 
 These rules are consistent with RFC 8785 (JSON Canonicalisation Scheme, JCS).
 Implementations SHOULD use a JCS-compliant library.
+
+> **v1.0 rule 7 removed.** v1.0 additionally required `"nodes"` to appear before
+> `"segments"` in the root object. Rule 3 already guarantees this (`nodes` sorts
+> before `segments` lexicographically), so the rule was redundant and misleadingly
+> implied canonical output could carry bespoke ordering constraints. It has been
+> deleted; rule 3 is the only ordering rule.
 
 ### 16.2 Canonical JSON Example (SessionPlan fragment)
 
@@ -1032,7 +1143,7 @@ Implementations SHOULD use a JCS-compliant library.
 {"mode":"LTX","nodes":[{"delay":860,"id":"N1","location":"mars","name":"Mars Hab-02","role":"PARTICIPANT"},{"delay":0,"id":"N0","location":"earth","name":"Earth HQ","role":"HOST"}],"quantum":5,"segments":[{"q":2,"type":"PLAN_CONFIRM"}],"start":"2026-03-15T14:00:00.000Z","title":"Mars Mission Alpha","v":2}
 ```
 
-Note: no spaces, keys sorted, `"nodes"` before `"segments"`.
+Note: no spaces, keys sorted lexicographically (which places `"nodes"` before `"segments"`).
 
 ---
 
@@ -1228,11 +1339,12 @@ security blocks during processing, but the destination cannot verify whether blo
 were legitimately processed or maliciously dropped.
 
 **StrongBPSec mitigation:** The authors proposed StrongBPSec, formalized as
-`draft-tian-dtn-sbam-00` ("StrongBPSec Audit Mechanism"). It introduces **Bundle
-Report Blocks** — signed, verifiable blocks produced by intermediate nodes that
-process and discard source-added blocks, maintaining a verifiable ledger of
-modifications. LTX implementations SHOULD track this draft and adopt it once
-standardised.
+`draft-tian-dtn-sbam-00` ("Securing BPSec Against Arbitrary Packet Dropping",
+July 2025). It introduces **Bundle Report Blocks** — signed, verifiable blocks
+produced by intermediate nodes that process and discard source-added blocks,
+maintaining a verifiable ledger of modifications. As of July 2026 the draft
+remains at -00, **expired and unadopted**; no successor has been submitted. LTX
+implementations SHOULD continue to track it (R20, §23) but MUST NOT depend on it.
 
 ### 21.2 No Automated Protocol Verification
 
@@ -1334,16 +1446,16 @@ Implementation is deferred to a future sprint pending review of this document.
 | R15 | iCalendar S/MIME signing and COSE_Sign1 attachment | §15 |
 | R16 | Library signed release manifests | §17 |
 
-### Deferred (future work)
+### Deferred (future work) — dispositions re-evaluated 2026-07-07
 
-| Ref | Requirement | Notes |
-|-----|-------------|-------|
-| R17 | Migrate BIBs to Context ID 3 once `draft-ietf-dtn-bpsec-cose` achieves RFC status | §8.2 |
-| R18 | Post-quantum hybrid signatures (classical + LMS or FN-DSA) | §20 |
-| R19 | Tamarin/ProVerif formal model of LTX security composition | §21.2 |
-| R20 | StrongBPSec Bundle Report Blocks once `draft-tian-dtn-sbam` standardised | §21.1 |
-| R21 | BP-SAFE SA establishment once a successor to `draft-sipos-dtn-bp-safe` is adopted | §14 |
-| R22 | Distributed-CA per network segment (KeySpace model) for revocation improvement | §6.5 |
+| Ref | Requirement | Notes | 2026-07 disposition |
+|-----|-------------|-------|---------------------|
+| R17 | Migrate BIBs to Context ID 3 once `draft-ietf-dtn-bpsec-cose` achieves RFC status | §8.2 | Draft at -16 (June 2026), active, pre-RFC; still no production stack implements Context ID 3. **Remain deferred.** Interim non-repudiation gap now covered by the LTX-native Ed25519 BIB (§8.2). |
+| R18 | Post-quantum hybrid signatures (classical + LMS or FN-DSA) | §20 | No status change requiring action; FIPS 206 still pending. **Remain deferred**, algorithm agility preserved via §20.5. |
+| R19 | Tamarin/ProVerif formal model of LTX security composition | §21.2 | Scope has grown (amendment chains §7.6, dual freshness scopes §11, merge determinism). **Remain deferred but re-scoped**: the model should now include the amendment-chain and plan-lock v1.1 resolution rules. |
+| R20 | StrongBPSec Bundle Report Blocks once `draft-tian-dtn-sbam` standardised | §21.1 | Draft -00 expired unadopted, no successor. **Remain deferred; low expectation.** |
+| R21 | BP-SAFE SA establishment once `draft-sipos-dtn-bp-safe` is adopted | §14 | **Status change:** draft revived as -01 (April 2026), Standards Track intent. Still individual submission. **Remain deferred; monitor for WG adoption** — revisit at next roadmap review. |
+| R22 | Distributed-CA per network segment (KeySpace model) for revocation improvement | §6.5 | No status change. **Remain deferred.** |
 
 ---
 
@@ -1359,10 +1471,11 @@ symmetric BIBs for relay integrity, COSE_Sign1 at the LTX application layer for
 non-repudiation — provides meaningful security without waiting for Context ID 3
 implementations.
 
-**Standards in flux.** `draft-ietf-dtn-bpsec-cose` is at v15 but not yet RFC.
-`draft-sipos-dtn-bp-safe-00` has expired. `draft-tian-dtn-sbam-00` is early draft.
-LTX implementations must track these drafts; the architecture is designed to accommodate
-changes without protocol-level disruption via BPSec's pluggable context model.
+**Standards in flux.** As of July 2026: `draft-ietf-dtn-bpsec-cose` is at -16 but
+not yet RFC. `draft-sipos-dtn-bp-safe` has been revived at -01 (unadopted).
+`draft-tian-dtn-sbam-00` has expired unadopted. LTX implementations must track
+these drafts; the architecture is designed to accommodate changes without
+protocol-level disruption via BPSec's pluggable context model.
 
 **Review status.** This document is a documentation artefact prepared for qualified
 security review. No cryptographic scheme should be considered adopted or implemented
@@ -1423,13 +1536,13 @@ Post-quantum near-term option (§20).
 Challenges Using DTN Node IDs", RFC 9891, November 2025. First RFC publication
 for DTN key management-related standardisation.
 
-**[BPSec-COSE-15]** Sipos, B., "CBOR Object Signing and Encryption (COSE) for
-Bundle Protocol Security (BPSec)", `draft-ietf-dtn-bpsec-cose-15`, March 2026.
-WG state: Consensus/Waiting for Write-Up. Defines Security Context ID 3.
+**[BPSec-COSE-16]** Sipos, B., "Bundle Protocol Security (BPSec) COSE Context",
+`draft-ietf-dtn-bpsec-cose-16`, June 2026. Standards Track, pre-RFC. Defines
+Security Context ID 3.
 
-**[BP-SAFE-00]** Sipos, B., "Bundle Protocol Security Associations with Few
-Exchanges", `draft-sipos-dtn-bp-safe-00`, June 2025. Individual submission;
-expired December 2025; NOT adopted by DTN WG.
+**[BP-SAFE-01]** Sipos, B., "Bundle Protocol (BP) Security Associations with Few
+Exchanges (SAFE)", `draft-sipos-dtn-bp-safe-01`, April 2026. Individual
+submission; expires October 2026; NOT adopted by DTN WG.
 
 **[DTKA]** Burleigh, S.C. (JPL/Caltech), "Delay-Tolerant Key Administration",
 `draft-burleigh-dtnwg-dtka-02`, August 2018. Expired March 2019; not adopted.
@@ -1442,9 +1555,10 @@ IACR ePrint 2025/806.
 **[KEYSPACE]** Smailes, J. et al. (Oxford University), "KeySpace: PKI for
 Interplanetary Networks", arXiv:2408.10963, updated v5 February 2026.
 
-**[STRONGBPSEC]** Tian, H. et al., "StrongBPSec Audit Mechanism",
-`draft-tian-dtn-sbam-00`. Proposes Bundle Report Blocks to address the
-block-dropping vulnerability identified in [BPSEC-ANALYSIS].
+**[STRONGBPSEC]** Tian, H. et al., "Securing BPSec Against Arbitrary Packet
+Dropping (SBAM)", `draft-tian-dtn-sbam-00`, July 2025 (expired, unadopted).
+Proposes Bundle Report Blocks to address the block-dropping vulnerability
+identified in [BPSEC-ANALYSIS].
 
 **[BPSEC-ANALYSIS]** Dowling, B., Hale, B., Tian, H., and Wimalasiri, C.,
 "Cryptography is Rocket Science: Analysis of BPSec", IACR Communications in
@@ -1478,7 +1592,7 @@ Interplanetary Networks", IEEE/NASA CCAA Workshop, June 2023.
 **[ROMAILLER-FDTC]** Romailler, Y. and Pelissier, S., "Practical Fault Attack
 Against the Ed25519 and EdDSA Signature Schemes", FDTC 2017.
 
-**[LTX-SPEC]** InterPlanet Project, "LTX Specification v1.0",
+**[LTX-SPEC]** InterPlanet Project, "LTX Specification v1.1",
 `interplanet-github/docs/LTX-SPECIFICATION.md`.
 
 **[RFC9557]** IETF, "Date and Time on the Internet: Timestamps with Additional

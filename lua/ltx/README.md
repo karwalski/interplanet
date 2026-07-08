@@ -55,7 +55,7 @@ Creates a new v2 LTX plan config. Options:
 |---|---|---|
 | `title` | string | `"LTX Session"` |
 | `start` | string (ISO 8601) | 5 min from now |
-| `quantum` | number | `3` |
+| `quantum` | number | `5` |
 | `mode` | string | `"LTX"` |
 | `host_name` | string | `"Earth HQ"` |
 | `host_location` | string | `"earth"` |

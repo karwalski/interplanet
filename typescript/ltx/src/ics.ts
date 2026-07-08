@@ -1,11 +1,22 @@
 /**
  * @interplanet/ltx — ICS generation
+ * Story 71.3 — optional per-attendee export (LTX-SPECIFICATION.md §14.5)
  */
 
 import { upgradeConfig }   from './plan.js';
-import { computeSegments } from './segments.js';
+import { computeSegments, computeSegmentsFor } from './segments.js';
 import { makePlanId }      from './segments.js';
-import type { LtxPlan, LtxPlanV1 } from './types.js';
+import type { AnyLtxPlan, LtxPlan, LtxPlanV1 } from './types.js';
+
+/** Options for generateICS(). */
+export interface GenerateICSOptions {
+  /**
+   * Per-attendee export: one VEVENT per segment at this viewer's local
+   * arrival times (attributed segments shift by pairDelay(speaker, viewer)).
+   * Omit for the default single-VEVENT HOST-frame export.
+   */
+  viewerNodeId?: string;
+}
 
 function _fmtDT(dt: Date): string {
   return dt.toISOString().replace(/[-:.]/g, '').slice(0, 15) + 'Z';
@@ -18,9 +29,14 @@ function _toId(name: string): string {
 /**
  * Generate LTX-extended iCalendar (.ics) content for a plan.
  * Includes `LTX-NODE`, `LTX-DELAY`, `LTX-LOCALTIME` extension properties.
+ * With `options.viewerNodeId`, emits the per-attendee form (§14.5).
  */
-export function generateICS(cfg: LtxPlan | LtxPlanV1): string {
-  const c        = upgradeConfig(cfg);
+export function generateICS(
+  cfg: LtxPlan | LtxPlanV1 | AnyLtxPlan,
+  options: GenerateICSOptions = {},
+): string {
+  if (options.viewerNodeId) return _generateViewerICS(cfg, options.viewerNodeId);
+  const c        = upgradeConfig(cfg as LtxPlan | LtxPlanV1);
   const segs     = computeSegments(c);
   const start    = new Date(c.start);
   const end      = segs[segs.length - 1].end;
@@ -70,6 +86,67 @@ export function generateICS(cfg: LtxPlan | LtxPlanV1): string {
     `LTX-READINESS:CHECK=PT10M;REQUIRED=TRUE;FALLBACK=LTX-RELAY`,
     ...localLines,
     'END:VEVENT',
+    'END:VCALENDAR',
+  ].join('\r\n');
+}
+
+/** v3 pair-delay properties (LTX-SPECIFICATION.md §3.7.2, spec/ltx-spec.md §8.3). */
+function _pairDelayLines(c: LtxPlan): string[] {
+  const delays = (c as { delays?: Record<string, number> }).delays;
+  if (!delays) return [];
+  return Object.keys(delays).sort().map(
+    pair => `LTX-DELAY;PAIR=${pair}:ONEWAY-ASSUMED=${delays[pair]}`,
+  );
+}
+
+/**
+ * Per-attendee export (§14.5): one VEVENT per segment at the viewer's local
+ * arrival times. Attributed segments are shifted by pairDelay(speaker, viewer);
+ * summaries name the speaker and agenda label.
+ */
+function _generateViewerICS(cfg: LtxPlan | LtxPlanV1 | AnyLtxPlan, viewerNodeId: string): string {
+  const c      = upgradeConfig(cfg as LtxPlan | LtxPlanV1);
+  const segs   = computeSegmentsFor(c, viewerNodeId);
+  const planId = makePlanId(c);
+  const nodes  = c.nodes || [];
+  const viewer = nodes.find(n => n.id === viewerNodeId);
+  const dtstamp = _fmtDT(new Date());
+  const nameOf = (id: string) => nodes.find(n => n.id === id)?.name || id;
+
+  const events = segs.map((seg, i) => {
+    const base = seg.label || seg.type;
+    let summary: string;
+    if (seg.perspective === 'transmit') {
+      summary = `${base} — you present`;
+    } else if (seg.perspective === 'receive') {
+      summary = `${base} — ${nameOf(seg.speaker as string)}, arriving after ${Math.round(seg.arrivalOffsetS / 60)} min light-time`;
+    } else {
+      summary = `${base} (${c.title})`;
+    }
+    return [
+      'BEGIN:VEVENT',
+      `UID:${planId}-${viewerNodeId}-${i}@interplanet.live`,
+      `DTSTAMP:${dtstamp}`,
+      `DTSTART:${_fmtDT(seg.start)}`,
+      `DTEND:${_fmtDT(seg.end)}`,
+      `SUMMARY:${summary}`,
+      `DESCRIPTION:LTX ${seg.type} segment of "${c.title}" from the perspective of ${viewer?.name || viewerNodeId}`,
+      'LTX:1',
+      `LTX-PLANID:${planId}`,
+      `LTX-VIEWER:${viewerNodeId}`,
+      ...(seg.speaker ? [`LTX-SPEAKER:${seg.speaker}`] : []),
+      'END:VEVENT',
+    ].join('\r\n');
+  });
+
+  return [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//InterPlanet//LTX v1.1//EN',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    ...events,
+    ..._pairDelayLines(c),
     'END:VCALENDAR',
   ].join('\r\n');
 }

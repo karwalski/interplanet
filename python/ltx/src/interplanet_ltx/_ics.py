@@ -1,9 +1,12 @@
 """ICS generation for LTX plans — Python port of ltx-sdk.js generateICS."""
 
 from datetime import datetime, timezone
+from typing import Optional
 
 from ._models import LtxPlan
-from ._core import compute_segments, make_plan_id
+from ._core import (
+    _as_plan_dict, compute_segments, compute_segments_for, make_plan_id,
+)
 
 
 def _fmt_dt(iso: str) -> str:
@@ -15,12 +18,18 @@ def _to_id(name: str) -> str:
     return name.replace(' ', '-').upper()
 
 
-def generate_ics(plan: LtxPlan) -> str:
+def generate_ics(plan: LtxPlan, viewer_node_id: Optional[str] = None) -> str:
     """Generate LTX-extended iCalendar (.ics) content for a plan.
 
     Includes LTX-NODE, LTX-DELAY, LTX-LOCALTIME extension properties.
     Matches the output of ltx-sdk.js generateICS().
+
+    With ``viewer_node_id``, emits the per-attendee form (Story 71.3,
+    LTX-SPECIFICATION.md §14.5): one VEVENT per segment at that viewer's
+    local arrival times.
     """
+    if viewer_node_id:
+        return _generate_viewer_ics(plan, viewer_node_id)
     segs     = compute_segments(plan)
     start    = plan.start
     end      = segs[-1].end
@@ -79,6 +88,75 @@ def generate_ics(plan: LtxPlan) -> str:
         'LTX-READINESS:CHECK=PT10M;REQUIRED=TRUE;FALLBACK=LTX-RELAY',
         *local_time_lines,
         'END:VEVENT',
+        'END:VCALENDAR',
+    ]
+    return '\r\n'.join(lines)
+
+
+def _pair_delay_lines(c: dict) -> list:
+    """v3 pair-delay properties (LTX-SPECIFICATION.md §3.7.2), sorted by key."""
+    delays = c.get('delays')
+    if not delays:
+        return []
+    return [
+        f'LTX-DELAY;PAIR={pair}:ONEWAY-ASSUMED={delays[pair]}'
+        for pair in sorted(delays.keys())
+    ]
+
+
+def _generate_viewer_ics(plan, viewer_node_id: str) -> str:
+    """Per-attendee export (§14.5): one VEVENT per segment at the viewer's
+    local arrival times.  Attributed segments are shifted by
+    pair_delay(speaker, viewer); summaries name the speaker and agenda label.
+    """
+    c        = _as_plan_dict(plan)
+    segs     = compute_segments_for(c, viewer_node_id)
+    plan_id  = make_plan_id(c)
+    nodes    = c.get('nodes', [])
+    viewer   = next((n for n in nodes if n.get('id') == viewer_node_id), None)
+    now_stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+
+    def name_of(node_id: str) -> str:
+        node = next((n for n in nodes if n.get('id') == node_id), None)
+        return (node or {}).get('name') or node_id
+
+    viewer_name = (viewer or {}).get('name') or viewer_node_id
+    title = c.get('title', '')
+
+    events = []
+    for i, seg in enumerate(segs):
+        base = seg.get('label') or seg['type']
+        if seg['perspective'] == 'transmit':
+            summary = f'{base} — you present'
+        elif seg['perspective'] == 'receive':
+            summary = (f'{base} — {name_of(seg["speaker"])}, arriving after '
+                       f'{round(seg["arrivalOffsetS"] / 60)} min light-time')
+        else:
+            summary = f'{base} ({title})'
+        events.extend([
+            'BEGIN:VEVENT',
+            f'UID:{plan_id}-{viewer_node_id}-{i}@interplanet.live',
+            f'DTSTAMP:{now_stamp}',
+            f'DTSTART:{_fmt_dt(seg["start"])}',
+            f'DTEND:{_fmt_dt(seg["end"])}',
+            f'SUMMARY:{summary}',
+            (f'DESCRIPTION:LTX {seg["type"]} segment of "{title}" '
+             f'from the perspective of {viewer_name}'),
+            'LTX:1',
+            f'LTX-PLANID:{plan_id}',
+            f'LTX-VIEWER:{viewer_node_id}',
+            *([f'LTX-SPEAKER:{seg["speaker"]}'] if seg.get('speaker') else []),
+            'END:VEVENT',
+        ])
+
+    lines = [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'PRODID:-//InterPlanet//LTX v1.1//EN',
+        'CALSCALE:GREGORIAN',
+        'METHOD:PUBLISH',
+        *events,
+        *_pair_delay_lines(c),
         'END:VCALENDAR',
     ]
     return '\r\n'.join(lines)

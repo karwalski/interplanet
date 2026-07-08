@@ -813,6 +813,565 @@ const tsBcbEnc1 = ltx.encryptWindow({ x: 1 }, tsBcbKey);
 const tsBcbEnc2 = ltx.encryptWindow({ x: 1 }, tsBcbKey);
 check('nonce_uniqueness',                  tsBcbEnc1.nonce !== tsBcbEnc2.nonce);
 
+// ── Session state machine (Epic 68) ────────────────────────────────────────
+
+console.log('\n── session state machine ────────────────────');
+
+const smPlan = ltx.createPlan({
+  title: 'SM Test', start: '2026-08-01T12:00:00.000Z',
+  nodes: [
+    { id: 'N0', name: 'Earth HQ',  role: 'HOST',        delay: 0,   location: 'earth' },
+    { id: 'N1', name: 'Mars Hab',  role: 'PARTICIPANT', delay: 900, location: 'mars'  },
+    { id: 'N2', name: 'Luna Base', role: 'PARTICIPANT', delay: 2,   location: 'moon'  },
+  ],
+});
+const smPlanId = ltx.makePlanId(smPlan);
+const T0 = Date.parse('2026-08-01T11:00:00.000Z');
+
+let sm = ltx.createSession(smPlan, smPlanId);
+check('createSession state DRAFT',      sm.state === 'DRAFT');
+check('lockTimeout = 2×maxDelay',       sm.lockTimeoutMs === 2 * 900 * 1000);
+check('quorum default = all (2)',       sm.quorumThreshold === 2);
+check('sessionRootPlanId set',          sm.sessionRootPlanId === smPlanId);
+
+let sm_r = ltx.transition(sm, { type: 'START_LOCK', nowMs: T0 });
+check('START_LOCK → LOCKING',           sm_r.ctx.state === 'LOCKING');
+check('HOST auto-confirmed',            sm_r.ctx.confirmations.N0 === smPlanId);
+check('audit effect emitted',           sm_r.effects[0].kind === 'audit' && sm_r.effects[0].entry.to === 'LOCKING');
+
+// full lock path
+let sm_r2 = ltx.transition(sm_r.ctx, { type: 'PLAN_CONFIRM', nowMs: T0 + 4000, nodeId: 'N2', planId: smPlanId });
+check('partial confirm stays LOCKING',  sm_r2.ctx.state === 'LOCKING');
+let sm_r3 = ltx.transition(sm_r2.ctx, { type: 'PLAN_CONFIRM', nowMs: T0 + 1700000, nodeId: 'N1', planId: smPlanId });
+check('full confirm → LOCKED',          sm_r3.ctx.state === 'LOCKED');
+check('lock kind FULL',                 sm_r3.ctx.lock === 'FULL');
+let sm_r4 = ltx.transition(sm_r3.ctx, { type: 'SESSION_START', nowMs: T0 + 3600000 });
+check('SESSION_START → ACTIVE',         sm_r4.ctx.state === 'ACTIVE');
+
+// mismatch path
+let sm_rm = ltx.transition(sm_r.ctx, { type: 'PLAN_CONFIRM', nowMs: T0 + 5000, nodeId: 'N1', planId: 'LTX-XXXX-v2-00000000' });
+check('mismatch stays LOCKING',         sm_rm.ctx.state === 'LOCKING');
+check('mismatch recorded',              sm_rm.ctx.mismatched.includes('N1'));
+check('mismatch notify effect',         sm_rm.effects.some(e => e.kind === 'notify' && e.code === 'PLANID_MISMATCH'));
+
+// timeout boundary: 1 ms before → no-op; at timeout with quorum → DEGRADED quorum lock
+const smQ = ltx.createSession(smPlan, smPlanId, { quorum: 'majority' });
+check('majority quorum of 2 = 2',       smQ.quorumThreshold === 2);
+const smQ1 = ltx.createSession(smPlan, smPlanId, { quorum: 1 });
+let sm_q1 = ltx.transition(smQ1, { type: 'START_LOCK', nowMs: T0 });
+sm_q1 = ltx.transition(sm_q1.ctx, { type: 'PLAN_CONFIRM', nowMs: T0 + 10, nodeId: 'N2', planId: smPlanId });
+let sm_qPre = ltx.transition(sm_q1.ctx, { type: 'TICK', nowMs: T0 + 2 * 900 * 1000 - 1 });
+check('TICK before timeout no-op',      sm_qPre.ctx.state === 'LOCKING');
+let sm_qTo = ltx.transition(sm_q1.ctx, { type: 'TICK', nowMs: T0 + 2 * 900 * 1000 });
+check('TICK at timeout → DEGRADED',     sm_qTo.ctx.state === 'DEGRADED');
+check('quorum lock kind',               sm_qTo.ctx.lock === 'QUORUM');
+check('subset HOST first',              sm_qTo.ctx.subset[0] === 'N0');
+check('subset ascending delay',         sm_qTo.ctx.subset[1] === 'N2');
+check('escalate effect',                sm_qTo.effects.some(e => e.kind === 'escalate'));
+
+// DEGRADED recovery: late confirm completes full lock (§5.2)
+let sm_qRec = ltx.transition(sm_qTo.ctx, { type: 'PLAN_CONFIRM', nowMs: T0 + 2000000, nodeId: 'N1', planId: smPlanId });
+check('late confirm → LOCKED',          sm_qRec.ctx.state === 'LOCKED');
+check('recovered lock FULL',            sm_qRec.ctx.lock === 'FULL');
+
+// timeout without quorum
+let sm_sm2 = ltx.transition(ltx.createSession(smPlan, smPlanId), { type: 'START_LOCK', nowMs: T0 });
+let sm_noQ = ltx.transition(sm_sm2.ctx, { type: 'TICK', nowMs: T0 + 2 * 900 * 1000 });
+check('timeout no quorum → DEGRADED',   sm_noQ.ctx.state === 'DEGRADED');
+check('no lock kind',                   sm_noQ.ctx.lock === null);
+
+// HOST decisions from DEGRADED
+let sm_cont = ltx.transition(sm_qTo.ctx, { type: 'HOST_DECISION', nowMs: T0 + 2100000, decision: 'continue' });
+check('continue → ACTIVE',              sm_cont.ctx.state === 'ACTIVE');
+let sm_abrt = ltx.transition(sm_qTo.ctx, { type: 'HOST_DECISION', nowMs: T0 + 2100000, decision: 'abort' });
+check('abort → ABORTED',                sm_abrt.ctx.state === 'ABORTED');
+
+// delay violations (§5.4): boundaries exclusive — warn >120 s, degrade >300 s
+let sm_dv1 = ltx.transition(sm_r4.ctx, { type: 'DELAY_MEASURED', nowMs: T0 + 4000000, nodeId: 'N1', measuredDelayS: 1020 });
+check('dev=120 no warn',                sm_dv1.ctx.state === 'ACTIVE' && sm_dv1.effects.length === 0);
+let sm_dv2 = ltx.transition(sm_r4.ctx, { type: 'DELAY_MEASURED', nowMs: T0 + 4000000, nodeId: 'N1', measuredDelayS: 1021 });
+check('dev=121 warns',                  sm_dv2.effects.some(e => e.code === 'DELAY_VIOLATION') && sm_dv2.ctx.state === 'ACTIVE');
+let sm_dv3 = ltx.transition(sm_r4.ctx, { type: 'DELAY_MEASURED', nowMs: T0 + 4000000, nodeId: 'N1', measuredDelayS: 1200 });
+check('dev=300 warns only',             sm_dv3.ctx.state === 'ACTIVE');
+let sm_dv4 = ltx.transition(sm_r4.ctx, { type: 'DELAY_MEASURED', nowMs: T0 + 4000000, nodeId: 'N1', measuredDelayS: 1201 });
+check('dev=301 → DEGRADED',             sm_dv4.ctx.state === 'DEGRADED');
+
+// EOK override
+let sm_hold = ltx.transition(sm_r4.ctx, { type: 'EOK_OVERRIDE', nowMs: T0 + 4100000, verified: true, reason: 'solar storm' });
+check('override → EMERGENCY_HOLD',      sm_hold.ctx.state === 'EMERGENCY_HOLD');
+check('resumeState saved',              sm_hold.ctx.resumeState === 'ACTIVE');
+let sm_rej = ltx.transition(sm_r4.ctx, { type: 'EOK_OVERRIDE', nowMs: T0 + 4100000, verified: false });
+check('unverified override rejected',   sm_rej.ctx.state === 'ACTIVE' && sm_rej.effects.some(e => e.code === 'OVERRIDE_REJECTED'));
+let sm_resm = ltx.transition(sm_hold.ctx, { type: 'HOST_DECISION', nowMs: T0 + 4200000, decision: 'resume' });
+check('resume → ACTIVE',                sm_resm.ctx.state === 'ACTIVE');
+
+// amendment flow through the machine
+let sm_amdProp = ltx.transition(sm_r4.ctx, {
+  type: 'AMENDMENT_PROPOSED', nowMs: T0 + 4300000,
+  planId: 'LTX-20260801-EARTHHQ-MARS-LUNA-v3-abcd1234', planVersion: 2, affectedNodeIds: ['N1'],
+});
+check('amendment pending',              sm_amdProp.ctx.pendingAmendment !== null);
+check('amendment timeout from N1',      sm_amdProp.ctx.pendingAmendment.timeoutMs === 2 * 900 * 1000);
+let sm_amdBadV = ltx.transition(sm_r4.ctx, {
+  type: 'AMENDMENT_PROPOSED', nowMs: T0 + 4300000,
+  planId: 'x', planVersion: 3, affectedNodeIds: ['N1'],
+});
+check('version gap rejected',           sm_amdBadV.effects.some(e => e.code === 'AMENDMENT_REJECTED'));
+let sm_amdConf = ltx.transition(sm_amdProp.ctx, {
+  type: 'AMENDMENT_CONFIRMED', nowMs: T0 + 6200000, nodeId: 'N1',
+  planId: 'LTX-20260801-EARTHHQ-MARS-LUNA-v3-abcd1234',
+});
+check('amendment applied',              sm_amdConf.ctx.pendingAmendment === null);
+check('planVersion bumped',             sm_amdConf.ctx.planVersion === 2);
+check('planId switched',                sm_amdConf.ctx.planId.includes('-v3-'));
+check('root planId unchanged',          sm_amdConf.ctx.sessionRootPlanId === smPlanId);
+
+// completion
+let sm_done = ltx.transition(sm_amdConf.ctx, { type: 'SESSION_END', nowMs: T0 + 9000000 });
+check('SESSION_END → COMPLETE',         sm_done.ctx.state === 'COMPLETE');
+let sm_invalidEv = ltx.transition(sm_done.ctx, { type: 'SESSION_END', nowMs: T0 + 9100000 });
+check('event after COMPLETE ignored',   sm_invalidEv.ctx.state === 'COMPLETE' && sm_invalidEv.effects.some(e => e.code === 'INVALID_EVENT'));
+
+// determinism: same ctx+event twice → identical results
+const sm_detA = ltx.transition(sm_r.ctx, { type: 'TICK', nowMs: T0 + 2 * 900 * 1000 });
+const sm_detB = ltx.transition(sm_r.ctx, { type: 'TICK', nowMs: T0 + 2 * 900 * 1000 });
+check('transition deterministic',       JSON.stringify(sm_detA) === JSON.stringify(sm_detB));
+
+// ── Amendment chains (Epic 68.3) ────────────────────────────────────────────
+
+console.log('\n── amendment chains ─────────────────────────');
+
+const amdKeys = ltx.generateNIK({ nodeLabel: 'HOST' });
+const amdCache = { [amdKeys.nik.nodeId]: amdKeys.nik };
+const rootPlan = ltx.createPlan({ title: 'Chain Test', start: '2026-08-01T12:00:00.000Z', delay: 860 });
+const signedRoot = ltx.signPlan(rootPlan, amdKeys.privateKeyB64);
+
+check('planHash 64 hex',                /^[0-9a-f]{64}$/.test(ltx.planHash(rootPlan)));
+check('planHash key-order stable',      ltx.planHash({ b: 1, a: 2 }) === ltx.planHash({ a: 2, b: 1 }));
+
+const amd1 = ltx.createAmendment(signedRoot, { title: 'Chain Test (amended)' }, amdKeys.privateKeyB64);
+check('amendment is v3',                amd1.plan.v === 3);
+check('amendment planVersion 2',        amd1.plan.planVersion === 2);
+check('prevPlanHash = hash(root)',      amd1.plan.prevPlanHash === ltx.planHash(rootPlan));
+check('original plan untouched',        rootPlan.v === 2 && rootPlan.planVersion === undefined);
+check('amendment planId v3 infix',      ltx.makePlanId(amd1.plan).includes('-v3-'));
+check('v2 planId unchanged by 68',      ltx.makePlanId(rootPlan).includes('-v2-'));
+
+const amd2 = ltx.createAmendment(amd1, { quantum: 4 }, amdKeys.privateKeyB64);
+check('chain-of-3 verifies',            ltx.verifyAmendmentChain([signedRoot, amd1, amd2], amdCache).valid === true);
+check('single root verifies',           ltx.verifyAmendmentChain([signedRoot], amdCache).valid === true);
+check('empty chain invalid',            ltx.verifyAmendmentChain([], amdCache).valid === false);
+check('skipped link detected',          ltx.verifyAmendmentChain([signedRoot, amd2], amdCache).valid === false);
+
+// tamper: modify amended plan content after signing
+const amdTampered = JSON.parse(JSON.stringify(amd1));
+amdTampered.plan.title = 'EVIL';
+check('tampered link rejected',         ltx.verifyAmendmentChain([signedRoot, amdTampered], amdCache).valid === false);
+
+// wrong signer
+const evilKeys = ltx.generateNIK({ nodeLabel: 'EVIL' });
+const amdEvil = ltx.createAmendment(signedRoot, { title: 'hijack' }, evilKeys.privateKeyB64);
+check('non-HOST signer rejected',       ltx.verifyAmendmentChain([signedRoot, amdEvil], amdCache).valid === false);
+
+// insertBufferViaAmendment — drift scenario (§6.2 → §6.4)
+const drifted = ltx.insertBufferViaAmendment(signedRoot, { afterIndex: -1, q: 2 }, amdKeys.privateKeyB64);
+check('buffer appended',                drifted.plan.segments.length === rootPlan.segments.length + 1);
+check('buffer at end',                  drifted.plan.segments[drifted.plan.segments.length - 1].type === 'BUFFER');
+check('buffer amendment verifies',      ltx.verifyAmendmentChain([signedRoot, drifted], amdCache).valid === true);
+const drifted2 = ltx.insertBufferViaAmendment(signedRoot, { afterIndex: 2, q: 1 }, amdKeys.privateKeyB64);
+check('buffer mid-insert position',     drifted2.plan.segments[3].type === 'BUFFER');
+
+// ── Registers (Epic 69.1) ───────────────────────────────────────────────────
+
+console.log('\n── registers ────────────────────────────────');
+
+const regHost = ltx.generateNIK({ nodeLabel: 'HOST' });
+const regMars = ltx.generateNIK({ nodeLabel: 'MARS' });
+const regCache = { N0: regHost.nik, N1: regMars.nik };
+const regSid = 'LTX-20260801-EARTHHQ-MARS-v2-00b17ad8';
+
+function mkEntry(type, content, nodeId, seq, ts, priv, entryId) {
+  return ltx.createRegisterEntry(type, content, {
+    sessionId: regSid, nodeId, seq, timestamp: ts, privateKeyB64: priv,
+    ...(entryId ? { entryId } : {}),
+  });
+}
+
+const q1 = mkEntry('question', { text: 'Water status?', urgency: 'high' }, 'N1', 1, '2026-08-01T12:01:00.000Z', regMars.privateKeyB64);
+check('entry id prefix QST',           q1.entryId === 'QST-N1-1');
+check('entry has sig',                 typeof q1.sig === 'string' && q1.sig.length > 40);
+check('entry verifies',                ltx.verifyRegisterEntry(q1, regCache).valid === true);
+
+const qTampered = { ...q1, content: { ...q1.content, text: 'EVIL' } };
+check('tampered entry rejected',       ltx.verifyRegisterEntry(qTampered, regCache).valid === false);
+check('unknown key rejected',          ltx.verifyRegisterEntry(q1, { N9: regHost.nik }).reason === 'key_not_in_cache');
+
+const qResp = mkEntry('question_response', { qid: 'QST-N1-1', response: 'Nominal', version: 2 }, 'N0', 1, '2026-08-01T12:05:00.000Z', regHost.privateKeyB64);
+const act1 = mkEntry('action', { description: 'Resupply filters', owner: 'N1', dueTimeUTC: '2026-09-01T00:00:00Z' }, 'N0', 2, '2026-08-01T12:06:00.000Z', regHost.privateKeyB64);
+const actAcc = mkEntry('action_update', { aid: 'ACT-N0-2', status: 'ACCEPTED', version: 2 }, 'N1', 2, '2026-08-01T12:08:00.000Z', regMars.privateKeyB64);
+const actDone = mkEntry('action_update', { aid: 'ACT-N0-2', status: 'DONE', version: 3 }, 'N1', 3, '2026-08-01T12:20:00.000Z', regMars.privateKeyB64);
+
+const qReg = ltx.reduceQuestions([q1, qResp]);
+check('question ANSWERED',             qReg.byId['QST-N1-1'].status === 'ANSWERED');
+check('question response text',        qReg.byId['QST-N1-1'].response === 'Nominal');
+check('question submitter',            qReg.byId['QST-N1-1'].submitter === 'N1');
+
+const aReg = ltx.reduceActions([act1, actAcc, actDone]);
+check('action DONE',                   aReg.byId['ACT-N0-2'].status === 'DONE');
+check('action version 3',              aReg.byId['ACT-N0-2'].version === 3);
+check('action owner kept',             aReg.byId['ACT-N0-2'].owner === 'N1');
+
+// reducer determinism: shuffled input → identical state
+const allEntries = [q1, qResp, act1, actAcc, actDone];
+const shuffles = [
+  [actDone, q1, actAcc, qResp, act1],
+  [qResp, actDone, act1, q1, actAcc],
+  [act1, actAcc, actDone, qResp, q1],
+];
+check('reduceQuestions order-independent', shuffles.every(s =>
+  JSON.stringify(ltx.reduceQuestions(s)) === JSON.stringify(ltx.reduceQuestions(allEntries))));
+check('reduceActions order-independent', shuffles.every(s =>
+  JSON.stringify(ltx.reduceActions(s)) === JSON.stringify(ltx.reduceActions(allEntries))));
+
+// duplicate (nodeId,seq) deduped
+check('dedup by nodeId+seq',           ltx.orderEntries([q1, q1, qResp]).length === 2);
+
+// conflict: same version, different editors → lowest nodeId wins
+const respA = mkEntry('question_response', { qid: 'QST-N1-1', response: 'From N0', version: 5 }, 'N0', 7, '2026-08-01T13:00:00.000Z', regHost.privateKeyB64);
+const respB = mkEntry('question_response', { qid: 'QST-N1-1', response: 'From N1', version: 5 }, 'N1', 7, '2026-08-01T13:00:00.000Z', regMars.privateKeyB64);
+const conflictReg = ltx.reduceQuestions([q1, respA, respB]);
+check('conflict lowest nodeId wins',   conflictReg.byId['QST-N1-1'].response === 'From N0');
+check('loser flagged superseded',      conflictReg.superseded.includes(respB.entryId));
+const conflictReg2 = ltx.reduceQuestions([q1, respB, respA]);
+check('conflict result order-independent',
+  JSON.stringify(conflictReg.byId) === JSON.stringify(conflictReg2.byId));
+
+// question WITHDRAWN + orphan response
+const qWith = mkEntry('question_response', { qid: 'QST-N1-1', status: 'WITHDRAWN', version: 9 }, 'N1', 9, '2026-08-01T14:00:00.000Z', regMars.privateKeyB64);
+check('question WITHDRAWN',            ltx.reduceQuestions([q1, qWith]).byId['QST-N1-1'].status === 'WITHDRAWN');
+const orphan = mkEntry('question_response', { qid: 'QST-NOPE-1', version: 2 }, 'N0', 8, '2026-08-01T13:30:00.000Z', regHost.privateKeyB64);
+check('orphan response superseded',    ltx.reduceQuestions([orphan]).superseded.includes(orphan.entryId));
+
+// seeds
+const seeds = ltx.emitQuestionSeeds(
+  [{ text: 'Q one' }, { text: 'Q two' }],
+  { sessionId: regSid, nodeId: 'N1', seq: 20, timestamp: '2026-08-01T11:00:00.000Z', privateKeyB64: regMars.privateKeyB64 });
+check('seeds emitted with seq',        seeds.length === 2 && seeds[1].seq === 21);
+check('seeds verify',                  seeds.every(s => ltx.verifyRegisterEntry(s, regCache).valid));
+
+// ── Merge + partition recovery (Epic 69.2) ──────────────────────────────────
+
+console.log('\n── merge / partition recovery ───────────────');
+
+// two nodes diverge: shared prefix + unique entries each
+const shared = [q1, act1];
+const localOnly = [actAcc, mkEntry('decision', { text: 'Go for EVA' }, 'N0', 5, '2026-08-01T12:30:00.000Z', regHost.privateKeyB64)];
+const remoteOnly = [actDone, qWith];
+const sideA = shared.concat(localOnly);
+const sideB = shared.concat(remoteOnly);
+
+const mergedA = ltx.mergeLogs(sideA, sideB, regCache);
+const mergedB = ltx.mergeLogs(sideB, sideA, regCache);
+check('merge symmetric',               JSON.stringify(mergedA.entries) === JSON.stringify(mergedB.entries));
+check('merge union size',              mergedA.entries.length === 6);
+check('merge roots identical',         ltx.entriesRoot(mergedA.entries) === ltx.entriesRoot(mergedB.entries));
+check('merged register state equal',
+  JSON.stringify(ltx.reduceActions(mergedA.entries)) === JSON.stringify(ltx.reduceActions(mergedB.entries)));
+check('no rejects with good sigs',     mergedA.rejected.length === 0);
+
+// tampered entry rejected in merge
+const evilEntry = { ...actDone, content: { ...actDone.content, status: 'REJECTED' } };
+const mergedEvil = ltx.mergeLogs(sideA, [evilEntry], regCache);
+check('merge rejects tampered entry',  mergedEvil.rejected.length === 1);
+check('tampered not in union',         !mergedEvil.entries.some(e => e.content.status === 'REJECTED'));
+
+// merge snapshot
+const snapOpts = { sessionId: regSid, nodeId: 'N0', seq: 30, timestamp: '2026-08-01T15:00:00.000Z', privateKeyB64: regHost.privateKeyB64 };
+const msResult = ltx.runMergeSegment(sideA, sideB, regCache, snapOpts);
+check('snapshot type merge_snapshot',  msResult.snapshot.type === 'merge_snapshot');
+check('snapshot id prefix MRG',        msResult.snapshot.entryId.startsWith('MRG-'));
+check('snapshot root matches',         msResult.snapshot.content.mergedRoot === ltx.entriesRoot(msResult.merged.entries));
+check('snapshot verifies',             ltx.verifyRegisterEntry(msResult.snapshot, regCache).valid === true);
+check('snapshot registers reduced',    msResult.snapshot.content.actionRegister['ACT-N0-2'].status === 'DONE');
+
+// partition recovery: remote is a clean extension of local
+const remoteLog = ltx.createMerkleLog();
+const extended = ltx.orderEntries(shared).concat(ltx.orderEntries(remoteOnly));
+for (const e of extended) remoteLog.append(e);
+const remoteHead = remoteLog.signTreeHead(regMars.privateKeyB64, 'N1');
+const rec1 = ltx.recoverPartition(ltx.orderEntries(shared), extended, remoteHead, regMars.nik, regCache);
+check('prefix → accept_extension',     rec1.action === 'accept_extension');
+check('extension entry count',         rec1.entries.length === 4);
+
+// diverged: both sides have unique entries → deterministic merge
+const rec2 = ltx.recoverPartition(ltx.orderEntries(sideA), extended, remoteHead, regMars.nik, regCache);
+check('diverged → merged',             rec2.action === 'merged');
+check('merged count',                  rec2.entries.length === 6);
+
+// remote head lies about its entries → divergent
+const badHead = { ...remoteHead, treeSize: remoteHead.treeSize + 1 };
+const rec3 = ltx.recoverPartition(shared, extended, badHead, regMars.nik, regCache);
+check('bad head → divergent',          rec3.action === 'divergent');
+const wrongSigner = ltx.recoverPartition(shared, extended, remoteHead, regHost.nik, regCache);
+check('wrong head signer → divergent', wrongSigner.action === 'divergent');
+
+// ── CBOR (Epic 70.1) ─────────────────────────────────────────────────────────
+
+console.log('\n── cbor ─────────────────────────────────────');
+
+const hex = b => Buffer.from(b).toString('hex');
+// RFC 8949 Appendix A vectors (deterministic subset)
+check('cbor 0',                hex(ltx.encodeCbor(0)) === '00');
+check('cbor 10',               hex(ltx.encodeCbor(10)) === '0a');
+check('cbor 23',               hex(ltx.encodeCbor(23)) === '17');
+check('cbor 24',               hex(ltx.encodeCbor(24)) === '1818');
+check('cbor 100',              hex(ltx.encodeCbor(100)) === '1864');
+check('cbor 1000',             hex(ltx.encodeCbor(1000)) === '1903e8');
+check('cbor 1000000',          hex(ltx.encodeCbor(1000000)) === '1a000f4240');
+check('cbor -1',               hex(ltx.encodeCbor(-1)) === '20');
+check('cbor -10',              hex(ltx.encodeCbor(-10)) === '29');
+check('cbor -100',             hex(ltx.encodeCbor(-100)) === '3863');
+check('cbor -1000',            hex(ltx.encodeCbor(-1000)) === '3903e7');
+check('cbor false',            hex(ltx.encodeCbor(false)) === 'f4');
+check('cbor true',             hex(ltx.encodeCbor(true)) === 'f5');
+check('cbor null',             hex(ltx.encodeCbor(null)) === 'f6');
+check('cbor ""',               hex(ltx.encodeCbor('')) === '60');
+check('cbor "a"',              hex(ltx.encodeCbor('a')) === '6161');
+check('cbor "IETF"',           hex(ltx.encodeCbor('IETF')) === '6449455446');
+check('cbor h\'01020304\'',    hex(ltx.encodeCbor(Buffer.from('01020304', 'hex'))) === '4401020304');
+check('cbor []',               hex(ltx.encodeCbor([])) === '80');
+check('cbor [1,2,3]',          hex(ltx.encodeCbor([1, 2, 3])) === '83010203');
+check('cbor {"a":1,"b":[2,3]}', hex(ltx.encodeCbor({ a: 1, b: [2, 3] })) === 'a26161016162820203');
+check('cbor -19 (Ed25519 alg)', hex(ltx.encodeCbor(-19)) === '32');
+check('cbor tag 18',           hex(ltx.encodeCbor(new ltx.CborTag(18, [1]))) === 'd28101');
+
+// deterministic map key order: int keys sort before longer encodings
+check('cbor {1:-19} header',   hex(ltx.encodeCbor(new Map([[1, -19]]))) === 'a10132');
+
+// round-trips
+function rt(v) {
+  const dec = ltx.decodeCbor(ltx.encodeCbor(v));
+  return JSON.stringify(dec instanceof Map ? Object.fromEntries(dec) : dec) === JSON.stringify(v);
+}
+check('cbor rt ints',          rt(1234567) && rt(-42));
+check('cbor rt string',        rt('light-time'));
+check('cbor rt nested array',  rt([1, ['a', -3], null, true]));
+const rtMap = ltx.decodeCbor(ltx.encodeCbor({ z: 1, a: 2 }));
+check('cbor rt map',           rtMap instanceof Map && rtMap.get('a') === 2 && rtMap.get('z') === 1);
+let cborThrew = false;
+try { ltx.encodeCbor(1.5); } catch (_) { cborThrew = true; }
+check('cbor rejects floats',   cborThrew);
+let cborTrail = false;
+try { ltx.decodeCbor(Buffer.from('0000', 'hex')); } catch (_) { cborTrail = true; }
+check('cbor rejects trailing', cborTrail);
+
+// ── COSE_Sign1 (Epic 70.2) ───────────────────────────────────────────────────
+
+console.log('\n── cose_sign1 ───────────────────────────────');
+
+const coseKeys = ltx.generateNIK({ nodeLabel: 'HOST' });
+const coseCache = { [coseKeys.nik.nodeId]: coseKeys.nik };
+const cosePlan = ltx.createPlan({ title: 'COSE Test', start: '2026-08-01T12:00:00.000Z', delay: 860 });
+
+const coseEnv = ltx.signPlanCose(cosePlan, coseKeys.privateKeyB64);
+check('cose env has b64 bytes',        typeof coseEnv.coseSign1CborB64 === 'string');
+const coseBytes = Buffer.from(coseEnv.coseSign1CborB64, 'base64url');
+check('cose bytes start with tag 18',  coseBytes[0] === 0xd2);
+check('cose verify ok',                ltx.verifyPlanCose(coseEnv, coseCache).valid === true);
+
+// tamper: flip a payload bit
+const tamperedBytes = Buffer.from(coseBytes);
+tamperedBytes[tamperedBytes.length - 70] ^= 0x01;
+check('cose tamper rejected',
+  ltx.verifyPlanCose({ plan: cosePlan, coseSign1CborB64: tamperedBytes.toString('base64url') }, coseCache).valid === false);
+
+// plan mismatch
+check('cose payload mismatch',
+  ltx.verifyPlanCose({ plan: { ...cosePlan, title: 'EVIL' }, coseSign1CborB64: coseEnv.coseSign1CborB64 }, coseCache).reason === 'payload_mismatch');
+
+// unknown key
+check('cose unknown key',
+  ltx.verifyPlanCose(coseEnv, {}).reason === 'key_not_in_cache');
+
+// verifyPlanAny dispatches both envelope forms; JSON envelope stays frozen
+const jsonEnv = ltx.signPlan(cosePlan, coseKeys.privateKeyB64);
+check('verifyPlanAny cbor',            ltx.verifyPlanAny(coseEnv, coseCache).valid === true);
+check('verifyPlanAny json',            ltx.verifyPlanAny(jsonEnv, coseCache).valid === true);
+check('verifyPlanAny unknown',         ltx.verifyPlanAny({ plan: cosePlan }, coseCache).reason === 'unknown_envelope');
+check('json envelope alg still -19',
+  Buffer.from(jsonEnv.coseSign1.protected, 'base64url').toString('utf8') === '{"alg":-19}');
+
+// ── Ed25519 BIB (Epic 70.3) ──────────────────────────────────────────────────
+
+console.log('\n── ed25519 bib ──────────────────────────────');
+
+const bibNik = ltx.generateNIK({ nodeLabel: 'MARS' });
+const bibBundle = { type: 'READINESS', planId: 'X', nodeId: 'N1', seq: 4 };
+const bibSigned = ltx.addBIBEd25519(bibBundle, bibNik.privateKeyB64);
+check('ed25519 bib context',           bibSigned.bib.securityContext === 'ltx-ed25519');
+check('ed25519 bib verifies',          ltx.verifyBIBEd25519(bibSigned, bibNik.nik).valid === true);
+const bibTampered = { ...bibSigned, seq: 99 };
+check('ed25519 bib tamper rejected',   ltx.verifyBIBEd25519(bibTampered, bibNik.nik).valid === false);
+// context confusion: HMAC verifier must reject ed25519 BIBs and vice versa
+const hmacKey = ltx.generateBIBKey();
+check('hmac verifier rejects ed25519', ltx.verifyBIB(bibSigned, hmacKey).reason === 'context_mismatch');
+const hmacSigned = ltx.addBIB(bibBundle, hmacKey);
+check('hmac bib still verifies',       ltx.verifyBIB(hmacSigned, hmacKey).valid === true);
+check('ed25519 verifier rejects hmac', ltx.verifyBIBEd25519(hmacSigned, bibNik.nik).reason === 'context_mismatch');
+
+// ── Freshness scopes (Epic 70.4) ─────────────────────────────────────────────
+
+console.log('\n── freshness scopes ─────────────────────────');
+
+const gTracker = ltx.createGlobalSequenceTracker();
+check('global nextSeq',                gTracker.nextSeq('HQ', 'KEY_BUNDLE') === 1);
+check('global scope isolated',         gTracker.nextSeq('HQ', 'KEY_REVOCATION') === 1);
+check('global recordSeq accept',       gTracker.recordSeq('HQ', 'KEY_BUNDLE', 1).accepted === true);
+check('global replay rejected',        gTracker.recordSeq('HQ', 'KEY_BUNDLE', 1).reason === 'replay');
+check('global gap flagged',            gTracker.recordSeq('HQ', 'KEY_BUNDLE', 4).gapSize === 2);
+
+const NOW = Date.parse('2026-08-01T00:00:00Z');
+check('issuedAt fresh ok',             ltx.checkIssuedAt('2026-07-20T00:00:00Z', { nowMs: NOW }).accepted === true);
+check('issuedAt 31d expired',          ltx.checkIssuedAt('2026-07-01T00:00:00Z', { nowMs: NOW }).reason === 'expired');
+check('issuedAt custom window',        ltx.checkIssuedAt('2026-07-25T00:00:00Z', { nowMs: NOW, maxAgeDays: 3 }).reason === 'expired');
+check('issuedAt future rejected',      ltx.checkIssuedAt('2026-08-05T00:00:00Z', { nowMs: NOW }).reason === 'future_dated');
+check('issuedAt garbage rejected',     ltx.checkIssuedAt('not-a-date', { nowMs: NOW }).reason === 'invalid_issued_at');
+
+// KEY_BUNDLE with signature-covered freshness fields
+const kbHost = ltx.generateNIK({ nodeLabel: 'HQ' });
+const kbNiks = [kbHost.nik, bibNik.nik];
+const kbFresh = ltx.createKeyBundle('PLAN-X', kbNiks, kbHost.privateKeyB64,
+  { senderNodeId: 'HQ', seq: 1, issuedAt: '2026-07-20T00:00:00Z' });
+check('fresh bundle has issuedAt',     kbFresh.issuedAt === '2026-07-20T00:00:00Z' && kbFresh.seq === 1);
+const kbTracker = ltx.createGlobalSequenceTracker();
+const kbCache = ltx.verifyAndCacheKeys(kbFresh, kbHost.nik, { tracker: kbTracker, nowMs: NOW });
+check('fresh bundle verifies',         kbCache !== null && kbCache.size === 2);
+// replaying the identical bundle is now rejected (same (sender,msgType,seq))
+check('cross-session replay rejected', ltx.verifyAndCacheKeys(kbFresh, kbHost.nik, { tracker: kbTracker, nowMs: NOW }) === null);
+// tampering with signature-covered issuedAt breaks the signature
+const kbTampered = { ...kbFresh, issuedAt: '2026-07-31T00:00:00Z' };
+check('issuedAt covered by sig',       ltx.verifyAndCacheKeys(kbTampered, kbHost.nik, { tracker: ltx.createGlobalSequenceTracker(), nowMs: NOW }) === null);
+// stale bundle rejected by max-age even with valid signature
+const kbStale = ltx.createKeyBundle('PLAN-X', kbNiks, kbHost.privateKeyB64,
+  { senderNodeId: 'HQ', seq: 2, issuedAt: '2026-06-01T00:00:00Z' });
+check('stale bundle rejected',         ltx.verifyAndCacheKeys(kbStale, kbHost.nik, { tracker: ltx.createGlobalSequenceTracker(), nowMs: NOW }) === null);
+// legacy bundle (no freshness fields) still verifies without enforcement
+const kbLegacy = ltx.createKeyBundle('PLAN-X', kbNiks, kbHost.privateKeyB64);
+check('legacy bundle verifies',        ltx.verifyAndCacheKeys(kbLegacy, kbHost.nik) !== null);
+// legacy bundle rejected when freshness is demanded
+check('legacy rejected under enforcement',
+  ltx.verifyAndCacheKeys(kbLegacy, kbHost.nik, { tracker: ltx.createGlobalSequenceTracker(), nowMs: NOW }) === null);
+
+// ── Conference mode / v3 plans (Epic 71) ────────────────────────────────────
+
+console.log('\n── conference / v3 ──────────────────────────');
+
+// v2 planId freeze: known-good golden value must never change
+const frozenPlan = {
+  v: 2, title: 'Freeze Check', start: '2026-08-01T12:00:00.000Z', quantum: 5, mode: 'LTX',
+  segments: [{ type: 'PLAN_CONFIRM', q: 2 }, { type: 'TX', q: 2 }],
+  nodes: [
+    { id: 'N0', name: 'Earth HQ', role: 'HOST', delay: 0, location: 'earth' },
+    { id: 'N1', name: 'Mars Hab-01', role: 'PARTICIPANT', delay: 860, location: 'mars' },
+  ],
+};
+const frozenId = ltx.makePlanId(frozenPlan);
+check('v2 planId format',              /^LTX-20260801-EARTHHQ-MARS-v2-[0-9a-f]{8}$/.test(frozenId));
+check('v2 planId deterministic',       ltx.makePlanId(frozenPlan) === frozenId);
+
+// upgradePlanToV3 is explicit and non-mutating
+const v3plan = ltx.upgradePlanToV3(frozenPlan, { delays: { 'N0|N1': 860 } });
+check('upgrade v3 flag',               v3plan.v === 3 && v3plan.planVersion === 1);
+check('upgrade non-mutating',          frozenPlan.v === 2 && frozenPlan.delays === undefined);
+check('upgradeConfig leaves v3 alone', ltx.upgradeConfig(v3plan) === v3plan);
+check('v3 planId infix',               ltx.makePlanId(v3plan).includes('-v3-'));
+check('v2 id unchanged post-upgrade',  ltx.makePlanId(frozenPlan) === frozenId);
+
+// pairDelay: matrix authoritative, conservative-sum fallback, HOST row
+const confPlan = {
+  v: 2, title: 'Solar System Summit', start: '2026-08-01T12:00:00.000Z', quantum: 5, mode: 'LTX-ASYNC',
+  nodes: [
+    { id: 'N0', name: 'Earth HQ',   role: 'HOST',        delay: 0,    location: 'earth' },
+    { id: 'N1', name: 'Mars Hab',   role: 'PARTICIPANT', delay: 900,  location: 'mars' },
+    { id: 'N2', name: 'Luna Base',  role: 'PARTICIPANT', delay: 2,    location: 'moon' },
+    { id: 'N3', name: 'Jupiter Obs', role: 'PARTICIPANT', delay: 2600, location: 'jupiter' },
+  ],
+  segments: [
+    { type: 'PLAN_CONFIRM', q: 2 },
+    { type: 'TX', q: 3, speaker: 'N0', label: 'Opening Address' },
+    { type: 'TX', q: 4, speaker: 'N1', label: 'Mars Field Report' },
+    { type: 'RX', q: 2 },
+  ],
+};
+check('pairDelay HOST row',            ltx.pairDelay(confPlan, 'N0', 'N1') === 900);
+check('pairDelay symmetric',           ltx.pairDelay(confPlan, 'N1', 'N0') === 900);
+check('pairDelay sum fallback',        ltx.pairDelay(confPlan, 'N1', 'N3') === 3500);
+check('pairDelay self zero',           ltx.pairDelay(confPlan, 'N1', 'N1') === 0);
+const confV3 = ltx.upgradePlanToV3(confPlan, { delays: { 'N1|N3': 700 } });
+check('pairDelay matrix wins',         ltx.pairDelay(confV3, 'N3', 'N1') === 700);
+check('pairDelay matrix key sorted',   ltx.pairDelay(confV3, 'N1', 'N3') === 700);
+
+// computeSegmentsFor: viewer-perspective derivation (§14.3)
+const hostView = ltx.computeSegmentsFor(confPlan, 'N0');
+const marsView = ltx.computeSegmentsFor(confPlan, 'N1');
+check('speaker sees transmit',         hostView[1].perspective === 'transmit' && hostView[1].arrivalOffsetS === 0);
+check('viewer sees receive',           marsView[1].perspective === 'receive');
+check('arrival shift = pairDelay',     marsView[1].arrivalOffsetS === 900);
+check('arrival time shifted',          marsView[1].start.getTime() - hostView[1].start.getTime() === 900000);
+check('own segment unshifted',         marsView[2].perspective === 'transmit' && marsView[2].arrivalOffsetS === 0);
+check('unattributed neutral',          marsView[0].perspective === 'neutral' && marsView[3].perspective === 'neutral');
+check('label carried',                 marsView[1].label === 'Opening Address');
+let cfThrew = false;
+try { ltx.computeSegmentsFor(confPlan, 'N9'); } catch (_) { cfThrew = true; }
+check('unknown viewer throws',         cfThrew);
+
+// buildConferenceAgenda: rotation invariant for N=3..6
+for (let N = 3; N <= 6; N++) {
+  const nodes = Array.from({ length: N }, (_, i) =>
+    ({ id: `N${i}`, name: `Node ${i}`, role: i === 0 ? 'HOST' : 'PARTICIPANT', delay: i * 100, location: 'earth' }));
+  const agenda = ltx.buildConferenceAgenda(nodes, { cycles: N, blockQ: 2 });
+  const tx = agenda.filter(s => s.type === 'TX');
+  check(`rotation N=${N} block count`, tx.length === N * N);
+  const openers = [];
+  for (let c = 0; c < N; c++) openers.push(tx[c * N].speaker);
+  check(`rotation N=${N} openers distinct`, new Set(openers).size === N);
+  const perNode = {};
+  tx.forEach(s => { perNode[s.speaker] = (perNode[s.speaker] || 0) + 1; });
+  check(`rotation N=${N} equal blocks`, Object.values(perNode).every(v => v === N));
+}
+const agendaFixed = ltx.buildConferenceAgenda(confPlan.nodes, { cycles: 2, fairness: 'fixed' });
+const fixedTx = agendaFixed.filter(s => s.type === 'TX');
+check('fixed keeps plan order',        fixedTx[0].speaker === 'N0' && fixedTx[4].speaker === 'N0');
+const agendaLabeled = ltx.buildConferenceAgenda(confPlan.nodes, { labels: { N1: 'Mars Field Report' } });
+check('labels applied',                agendaLabeled.some(s => s.label === 'Mars Field Report'));
+check('agenda determinism',            JSON.stringify(ltx.buildConferenceAgenda(confPlan.nodes, { cycles: 3 }))
+                                        === JSON.stringify(ltx.buildConferenceAgenda(confPlan.nodes, { cycles: 3 })));
+
+// primeTimeReport
+const ptAgenda = ltx.buildConferenceAgenda(confPlan.nodes, { cycles: 4, blockQ: 2 });
+const ptPlan = { ...confPlan, segments: ptAgenda };
+const report = ltx.primeTimeReport(ptPlan);
+check('report covers all nodes',       report.length === 4);
+check('rotation openings fair',        report.every(r => r.openings === 1));
+const fixedReport = ltx.primeTimeReport({ ...confPlan, segments: ltx.buildConferenceAgenda(confPlan.nodes, { cycles: 4, fairness: 'fixed' }) });
+check('fixed openings unfair',         fixedReport.find(r => r.nodeId === 'N0').openings === 4);
+check('scores in [0,1]',               report.every(r => r.score > 0 && r.score <= 1));
+
+// per-attendee ICS (§14.5); no-arg output byte-compatible
+const icsDefault = ltx.generateICS(confPlan);
+const icsDefault2 = ltx.generateICS(confPlan, {});
+check('no-arg ICS single VEVENT',      (icsDefault.match(/BEGIN:VEVENT/g) || []).length === 1);
+check('empty-opts ICS identical',      icsDefault === icsDefault2);
+const icsMars = ltx.generateICS(confPlan, { viewerNodeId: 'N1' });
+check('viewer ICS event per segment',  (icsMars.match(/BEGIN:VEVENT/g) || []).length === confPlan.segments.length);
+check('viewer ICS names speaker',      icsMars.includes('Opening Address — Earth HQ, arriving after 15 min light-time'));
+check('viewer ICS you-present',        icsMars.includes('Mars Field Report — you present'));
+check('viewer ICS LTX-VIEWER',         icsMars.includes('LTX-VIEWER:N1'));
+const icsShift = icsMars.match(/DTSTART:(\d{8}T\d{6}Z)/g) || [];
+check('viewer ICS has DTSTARTs',       icsShift.length === confPlan.segments.length);
+const icsV3 = ltx.generateICS(confV3, { viewerNodeId: 'N1' });
+check('viewer ICS pair lines',         icsV3.includes('LTX-DELAY;PAIR=N1|N3:ONEWAY-ASSUMED=700'));
+
 // ── Summary ────────────────────────────────────────────────────────────────
 
 console.log('\n══════════════════════════════════════════');

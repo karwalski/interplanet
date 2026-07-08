@@ -11,8 +11,8 @@ fn test_all() {
     let mut failed = 0i32;
 
     // -- Constants (9 checks)
-    check("VERSION", VERSION == "1.0.0", &mut passed, &mut failed);
-    check("DEFAULT_QUANTUM", DEFAULT_QUANTUM == 3, &mut passed, &mut failed);
+    check("VERSION", VERSION == "1.1.0", &mut passed, &mut failed);
+    check("DEFAULT_QUANTUM", DEFAULT_QUANTUM == 5, &mut passed, &mut failed);
     check("DEFAULT_API_BASE", DEFAULT_API_BASE.contains("interplanet.live"), &mut passed, &mut failed);
     let ds = default_segments();
     check("ds[0] PLAN_CONFIRM", ds[0].seg_type == "PLAN_CONFIRM", &mut passed, &mut failed);
@@ -27,7 +27,7 @@ fn test_all() {
     check("v==2", plan.v == 2, &mut passed, &mut failed);
     check("title default", plan.title == "LTX Session", &mut passed, &mut failed);
     check("start", plan.start == "2026-03-15T14:00:00Z", &mut passed, &mut failed);
-    check("quantum==3", plan.quantum == 3, &mut passed, &mut failed);
+    check("quantum==5", plan.quantum == 5, &mut passed, &mut failed);
     check("mode==LTX", plan.mode == "LTX", &mut passed, &mut failed);
     check("nodes[0].id==N0", plan.nodes[0].id == "N0", &mut passed, &mut failed);
     check("nodes[0].role==HOST", plan.nodes[0].role == "HOST", &mut passed, &mut failed);
@@ -62,13 +62,13 @@ fn test_all() {
     check("segs.len==7", segs.len() == 7, &mut passed, &mut failed);
     check("segs[0].seg_type", segs[0].seg_type == "PLAN_CONFIRM", &mut passed, &mut failed);
     check("segs[0].q==2", segs[0].q == 2, &mut passed, &mut failed);
-    let expected_dur0 = 2 * 3 * 60 * 1000i64; // q=2, quantum=3, ms
-    check("segs[0].dur_min==6", segs[0].dur_min == 6, &mut passed, &mut failed);
+    let expected_dur0 = 2 * 5 * 60 * 1000i64; // q=2, quantum=5, ms
+    check("segs[0].dur_min==10", segs[0].dur_min == 10, &mut passed, &mut failed);
     check("segs[0].end-start==dur", segs[0].end_ms - segs[0].start_ms == expected_dur0, &mut passed, &mut failed);
     check("segs[1].start==segs[0].end", segs[1].start_ms == segs[0].end_ms, &mut passed, &mut failed);
     check("segs[6].seg_type==BUFFER", segs[6].seg_type == "BUFFER", &mut passed, &mut failed);
     check("segs[6].q==1", segs[6].q == 1, &mut passed, &mut failed);
-    check("segs[6].dur_min==3", segs[6].dur_min == 3, &mut passed, &mut failed);
+    check("segs[6].dur_min==5", segs[6].dur_min == 5, &mut passed, &mut failed);
     // contiguous
     for i in 1..segs.len() {
         check(&format!("segs contiguous {}", i), segs[i].start_ms == segs[i-1].end_ms, &mut passed, &mut failed);
@@ -82,10 +82,10 @@ fn test_all() {
 
     // -- total_min (2 checks)
     let tm = total_min(&plan);
-    check("total_min==39", tm == 39, &mut passed, &mut failed); // (2+2+2+2+2+2+1)*3=39
+    check("total_min==65", tm == 65, &mut passed, &mut failed); // (2+2+2+2+2+2+1)*5=65
     let plan_q5 = create_plan(None, "2026-03-15T14:00:00Z", 0);
     let tm2 = total_min(&plan_q5);
-    check("total_min q3 again", tm2 == 39, &mut passed, &mut failed);
+    check("total_min q5 again", tm2 == 65, &mut passed, &mut failed);
 
     // -- make_plan_id (6 checks)
     let pid = make_plan_id(&plan);
@@ -134,7 +134,7 @@ fn test_all() {
     check("ics has DTSTART", ics.contains("DTSTART:"), &mut passed, &mut failed);
     check("ics has SUMMARY", ics.contains("SUMMARY:LTX Session"), &mut passed, &mut failed);
     check("ics has LTX-PLANID", ics.contains("LTX-PLANID:"), &mut passed, &mut failed);
-    check("ics has LTX-QUANTUM", ics.contains("LTX-QUANTUM:PT3M"), &mut passed, &mut failed);
+    check("ics has LTX-QUANTUM", ics.contains("LTX-QUANTUM:PT5M"), &mut passed, &mut failed);
     check("ics CRLF endings", ics.contains("\r\n"), &mut passed, &mut failed);
     check("ics ends with CRLF", ics.ends_with("\r\n"), &mut passed, &mut failed);
     check("ics has LTX-MODE", ics.contains("LTX-MODE:LTX"), &mut passed, &mut failed);
@@ -214,7 +214,7 @@ fn test_all() {
     let escape_plan = create_plan(Some("Hello, World; Test"), "2026-03-15T14:00:00Z", 0);
     let escape_ics = generate_ics(&escape_plan);
     check("ics summary escaped", escape_ics.contains("SUMMARY:Hello\\, World\\; Test"), &mut passed, &mut failed);
-    check("ics quantum format PT3M", escape_ics.contains("LTX-QUANTUM:PT3M"), &mut passed, &mut failed);
+    check("ics quantum format PT5M", escape_ics.contains("LTX-QUANTUM:PT5M"), &mut passed, &mut failed);
 
     println!("
 {} passed  {} failed", passed, failed);

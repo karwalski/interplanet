@@ -21,7 +21,7 @@ object InterplanetLTX {
 
     // ── Constants ──────────────────────────────────────────────────────────
 
-    const val VERSION = "1.0.0"
+    const val VERSION = "1.1.0"
     const val DEFAULT_QUANTUM = 5
     const val DEFAULT_API_BASE = "https://interplanet.live/api/ltx"
 

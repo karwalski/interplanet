@@ -25,8 +25,8 @@ func TestAll(t *testing.T) {
 	plan := ltx.CreatePlan(ltx.CreatePlanOpts{Start: "2026-03-15T14:00:00Z"})
 
 	// ── 1. Constants ────────────────────────────────────────────────────────
-	check("VERSION == 1.0.0", ltx.VERSION == "1.0.0")
-	check("DEFAULT_QUANTUM == 3", ltx.DEFAULT_QUANTUM == 3)
+	check("VERSION == 1.1.0", ltx.VERSION == "1.1.0")
+	check("DEFAULT_QUANTUM == 5", ltx.DEFAULT_QUANTUM == 5)
 	check("DEFAULT_API_BASE has https://", strings.Contains(ltx.DEFAULT_API_BASE, "https://"))
 	check("DefaultSegments[0].Type == PLAN_CONFIRM", ltx.DefaultSegments[0].Type == "PLAN_CONFIRM")
 	check("DefaultSegments[0].Q == 2", ltx.DefaultSegments[0].Q == 2)
@@ -39,7 +39,7 @@ func TestAll(t *testing.T) {
 	check("V == 2", plan.V == 2)
 	check("Title == LTX Session", plan.Title == "LTX Session")
 	check("Start preserved", plan.Start == "2026-03-15T14:00:00Z")
-	check("Quantum == 3", plan.Quantum == 3)
+	check("Quantum == 5", plan.Quantum == 5)
 	check("Mode == LTX", plan.Mode == "LTX")
 	check("len(Nodes) == 2", len(plan.Nodes) == 2)
 	check("Nodes[0].ID == N0", plan.Nodes[0].ID == "N0")
@@ -93,8 +93,8 @@ func TestAll(t *testing.T) {
 	check("seg[6].Q == 1", segs[6].Q == 1)
 	check("seg[0].StartMs > 0", segs[0].StartMs > 0)
 	check("seg[0].EndMs > StartMs", segs[0].EndMs > segs[0].StartMs)
-	check("seg[0].DurMin == 6", segs[0].DurMin == 6)
-	check("seg[6].DurMin == 3", segs[6].DurMin == 3)
+	check("seg[0].DurMin == 10", segs[0].DurMin == 10)
+	check("seg[6].DurMin == 5", segs[6].DurMin == 5)
 	// Check all contiguous pairs
 	check("segs contiguous 0-1", segs[0].EndMs == segs[1].StartMs)
 	check("segs contiguous 1-2", segs[1].EndMs == segs[2].StartMs)
@@ -114,8 +114,8 @@ func TestAll(t *testing.T) {
 
 	// ── 5. TotalMin ──────────────────────────────────────────────────────────
 	total := ltx.TotalMin(plan)
-	check("TotalMin == 39", total == 39)
-	// Verify by manual sum: (2+2+2+2+2+2+1)*3 = 13*3 = 39
+	check("TotalMin == 65", total == 65)
+	// Verify by manual sum: (2+2+2+2+2+2+1)*5 = 13*5 = 65
 	manualSum := 0
 	for _, s := range plan.Segments {
 		manualSum += s.Q * plan.Quantum
@@ -190,7 +190,7 @@ func TestAll(t *testing.T) {
 	check("ICS has SUMMARY:", strings.Contains(ics, "SUMMARY:"))
 	check("ICS has LTX:1", strings.Contains(ics, "LTX:1"))
 	check("ICS has LTX-PLANID:", strings.Contains(ics, "LTX-PLANID:"))
-	check("ICS has LTX-QUANTUM:PT3M", strings.Contains(ics, "LTX-QUANTUM:PT3M"))
+	check("ICS has LTX-QUANTUM:PT5M", strings.Contains(ics, "LTX-QUANTUM:PT5M"))
 	check("ICS has LTX-NODE:", strings.Contains(ics, "LTX-NODE:"))
 	check("ICS has CRLF", strings.Contains(ics, "\r\n"))
 
@@ -253,7 +253,7 @@ func TestAll(t *testing.T) {
 	escapePlan := ltx.CreatePlan(ltx.CreatePlanOpts{Title: "Hello, World; Test", Start: "2026-03-15T14:00:00Z"})
 	escapeIcs := ltx.GenerateICS(escapePlan)
 	check("ICS SUMMARY escapes comma", strings.Contains(escapeIcs, `SUMMARY:Hello\, World\; Test`))
-	check("ICS has LTX-QUANTUM:PT3M", strings.Contains(escapeIcs, "LTX-QUANTUM:PT3M"))
+	check("ICS has LTX-QUANTUM:PT5M", strings.Contains(escapeIcs, "LTX-QUANTUM:PT5M"))
 
 	// ── Summary ──────────────────────────────────────────────────────────────
 	fmt.Printf("\n%d passed  %d failed\n", passed, failed)

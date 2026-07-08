@@ -35,17 +35,34 @@ class LtxNode {
       );
 }
 
-/// A segment template (type + quantum count).
+/// A segment template (type + quantum count, optional v3 speaker/label).
 class LtxSegmentTemplate {
   final String type;
   final int q;
+  final String? speaker;
+  final String? label;
 
-  const LtxSegmentTemplate({required this.type, required this.q});
+  const LtxSegmentTemplate({
+    required this.type,
+    required this.q,
+    this.speaker,
+    this.label,
+  });
 
-  Map<String, dynamic> toMap() => {'type': type, 'q': q};
+  Map<String, dynamic> toMap() => {
+        'type': type,
+        'q': q,
+        if (speaker != null) 'speaker': speaker,
+        if (label != null) 'label': label,
+      };
 
   static LtxSegmentTemplate fromMap(Map<String, dynamic> m) =>
-      LtxSegmentTemplate(type: m['type'] as String, q: m['q'] as int);
+      LtxSegmentTemplate(
+        type: m['type'] as String,
+        q: m['q'] as int,
+        speaker: m['speaker'] as String?,
+        label: m['label'] as String?,
+      );
 }
 
 /// A computed timed segment.
@@ -66,6 +83,43 @@ class LtxSegment {
     required this.durMin,
     required this.startMs,
     required this.endMs,
+  });
+}
+
+/// A computed segment from a specific viewer's perspective (§14.3).
+class LtxViewerSegment {
+  final String type;
+  final int q;
+  final String start;
+  final String end;
+  final int durMin;
+  final int startMs;
+  final int endMs;
+
+  /// Presenting node id, when the segment is attributed.
+  final String? speaker;
+
+  /// Agenda label, when present.
+  final String? label;
+
+  /// 'transmit' (viewer presents), 'receive' (after light-time), 'neutral'.
+  final String perspective;
+
+  /// Light-time shift applied to start/end, in seconds (0 unless receiving).
+  final num arrivalOffsetS;
+
+  const LtxViewerSegment({
+    required this.type,
+    required this.q,
+    required this.start,
+    required this.end,
+    required this.durMin,
+    required this.startMs,
+    required this.endMs,
+    this.speaker,
+    this.label,
+    required this.perspective,
+    required this.arrivalOffsetS,
   });
 }
 
@@ -94,6 +148,15 @@ class LtxPlan {
   final List<LtxNode> nodes;
   final List<LtxSegmentTemplate> segments;
 
+  /// v3 pair-delay matrix: key "A|B" (node ids sorted) → one-way delay (s).
+  final Map<String, num>? delays;
+
+  /// v3 amendment-chain version (LTX-SPECIFICATION.md §4.4).
+  final int? planVersion;
+
+  /// SHA-256 hex of the canonical JSON of the predecessor plan (§6.4).
+  final String? prevPlanHash;
+
   LtxPlan({
     required this.v,
     required this.title,
@@ -102,7 +165,35 @@ class LtxPlan {
     required this.mode,
     required this.nodes,
     required this.segments,
+    this.delays,
+    this.planVersion,
+    this.prevPlanHash,
   });
+
+  /// Plain-map representation (canonical field set; integral delays as int).
+  /// Used by the v3 canonical-JSON plan hash and the security functions.
+  Map<String, dynamic> toMap() => {
+        'v': v,
+        'title': title,
+        'start': start,
+        'quantum': quantum,
+        'mode': mode,
+        'nodes': nodes
+            .map((n) => {
+                  'id': n.id,
+                  'name': n.name,
+                  'role': n.role,
+                  'delay': n.delay == n.delay.truncateToDouble()
+                      ? n.delay.toInt()
+                      : n.delay,
+                  'location': n.location,
+                })
+            .toList(),
+        'segments': segments.map((s) => s.toMap()).toList(),
+        if (delays != null) 'delays': delays,
+        if (planVersion != null) 'planVersion': planVersion,
+        if (prevPlanHash != null) 'prevPlanHash': prevPlanHash,
+      };
 
   /// Serialize to JSON string.
   /// EXACT key order: v, title, start, quantum, mode, nodes, segments
@@ -138,9 +229,32 @@ class LtxPlan {
     for (int i = 0; i < segments.length; i++) {
       if (i > 0) buf.write(',');
       final s = segments[i];
-      buf.write('{"type":${_jsonStr(s.type)},"q":${s.q}}');
+      buf.write('{"type":${_jsonStr(s.type)},"q":${s.q}');
+      if (s.speaker != null) buf.write(',"speaker":${_jsonStr(s.speaker!)}');
+      if (s.label != null) buf.write(',"label":${_jsonStr(s.label!)}');
+      buf.write('}');
     }
     buf.write(']');
+
+    // v3 optional fields (never present on v2 plans — the frozen v2 planId
+    // hash covers exactly the original byte sequence above).
+    if (delays != null) {
+      buf.write(',"delays":{');
+      var first = true;
+      delays!.forEach((k, v) {
+        if (!first) buf.write(',');
+        first = false;
+        final dv = (v is double && v == v.truncateToDouble())
+            ? v.toInt().toString()
+            : v.toString();
+        buf.write('${_jsonStr(k)}:$dv');
+      });
+      buf.write('}');
+    }
+    if (planVersion != null) buf.write(',"planVersion":$planVersion');
+    if (prevPlanHash != null) {
+      buf.write(',"prevPlanHash":${_jsonStr(prevPlanHash!)}');
+    }
 
     buf.write('}');
     return buf.toString();
@@ -163,7 +277,12 @@ class LtxPlan {
 
       final segList = (m['segments'] as List).map((s) {
         final sm = s as Map<String, dynamic>;
-        return LtxSegmentTemplate(type: sm['type'] as String, q: sm['q'] as int);
+        return LtxSegmentTemplate(
+          type: sm['type'] as String,
+          q: sm['q'] as int,
+          speaker: sm['speaker'] as String?,
+          label: sm['label'] as String?,
+        );
       }).toList();
 
       return LtxPlan(
@@ -174,6 +293,9 @@ class LtxPlan {
         mode: m['mode'] as String,
         nodes: nodesList,
         segments: segList,
+        delays: (m['delays'] as Map?)?.cast<String, num>(),
+        planVersion: m['planVersion'] as int?,
+        prevPlanHash: m['prevPlanHash'] as String?,
       );
     } catch (_) {
       return null;

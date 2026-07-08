@@ -4,8 +4,8 @@ defmodule InterplanetLtx.Constants do
   Pure Elixir port of ltx-sdk.js — Story 49.1.
   """
 
-  @version "1.0.0"
-  @default_quantum 3
+  @version "1.1.0"
+  @default_quantum 5
   @default_api_base "https://interplanet.live/api/ltx.php"
   @default_segments [
     %{type: "PLAN_CONFIRM", q: 2},

@@ -1,6 +1,13 @@
 // Security.fs --- Epic 29 security cascade for InterplanetLtx (F#)
 // Stories 29.1, 29.4, 29.5
-// Uses System.Security.Cryptography (Ed25519, SHA-256)
+// Real Ed25519 signatures via NSec.Cryptography (libsodium); SHA-256 via
+// System.Security.Cryptography.
+//
+// This file is consumed via #load from .fsx scripts, and a #load-ed .fs file
+// cannot declare a nuget reference itself. Every consuming script must put
+// the reference BEFORE the #load line:
+//   #r "nuget: NSec.Cryptography, 24.4.0"
+//   #load "../src/Security.fs"
 
 module InterplanetLtx.Security
 
@@ -61,10 +68,15 @@ let sha256 (data: byte[]) : byte[] =
     use h = SHA256.Create()
     h.ComputeHash(data)
 
-// ---- SPKI / PKCS8 DER headers for Ed25519 ----
+// ---- Ed25519 (NSec) ----
 
-let private SPKI_HDR  = [| 0x30uy;0x2auy;0x30uy;0x05uy;0x06uy;0x03uy;0x2buy;0x65uy;0x70uy;0x03uy;0x21uy;0x00uy |]
-let private PKCS8_HDR = [| 0x30uy;0x2euy;0x02uy;0x01uy;0x00uy;0x30uy;0x05uy;0x06uy;0x03uy;0x2buy;0x65uy;0x70uy;0x04uy;0x22uy;0x04uy;0x20uy |]
+let private ed = NSec.Cryptography.SignatureAlgorithm.Ed25519
+
+/// Import a raw 32-byte Ed25519 seed as an NSec signing key.
+let private importSeedKey (privRaw: byte[]) : NSec.Cryptography.Key =
+    NSec.Cryptography.Key.Import(
+        ed, ReadOnlySpan<byte>(privRaw),
+        NSec.Cryptography.KeyBlobFormat.RawPrivateKey)
 
 // ---- NIK type ----
 
@@ -88,31 +100,40 @@ let private isoNow (offsetDays: int) : string =
 
 // ---- generate_nik ----
 
-let generateNik (validDays: int) (nodeLabel: string) : Nik =
-    use ecDsa = ECDiffieHellman.Create()
-    // Generate random bytes as the key material (Ed25519 not available on this platform)
-    let pubRaw, privRaw =
-        let rng = RandomNumberGenerator.Create()
-        let pr = Array.zeroCreate 32
-        let pu = Array.zeroCreate 32
-        rng.GetBytes(pr)
-        rng.GetBytes(pu)
-        pu, pr
+/// Cross-port key formats (LTX-SECURITY):
+///   privateKey = base64url of the raw 32-byte Ed25519 seed
+///   publicKey  = base64url of the raw 32-byte Ed25519 public key
+///   nodeId     = base64url of the first 16 bytes of SHA-256(raw public key)
+let private mkNik (pubRaw: byte[]) (privRaw: byte[]) (validDays: int) (nodeLabel: string) : Nik =
     let h      = sha256 pubRaw
     let nodeId = b64uEncode h.[..15]
-    let kid    = nodeId
-    let pubDer  = Array.append SPKI_HDR  pubRaw
-    let privDer = Array.append PKCS8_HDR privRaw
     { KeyType        = "ltx-nik-v1"
       NodeId         = nodeId
-      Kid            = kid
+      Kid            = nodeId
       IssuedAt       = isoNow 0
       ExpiresAt      = isoNow validDays
       NodeLabel      = nodeLabel
-      PublicKeyB64   = b64uEncode pubDer
-      PrivateKeyB64  = b64uEncode privDer
+      PublicKeyB64   = b64uEncode pubRaw
+      PrivateKeyB64  = b64uEncode privRaw
       PubRaw         = pubRaw
       PrivRaw        = privRaw }
+
+let generateNik (validDays: int) (nodeLabel: string) : Nik =
+    // An Ed25519 private key is any random 32-byte seed (RFC 8032).
+    let privRaw = Array.zeroCreate<byte> 32
+    use rng = RandomNumberGenerator.Create()
+    rng.GetBytes(privRaw)
+    use key = importSeedKey privRaw
+    let pubRaw = key.PublicKey.Export(NSec.Cryptography.KeyBlobFormat.RawPublicKey)
+    mkNik pubRaw privRaw validDays nodeLabel
+
+/// Rebuild a NIK from a base64url-encoded raw 32-byte Ed25519 seed
+/// (the cross-port private-key format).
+let nikFromSeed (seedB64: string) (validDays: int) (nodeLabel: string) : Nik =
+    let privRaw = b64uDecode seedB64
+    use key = importSeedKey privRaw
+    let pubRaw = key.PublicKey.Export(NSec.Cryptography.KeyBlobFormat.RawPublicKey)
+    mkNik pubRaw privRaw validDays nodeLabel
 
 // ---- is_nik_expired ----
 
@@ -140,8 +161,9 @@ let signPlan (plan: IDictionary<string,obj>) (nik: Nik) : SignedPlan =
     let payloadB64    = b64uEncode (Encoding.UTF8.GetBytes payloadJson)
     let sigStructJson = canonicalJson ([| "Signature1" :> obj; protectedB64; ""; payloadB64 |])
     let sigStructBytes = Encoding.UTF8.GetBytes sigStructJson
-    // Use SHA-256 of sig structure as signature stub (Ed25519 not available on this platform)
-    let sigBytes = sha256 sigStructBytes
+    // Real Ed25519 signature over the COSE-style sig structure (NSec/libsodium).
+    use key = importSeedKey nik.PrivRaw
+    let sigBytes = ed.Sign(key, ReadOnlySpan<byte>(sigStructBytes))
     { Plan      = plan
       CoseSign1 = { ProtectedHdr = protectedB64
                     Kid          = nik.Kid
@@ -163,8 +185,15 @@ let verifyPlan (sp: SignedPlan) (keyCache: IDictionary<string, Nik>) : bool * st
             else
                 let sigStructJson  = canonicalJson ([| "Signature1" :> obj; cs.ProtectedHdr; ""; cs.Payload |])
                 let sigStructBytes = Encoding.UTF8.GetBytes sigStructJson
-                // Verify: compare SHA-256 stubs (Ed25519 not available on this platform)
-                let valid = b64uEncode (sha256 sigStructBytes) = cs.Signature
+                // Real Ed25519 verification against the cached NIK's public key.
+                let valid =
+                    try
+                        let pub = NSec.Cryptography.PublicKey.Import(
+                                    ed, ReadOnlySpan<byte>(b64uDecode nik.PublicKeyB64),
+                                    NSec.Cryptography.KeyBlobFormat.RawPublicKey)
+                        ed.Verify(pub, ReadOnlySpan<byte>(sigStructBytes),
+                                  ReadOnlySpan<byte>(b64uDecode cs.Signature))
+                    with _ -> false
                 if valid then true, "ok" else false, "signature_mismatch"
 
 // ---- SequenceTracker ----

@@ -11,7 +11,18 @@ import os
 import json
 import base64
 
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+def _aesgcm():
+    """Lazy-load AESGCM so the SDK stays importable without `cryptography`
+    (same guarded-dependency pattern as _security.py)."""
+    try:
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+        return AESGCM
+    except ImportError as exc:
+        raise ImportError(
+            'BCB confidentiality requires the `cryptography` package. '
+            'Install it: pip install cryptography'
+        ) from exc
 
 
 def generate_session_key() -> bytes:
@@ -45,7 +56,7 @@ def encrypt_window(payload: dict, session_key: bytes) -> dict:
         }
     """
     nonce = os.urandom(12)
-    aesgcm = AESGCM(session_key)
+    aesgcm = _aesgcm()(session_key)
     plaintext_bytes = json.dumps(payload, separators=(',', ':')).encode('utf-8')
     # AESGCM.encrypt returns ciphertext + 16-byte auth tag concatenated
     ct_and_tag = aesgcm.encrypt(nonce, plaintext_bytes, None)
@@ -75,7 +86,7 @@ def decrypt_window(bundle: dict, session_key: bytes) -> dict:
         nonce = _b64u_decode(bundle['nonce'])
         ct    = _b64u_decode(bundle['ciphertext'])
         tag   = _b64u_decode(bundle['tag'])
-        aesgcm = AESGCM(session_key)
+        aesgcm = _aesgcm()(session_key)
         # AESGCM.decrypt expects ciphertext + tag concatenated
         plaintext_bytes = aesgcm.decrypt(nonce, ct + tag, None)
         return {'valid': True, 'plaintext': json.loads(plaintext_bytes)}

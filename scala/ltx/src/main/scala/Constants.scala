@@ -3,9 +3,9 @@
  * Story 33.13 - Scala LTX library
  */
 
-val VERSION: String = "1.0.0"
+val VERSION: String = "1.1.0"
 
-val DEFAULT_QUANTUM: Int = 3
+val DEFAULT_QUANTUM: Int = 5
 
 val DEFAULT_API_BASE: String = "https://api.interplanet.app/ltx"
 

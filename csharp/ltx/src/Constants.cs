@@ -5,14 +5,14 @@ namespace InterplanetLtx;
 
 public static class Constants
 {
-    public const string VERSION = "1.0.0";
+    public const string VERSION = "1.1.0";
 
     public static readonly string[] SEG_TYPES =
     {
         "PLAN_CONFIRM", "TX", "RX", "CAUCUS", "BUFFER", "MERGE"
     };
 
-    public const int DEFAULT_QUANTUM = 3;   // minutes per quantum
+    public const int DEFAULT_QUANTUM = 5;   // minutes per quantum
 
     public const string DEFAULT_API_BASE = "https://interplanet.live/api/ltx.php";
 

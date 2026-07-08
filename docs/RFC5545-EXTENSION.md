@@ -585,7 +585,7 @@ IANA is also requested to register the following iCalendar parameters under the 
 
 ### 13.2 Informative References
 
-* [LTX-SPEC] Watt, M., "LTX v1.0 Specification — Light-Time eXchange Distributed High-Latency Deliberation Protocol", InterPlanet project, 2026. (docs/LTX-SPECIFICATION.md)
+* [LTX-SPEC] Watt, M., "LTX v1.1 Specification — Light-Time eXchange Distributed High-Latency Deliberation Protocol", InterPlanet project, 2026. (docs/LTX-SPECIFICATION.md)
 * [DRAFT-STANDARD] Watt, M., "Interplanetary Timezone Conventions for Human Work Scheduling", InterPlanet community specification, February 2026. (docs/DRAFT-STANDARD.md)
 
 ---

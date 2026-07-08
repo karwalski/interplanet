@@ -4,7 +4,7 @@ DOTNET := $(shell command -v dotnet 2>/dev/null)
 
 test:
 ifdef DOTNET
-	dotnet fsi tests/UnitTest.fsx && dotnet fsi tests/SecurityTest.fsx
+	dotnet fsi tests/UnitTest.fsx && dotnet fsi tests/SecurityTest.fsx && dotnet fsi tests/V11Test.fsx
 else
 	@echo "dotnet not installed -- skipping F# tests"
 endif

@@ -243,6 +243,18 @@ end
 
 M.canonical_json = canonical_json
 
+-- Exposed primitives (LTX v1.1 modules build on these).
+M.sha256_raw = sha256
+
+function M.sha256_hex(s)
+  return (sha256(s):gsub('.', function(c)
+    return string.format('%02x', string.byte(c))
+  end))
+end
+
+M.b64u_encode = b64u_enc
+M.b64u_decode = b64u_dec
+
 --------------- helpers --------------------------------------------------------
 
 local function iso_now(offset_days)

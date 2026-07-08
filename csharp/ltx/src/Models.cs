@@ -33,7 +33,7 @@ public class LtxPlan
     public int V { get; set; } = 2;
     public string Title { get; set; } = "";
     public string Start { get; set; } = "";
-    public int Quantum { get; set; } = 3;
+    public int Quantum { get; set; } = 5;
     public string Mode { get; set; } = "LTX";
     public List<LtxNode> Nodes { get; set; } = new();
     public List<LtxSegmentTemplate> Segments { get; set; } = new();
@@ -116,7 +116,7 @@ public class LtxPlan
             plan.V = ParseIntField(json, "v") ?? 2;
             plan.Title = ParseStringField(json, "title") ?? "";
             plan.Start = ParseStringField(json, "start") ?? "";
-            plan.Quantum = ParseIntField(json, "quantum") ?? 3;
+            plan.Quantum = ParseIntField(json, "quantum") ?? 5;
             plan.Mode = ParseStringField(json, "mode") ?? "LTX";
             plan.Segments = ParseSegments(json);
             plan.Nodes = ParseNodes(json);

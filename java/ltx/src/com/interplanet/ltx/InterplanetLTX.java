@@ -31,7 +31,7 @@ public final class InterplanetLTX {
     // ── Constants ──────────────────────────────────────────────────────────
 
     public static final String   VERSION         = "1.0.0";
-    public static final int      DEFAULT_QUANTUM  = 3;
+    public static final int      DEFAULT_QUANTUM  = 5;
     public static final String   DEFAULT_API_BASE = "https://interplanet.live/api/ltx.php";
 
     public static final String[] SEG_TYPES = {
@@ -360,7 +360,7 @@ public final class InterplanetLTX {
      * Download ICS content for a stored plan.
      * Returns the raw ICS string.
      *
-     * @param opts JSON body: e.g. {@code {"start":"2026-03-01T14:00:00Z","duration_min":39}}
+     * @param opts JSON body: e.g. {@code {"start":"2026-03-01T14:00:00Z","duration_min":65}}
      */
     public static String downloadICS(String planId, String optsJson) throws Exception {
         return downloadICS(planId, optsJson, DEFAULT_API_BASE);

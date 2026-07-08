@@ -44,7 +44,7 @@ def format_utc(ms);       ILX.format_utc(ms);       end
 section 'Constants'
 check 'VERSION not empty',              !VERSION.empty?
 check 'VERSION is 1.0.0',              VERSION == '1.0.0'
-check 'DEFAULT_QUANTUM == 3',          DEFAULT_QUANTUM == 3
+check 'DEFAULT_QUANTUM == 5',          DEFAULT_QUANTUM == 5
 check 'DEFAULT_SEG_COUNT == 7',        DEFAULT_SEG_COUNT == 7
 check 'DEFAULT_API_BASE has https',    DEFAULT_API_BASE.start_with?('https://')
 check 'DEFAULT_SEGMENTS[0] PLAN_CONFIRM', DEFAULT_SEGMENTS[0][:type] == 'PLAN_CONFIRM'
@@ -60,7 +60,7 @@ plan = create_plan(start: '2026-03-15T14:00:00Z')
 check 'v == 2',                        plan.v == 2
 check 'title == LTX Session',          plan.title == 'LTX Session'
 check 'start preserved',               plan.start == '2026-03-15T14:00:00Z'
-check 'quantum == 3',                  plan.quantum == 3
+check 'quantum == 5',                  plan.quantum == 5
 check 'mode == LTX',                   plan.mode == 'LTX'
 check 'node_count == 2',              plan.nodes.length == 2
 check 'nodes[0].id == N0',             plan.nodes[0].id == 'N0'
@@ -103,8 +103,8 @@ check 'segs[6].type BUFFER',           segs[6].type == 'BUFFER'
 check 'segs[0].q == 2',               segs[0].q == 2
 check 'segs[0].start_ms > 0',         segs[0].start_ms > 0
 check 'segs[0].end_ms > start_ms',     segs[0].end_ms > segs[0].start_ms
-check 'segs[0].dur_min == 6',         segs[0].dur_min == 6
-check 'segs[6].dur_min == 3',         segs[6].dur_min == 3
+check 'segs[0].dur_min == 10',        segs[0].dur_min == 10
+check 'segs[6].dur_min == 5',         segs[6].dur_min == 5
 (0...segs.length - 1).each do |i|
   check "segs[#{i}] contiguous",      segs[i].end_ms == segs[i + 1].start_ms
 end
@@ -112,7 +112,7 @@ end
 # ── total_min ────────────────────────────────────────────────────────────────
 section 'total_min'
 total = total_min(plan)
-check 'total_min == 39',              total == 39
+check 'total_min == 65',              total == 65
 seg_sum = segs.sum(&:dur_min)
 check 'total_min matches seg sum',     seg_sum == total
 
@@ -176,7 +176,7 @@ check 'ICS has DTEND',               ics.include?('DTEND:')
 check 'ICS has SUMMARY',             ics.include?('SUMMARY:')
 check 'ICS has LTX:1',              ics.include?('LTX:1')
 check 'ICS has LTX-PLANID',         ics.include?('LTX-PLANID:')
-check 'ICS has LTX-QUANTUM:PT3M',   ics.include?('LTX-QUANTUM:PT3M')
+check 'ICS has LTX-QUANTUM:PT5M',   ics.include?('LTX-QUANTUM:PT5M')
 check 'ICS has LTX-NODE',           ics.include?('LTX-NODE:')
 check 'ICS has CRLF',               ics.include?("\r\n")
 

@@ -1,0 +1,643 @@
+{
+  "description": "LTX v1.1 conformance vectors (Epic 72.1). Fixed Ed25519 seed for deterministic signatures.",
+  "key": {
+    "privateSeedB64": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+    "nik": {
+      "nodeId": "Vkdap1RjR0wChd9dvyvKtw",
+      "publicKey": "A6EHv_POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg",
+      "algorithm": "Ed25519",
+      "validFrom": "2026-01-01T00:00:00.000Z",
+      "validUntil": "2046-01-01T00:00:00.000Z",
+      "keyVersion": 1
+    }
+  },
+  "planIdV3": {
+    "plan": {
+      "v": 3,
+      "title": "Vector Summit",
+      "start": "2040-02-01T12:00:00.000Z",
+      "quantum": 5,
+      "mode": "LTX-ASYNC",
+      "nodes": [
+        {
+          "id": "N0",
+          "name": "Earth HQ",
+          "role": "HOST",
+          "delay": 0,
+          "location": "earth"
+        },
+        {
+          "id": "N1",
+          "name": "Mars Hab",
+          "role": "PARTICIPANT",
+          "delay": 900,
+          "location": "mars"
+        },
+        {
+          "id": "N2",
+          "name": "Luna Base",
+          "role": "PARTICIPANT",
+          "delay": 2,
+          "location": "moon"
+        }
+      ],
+      "segments": [
+        {
+          "type": "PLAN_CONFIRM",
+          "q": 2
+        },
+        {
+          "type": "TX",
+          "q": 3,
+          "speaker": "N0",
+          "label": "Opening"
+        },
+        {
+          "type": "TX",
+          "q": 3,
+          "speaker": "N1",
+          "label": "Mars Report"
+        },
+        {
+          "type": "MERGE",
+          "q": 2
+        }
+      ],
+      "delays": {
+        "N1|N2": 500
+      },
+      "planVersion": 1
+    },
+    "canonicalJson": "{\"delays\":{\"N1|N2\":500},\"mode\":\"LTX-ASYNC\",\"nodes\":[{\"delay\":0,\"id\":\"N0\",\"location\":\"earth\",\"name\":\"Earth HQ\",\"role\":\"HOST\"},{\"delay\":900,\"id\":\"N1\",\"location\":\"mars\",\"name\":\"Mars Hab\",\"role\":\"PARTICIPANT\"},{\"delay\":2,\"id\":\"N2\",\"location\":\"moon\",\"name\":\"Luna Base\",\"role\":\"PARTICIPANT\"}],\"planVersion\":1,\"quantum\":5,\"segments\":[{\"q\":2,\"type\":\"PLAN_CONFIRM\"},{\"label\":\"Opening\",\"q\":3,\"speaker\":\"N0\",\"type\":\"TX\"},{\"label\":\"Mars Report\",\"q\":3,\"speaker\":\"N1\",\"type\":\"TX\"},{\"q\":2,\"type\":\"MERGE\"}],\"start\":\"2040-02-01T12:00:00.000Z\",\"title\":\"Vector Summit\",\"v\":3}",
+    "sha256": "a6120a8db075fb40de472c30c8afcce6c8635f829621723e6855769641b1b028",
+    "expectedPlanId": "LTX-20400201-EARTHHQ-MARS-LUNA-v3-a6120a8d"
+  },
+  "planIdV2Regression": {
+    "plan": {
+      "v": 2,
+      "title": "Vector Summit",
+      "start": "2040-02-01T12:00:00.000Z",
+      "quantum": 5,
+      "mode": "LTX-ASYNC",
+      "nodes": [
+        {
+          "id": "N0",
+          "name": "Earth HQ",
+          "role": "HOST",
+          "delay": 0,
+          "location": "earth"
+        },
+        {
+          "id": "N1",
+          "name": "Mars Hab",
+          "role": "PARTICIPANT",
+          "delay": 900,
+          "location": "mars"
+        },
+        {
+          "id": "N2",
+          "name": "Luna Base",
+          "role": "PARTICIPANT",
+          "delay": 2,
+          "location": "moon"
+        }
+      ],
+      "segments": [
+        {
+          "type": "PLAN_CONFIRM",
+          "q": 2
+        },
+        {
+          "type": "TX",
+          "q": 3,
+          "speaker": "N0",
+          "label": "Opening"
+        },
+        {
+          "type": "TX",
+          "q": 3,
+          "speaker": "N1",
+          "label": "Mars Report"
+        },
+        {
+          "type": "MERGE",
+          "q": 2
+        }
+      ]
+    },
+    "expectedPlanId": "LTX-20400201-EARTHHQ-MARS-LUNA-v2-3471002b"
+  },
+  "pairDelay": {
+    "plan": {
+      "v": 3,
+      "title": "Vector Summit",
+      "start": "2040-02-01T12:00:00.000Z",
+      "quantum": 5,
+      "mode": "LTX-ASYNC",
+      "nodes": [
+        {
+          "id": "N0",
+          "name": "Earth HQ",
+          "role": "HOST",
+          "delay": 0,
+          "location": "earth"
+        },
+        {
+          "id": "N1",
+          "name": "Mars Hab",
+          "role": "PARTICIPANT",
+          "delay": 900,
+          "location": "mars"
+        },
+        {
+          "id": "N2",
+          "name": "Luna Base",
+          "role": "PARTICIPANT",
+          "delay": 2,
+          "location": "moon"
+        }
+      ],
+      "segments": [
+        {
+          "type": "PLAN_CONFIRM",
+          "q": 2
+        },
+        {
+          "type": "TX",
+          "q": 3,
+          "speaker": "N0",
+          "label": "Opening"
+        },
+        {
+          "type": "TX",
+          "q": 3,
+          "speaker": "N1",
+          "label": "Mars Report"
+        },
+        {
+          "type": "MERGE",
+          "q": 2
+        }
+      ],
+      "delays": {
+        "N1|N2": 500
+      },
+      "planVersion": 1
+    },
+    "cases": [
+      {
+        "a": "N0",
+        "b": "N1",
+        "expected": 900
+      },
+      {
+        "a": "N1",
+        "b": "N0",
+        "expected": 900
+      },
+      {
+        "a": "N1",
+        "b": "N2",
+        "expected": 500
+      },
+      {
+        "a": "N2",
+        "b": "N1",
+        "expected": 500
+      },
+      {
+        "a": "N1",
+        "b": "N1",
+        "expected": 0
+      }
+    ],
+    "fallbackCase": {
+      "plan": {
+        "v": 2,
+        "title": "Vector Summit",
+        "start": "2040-02-01T12:00:00.000Z",
+        "quantum": 5,
+        "mode": "LTX-ASYNC",
+        "nodes": [
+          {
+            "id": "N0",
+            "name": "Earth HQ",
+            "role": "HOST",
+            "delay": 0,
+            "location": "earth"
+          },
+          {
+            "id": "N1",
+            "name": "Mars Hab",
+            "role": "PARTICIPANT",
+            "delay": 900,
+            "location": "mars"
+          },
+          {
+            "id": "N2",
+            "name": "Luna Base",
+            "role": "PARTICIPANT",
+            "delay": 2,
+            "location": "moon"
+          }
+        ],
+        "segments": [
+          {
+            "type": "PLAN_CONFIRM",
+            "q": 2
+          },
+          {
+            "type": "TX",
+            "q": 3,
+            "speaker": "N0",
+            "label": "Opening"
+          },
+          {
+            "type": "TX",
+            "q": 3,
+            "speaker": "N1",
+            "label": "Mars Report"
+          },
+          {
+            "type": "MERGE",
+            "q": 2
+          }
+        ]
+      },
+      "a": "N1",
+      "b": "N2",
+      "expected": 902
+    }
+  },
+  "amendmentChain": {
+    "chain": [
+      {
+        "plan": {
+          "v": 2,
+          "title": "Vector Summit",
+          "start": "2040-02-01T12:00:00.000Z",
+          "quantum": 5,
+          "mode": "LTX-ASYNC",
+          "nodes": [
+            {
+              "id": "N0",
+              "name": "Earth HQ",
+              "role": "HOST",
+              "delay": 0,
+              "location": "earth"
+            },
+            {
+              "id": "N1",
+              "name": "Mars Hab",
+              "role": "PARTICIPANT",
+              "delay": 900,
+              "location": "mars"
+            },
+            {
+              "id": "N2",
+              "name": "Luna Base",
+              "role": "PARTICIPANT",
+              "delay": 2,
+              "location": "moon"
+            }
+          ],
+          "segments": [
+            {
+              "type": "PLAN_CONFIRM",
+              "q": 2
+            },
+            {
+              "type": "TX",
+              "q": 3,
+              "speaker": "N0",
+              "label": "Opening"
+            },
+            {
+              "type": "TX",
+              "q": 3,
+              "speaker": "N1",
+              "label": "Mars Report"
+            },
+            {
+              "type": "MERGE",
+              "q": 2
+            }
+          ]
+        },
+        "coseSign1": {
+          "protected": "eyJhbGciOi0xOX0",
+          "unprotected": {
+            "kid": "Vkdap1RjR0wChd9dvyvKtw"
+          },
+          "payload": "eyJtb2RlIjoiTFRYLUFTWU5DIiwibm9kZXMiOlt7ImRlbGF5IjowLCJpZCI6Ik4wIiwibG9jYXRpb24iOiJlYXJ0aCIsIm5hbWUiOiJFYXJ0aCBIUSIsInJvbGUiOiJIT1NUIn0seyJkZWxheSI6OTAwLCJpZCI6Ik4xIiwibG9jYXRpb24iOiJtYXJzIiwibmFtZSI6Ik1hcnMgSGFiIiwicm9sZSI6IlBBUlRJQ0lQQU5UIn0seyJkZWxheSI6MiwiaWQiOiJOMiIsImxvY2F0aW9uIjoibW9vbiIsIm5hbWUiOiJMdW5hIEJhc2UiLCJyb2xlIjoiUEFSVElDSVBBTlQifV0sInF1YW50dW0iOjUsInNlZ21lbnRzIjpbeyJxIjoyLCJ0eXBlIjoiUExBTl9DT05GSVJNIn0seyJsYWJlbCI6Ik9wZW5pbmciLCJxIjozLCJzcGVha2VyIjoiTjAiLCJ0eXBlIjoiVFgifSx7ImxhYmVsIjoiTWFycyBSZXBvcnQiLCJxIjozLCJzcGVha2VyIjoiTjEiLCJ0eXBlIjoiVFgifSx7InEiOjIsInR5cGUiOiJNRVJHRSJ9XSwic3RhcnQiOiIyMDQwLTAyLTAxVDEyOjAwOjAwLjAwMFoiLCJ0aXRsZSI6IlZlY3RvciBTdW1taXQiLCJ2IjoyfQ",
+          "signature": "2zHRgtxRFQvcNfj-XPFtqB0qg-Ipbx0CsmxgKK9zWCguMfvVADHdEYQtE1ko5z2fZnxd2MPVrx6FrFsww5hgAw"
+        }
+      },
+      {
+        "plan": {
+          "v": 3,
+          "title": "Vector Summit (amended)",
+          "start": "2040-02-01T12:00:00.000Z",
+          "quantum": 5,
+          "mode": "LTX-ASYNC",
+          "nodes": [
+            {
+              "id": "N0",
+              "name": "Earth HQ",
+              "role": "HOST",
+              "delay": 0,
+              "location": "earth"
+            },
+            {
+              "id": "N1",
+              "name": "Mars Hab",
+              "role": "PARTICIPANT",
+              "delay": 900,
+              "location": "mars"
+            },
+            {
+              "id": "N2",
+              "name": "Luna Base",
+              "role": "PARTICIPANT",
+              "delay": 2,
+              "location": "moon"
+            }
+          ],
+          "segments": [
+            {
+              "type": "PLAN_CONFIRM",
+              "q": 2
+            },
+            {
+              "type": "TX",
+              "q": 3,
+              "speaker": "N0",
+              "label": "Opening"
+            },
+            {
+              "type": "TX",
+              "q": 3,
+              "speaker": "N1",
+              "label": "Mars Report"
+            },
+            {
+              "type": "MERGE",
+              "q": 2
+            }
+          ],
+          "planVersion": 2,
+          "prevPlanHash": "58710a510afe517cbd2ed014a3fc5c33d48b9ba26cc59d7ab75613528fa9411f"
+        },
+        "coseSign1": {
+          "protected": "eyJhbGciOi0xOX0",
+          "unprotected": {
+            "kid": "Vkdap1RjR0wChd9dvyvKtw"
+          },
+          "payload": "eyJtb2RlIjoiTFRYLUFTWU5DIiwibm9kZXMiOlt7ImRlbGF5IjowLCJpZCI6Ik4wIiwibG9jYXRpb24iOiJlYXJ0aCIsIm5hbWUiOiJFYXJ0aCBIUSIsInJvbGUiOiJIT1NUIn0seyJkZWxheSI6OTAwLCJpZCI6Ik4xIiwibG9jYXRpb24iOiJtYXJzIiwibmFtZSI6Ik1hcnMgSGFiIiwicm9sZSI6IlBBUlRJQ0lQQU5UIn0seyJkZWxheSI6MiwiaWQiOiJOMiIsImxvY2F0aW9uIjoibW9vbiIsIm5hbWUiOiJMdW5hIEJhc2UiLCJyb2xlIjoiUEFSVElDSVBBTlQifV0sInBsYW5WZXJzaW9uIjoyLCJwcmV2UGxhbkhhc2giOiI1ODcxMGE1MTBhZmU1MTdjYmQyZWQwMTRhM2ZjNWMzM2Q0OGI5YmEyNmNjNTlkN2FiNzU2MTM1MjhmYTk0MTFmIiwicXVhbnR1bSI6NSwic2VnbWVudHMiOlt7InEiOjIsInR5cGUiOiJQTEFOX0NPTkZJUk0ifSx7ImxhYmVsIjoiT3BlbmluZyIsInEiOjMsInNwZWFrZXIiOiJOMCIsInR5cGUiOiJUWCJ9LHsibGFiZWwiOiJNYXJzIFJlcG9ydCIsInEiOjMsInNwZWFrZXIiOiJOMSIsInR5cGUiOiJUWCJ9LHsicSI6MiwidHlwZSI6Ik1FUkdFIn1dLCJzdGFydCI6IjIwNDAtMDItMDFUMTI6MDA6MDAuMDAwWiIsInRpdGxlIjoiVmVjdG9yIFN1bW1pdCAoYW1lbmRlZCkiLCJ2IjozfQ",
+          "signature": "_LfyAbDXQf-0ayJeC8-Tif9PNGMxiTHoCCYOz9C9Oa5Hg0I5GHZSa6c-HiYdOnFBkBgCr4TrrUGoJ_bKUrc7AA"
+        }
+      }
+    ],
+    "rootPlanHash": "58710a510afe517cbd2ed014a3fc5c33d48b9ba26cc59d7ab75613528fa9411f",
+    "expectedValid": true,
+    "tamperField": "title"
+  },
+  "registerEntries": {
+    "entries": [
+      {
+        "entryId": "QST-N1-1",
+        "sessionId": "VEC-SESSION",
+        "nodeId": "N1",
+        "seq": 1,
+        "type": "question",
+        "content": {
+          "text": "Status?",
+          "urgency": "high"
+        },
+        "timestamp": "2040-02-01T11:00:00.000Z",
+        "sig": "-_CozI8Uz_sCodjoOab097slBkYttOnE-3jY8-MXbBPYk_B5CUP-Xem4Xz1BSokXVzoQAUP15_CWMi8oHACvDw"
+      },
+      {
+        "entryId": "QST-N0-1",
+        "sessionId": "VEC-SESSION",
+        "nodeId": "N0",
+        "seq": 1,
+        "type": "question_response",
+        "content": {
+          "qid": "QST-N1-1",
+          "response": "Nominal",
+          "version": 2
+        },
+        "timestamp": "2040-02-01T11:05:00.000Z",
+        "sig": "uvMUnPlkMCKqjpU4MPuBBQXq1O7oEKs4tUaDQHTu50G8CX4NjyeJ8cX65Ot23rVer3Ea1VrIFrEq7lKWCNz8DA"
+      }
+    ],
+    "expectedQuestionState": {
+      "QST-N1-1": {
+        "qid": "QST-N1-1",
+        "text": "Status?",
+        "submitter": "N1",
+        "urgency": "high",
+        "status": "ANSWERED",
+        "version": 2,
+        "response": "Nominal",
+        "responder": "N0"
+      }
+    },
+    "entriesRoot": "1ab1318b96825b442e6d2a43bebc11a909bc8bcf775055542a54c2faa1b96f3d"
+  },
+  "coseSign1": {
+    "plan": {
+      "v": 2,
+      "title": "Vector Summit",
+      "start": "2040-02-01T12:00:00.000Z",
+      "quantum": 5,
+      "mode": "LTX-ASYNC",
+      "nodes": [
+        {
+          "id": "N0",
+          "name": "Earth HQ",
+          "role": "HOST",
+          "delay": 0,
+          "location": "earth"
+        },
+        {
+          "id": "N1",
+          "name": "Mars Hab",
+          "role": "PARTICIPANT",
+          "delay": 900,
+          "location": "mars"
+        },
+        {
+          "id": "N2",
+          "name": "Luna Base",
+          "role": "PARTICIPANT",
+          "delay": 2,
+          "location": "moon"
+        }
+      ],
+      "segments": [
+        {
+          "type": "PLAN_CONFIRM",
+          "q": 2
+        },
+        {
+          "type": "TX",
+          "q": 3,
+          "speaker": "N0",
+          "label": "Opening"
+        },
+        {
+          "type": "TX",
+          "q": 3,
+          "speaker": "N1",
+          "label": "Mars Report"
+        },
+        {
+          "type": "MERGE",
+          "q": 2
+        }
+      ]
+    },
+    "coseSign1CborB64": "0oRDoQEyoQRQVkdap1RjR0wChd9dvyvKt1kCBXsibW9kZSI6IkxUWC1BU1lOQyIsIm5vZGVzIjpbeyJkZWxheSI6MCwiaWQiOiJOMCIsImxvY2F0aW9uIjoiZWFydGgiLCJuYW1lIjoiRWFydGggSFEiLCJyb2xlIjoiSE9TVCJ9LHsiZGVsYXkiOjkwMCwiaWQiOiJOMSIsImxvY2F0aW9uIjoibWFycyIsIm5hbWUiOiJNYXJzIEhhYiIsInJvbGUiOiJQQVJUSUNJUEFOVCJ9LHsiZGVsYXkiOjIsImlkIjoiTjIiLCJsb2NhdGlvbiI6Im1vb24iLCJuYW1lIjoiTHVuYSBCYXNlIiwicm9sZSI6IlBBUlRJQ0lQQU5UIn1dLCJxdWFudHVtIjo1LCJzZWdtZW50cyI6W3sicSI6MiwidHlwZSI6IlBMQU5fQ09ORklSTSJ9LHsibGFiZWwiOiJPcGVuaW5nIiwicSI6Mywic3BlYWtlciI6Ik4wIiwidHlwZSI6IlRYIn0seyJsYWJlbCI6Ik1hcnMgUmVwb3J0IiwicSI6Mywic3BlYWtlciI6Ik4xIiwidHlwZSI6IlRYIn0seyJxIjoyLCJ0eXBlIjoiTUVSR0UifV0sInN0YXJ0IjoiMjA0MC0wMi0wMVQxMjowMDowMC4wMDBaIiwidGl0bGUiOiJWZWN0b3IgU3VtbWl0IiwidiI6Mn1YQNDg5fHexnBLnLbQ5eCoVQfGOlbfhyXYx0xD4Q42Kh8T-FgyPhB_2-QrwEuvYgmZHnDGwfzjoxnAI_NVLJE2XQI",
+    "coseSign1CborHex": "d28443a10132a1045056475aa75463474c0285df5dbf2bcab75902057b226d6f6465223a224c54582d4153594e43222c226e6f646573223a5b7b2264656c6179223a302c226964223a224e30222c226c6f636174696f6e223a226561727468222c226e616d65223a224561727468204851222c22726f6c65223a22484f5354227d2c7b2264656c6179223a3930302c226964223a224e31222c226c6f636174696f6e223a226d617273222c226e616d65223a224d61727320486162222c22726f6c65223a225041525449434950414e54227d2c7b2264656c6179223a322c226964223a224e32222c226c6f636174696f6e223a226d6f6f6e222c226e616d65223a224c756e612042617365222c22726f6c65223a225041525449434950414e54227d5d2c227175616e74756d223a352c227365676d656e7473223a5b7b2271223a322c2274797065223a22504c414e5f434f4e4649524d227d2c7b226c6162656c223a224f70656e696e67222c2271223a332c22737065616b6572223a224e30222c2274797065223a225458227d2c7b226c6162656c223a224d617273205265706f7274222c2271223a332c22737065616b6572223a224e31222c2274797065223a225458227d2c7b2271223a322c2274797065223a224d45524745227d5d2c227374617274223a22323034302d30322d30315431323a30303a30302e3030305a222c227469746c65223a22566563746f722053756d6d6974222c2276223a327d5840d0e0e5f1dec6704b9cb6d0e5e0a85507c63a56df8725d8c74c43e10e362a1f13f858323e107fdbe42bc04baf6209991e70c6c1fce3a319c023f3552c91365d02",
+    "expectedValid": true
+  },
+  "stateMachine": {
+    "plan": {
+      "v": 2,
+      "title": "Vector Summit",
+      "start": "2040-02-01T12:00:00.000Z",
+      "quantum": 5,
+      "mode": "LTX-ASYNC",
+      "nodes": [
+        {
+          "id": "N0",
+          "name": "Earth HQ",
+          "role": "HOST",
+          "delay": 0,
+          "location": "earth"
+        },
+        {
+          "id": "N1",
+          "name": "Mars Hab",
+          "role": "PARTICIPANT",
+          "delay": 900,
+          "location": "mars"
+        },
+        {
+          "id": "N2",
+          "name": "Luna Base",
+          "role": "PARTICIPANT",
+          "delay": 2,
+          "location": "moon"
+        }
+      ],
+      "segments": [
+        {
+          "type": "PLAN_CONFIRM",
+          "q": 2
+        },
+        {
+          "type": "TX",
+          "q": 3,
+          "speaker": "N0",
+          "label": "Opening"
+        },
+        {
+          "type": "TX",
+          "q": 3,
+          "speaker": "N1",
+          "label": "Mars Report"
+        },
+        {
+          "type": "MERGE",
+          "q": 2
+        }
+      ]
+    },
+    "planId": "LTX-20400201-EARTHHQ-MARS-LUNA-v2-3471002b",
+    "quorum": 1,
+    "steps": [
+      {
+        "event": {
+          "type": "START_LOCK",
+          "nowMs": 1000
+        },
+        "expectState": "LOCKING",
+        "expectLock": null
+      },
+      {
+        "event": {
+          "type": "PLAN_CONFIRM",
+          "nowMs": 2000,
+          "nodeId": "N2",
+          "planId": "LTX-20400201-EARTHHQ-MARS-LUNA-v2-3471002b"
+        },
+        "expectState": "LOCKING",
+        "expectLock": null
+      },
+      {
+        "event": {
+          "type": "TICK",
+          "nowMs": 1800999
+        },
+        "expectState": "LOCKING",
+        "expectLock": null
+      },
+      {
+        "event": {
+          "type": "TICK",
+          "nowMs": 1801000
+        },
+        "expectState": "DEGRADED",
+        "expectLock": "QUORUM"
+      },
+      {
+        "event": {
+          "type": "PLAN_CONFIRM",
+          "nowMs": 4000000,
+          "nodeId": "N1",
+          "planId": "LTX-20400201-EARTHHQ-MARS-LUNA-v2-3471002b"
+        },
+        "expectState": "LOCKED",
+        "expectLock": "FULL"
+      },
+      {
+        "event": {
+          "type": "SESSION_START",
+          "nowMs": 4100000
+        },
+        "expectState": "ACTIVE",
+        "expectLock": "FULL"
+      },
+      {
+        "event": {
+          "type": "DELAY_MEASURED",
+          "nowMs": 4200000,
+          "nodeId": "N1",
+          "measuredDelayS": 1201
+        },
+        "expectState": "DEGRADED",
+        "expectLock": "FULL"
+      },
+      {
+        "event": {
+          "type": "HOST_DECISION",
+          "nowMs": 4300000,
+          "decision": "continue"
+        },
+        "expectState": "ACTIVE",
+        "expectLock": "FULL"
+      },
+      {
+        "event": {
+          "type": "SESSION_END",
+          "nowMs": 5000000
+        },
+        "expectState": "COMPLETE",
+        "expectLock": "FULL"
+      }
+    ]
+  }
+}

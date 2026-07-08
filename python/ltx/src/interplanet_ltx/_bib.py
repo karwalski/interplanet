@@ -1,12 +1,22 @@
 """
 _bib.py — BPSec Bundle Integrity Block (BIB)
 Story 28.3 — BPSec BIB (RFC 9173, Context ID 1) using HMAC-SHA-256
+Story 70.5 — LTX-native Ed25519 BIB (LTX-SECURITY.md §8.2, "ltx-ed25519"),
+             port of the Story 70.3 TypeScript additions.
 
-add_bib:          Attach a BIB HMAC-SHA-256 integrity tag to any LTX bundle.
-verify_bib:       Verify the BIB tag on a bundle.
-generate_bib_key: Generate a fresh 32-byte base64url-encoded HMAC key.
+add_bib:            Attach a BIB HMAC-SHA-256 integrity tag to any LTX bundle.
+verify_bib:         Verify the HMAC BIB tag on a bundle.
+add_bib_ed25519:    Attach an Ed25519 NIK-signed BIB (non-repudiation, no
+                    pre-shared pairwise key).
+verify_bib_ed25519: Verify an Ed25519 BIB against the sender's NIK.
+generate_bib_key:   Generate a fresh 32-byte base64url-encoded HMAC key.
 
-Uses only the Python standard library (base64, hashlib, hmac, os).
+Context-confusion defence: each verifier rejects a BIB whose declared
+context does not match its verification method.
+
+Uses only the Python standard library (base64, hashlib, hmac, os) for the
+HMAC context; the Ed25519 context needs the `cryptography` package
+(guarded imports).
 """
 
 from __future__ import annotations
@@ -89,7 +99,12 @@ def verify_bib(bundle: Dict[str, Any], hmac_key_b64: str) -> Dict[str, Any]:
     from ._security import canonical_json  # local import to avoid circular deps
 
     bib = bundle.get('bib')
-    if not bib or not isinstance(bib, dict) or 'hmac' not in bib:
+    if not bib or not isinstance(bib, dict):
+        return {'valid': False, 'reason': 'missing_bib'}
+    if bib.get('securityContext') == 'ltx-ed25519':
+        # Context-confusion defence: an Ed25519 BIB must not pass HMAC verification.
+        return {'valid': False, 'reason': 'context_mismatch'}
+    if 'hmac' not in bib:
         return {'valid': False, 'reason': 'missing_bib'}
 
     bundle_without_bib = {k: v for k, v in bundle.items() if k != 'bib'}
@@ -103,4 +118,77 @@ def verify_bib(bundle: Dict[str, Any], hmac_key_b64: str) -> Dict[str, Any]:
     if not _hmac.compare_digest(computed, expected):
         return {'valid': False, 'reason': 'hmac_mismatch'}
 
+    return {'valid': True}
+
+
+# ── LTX-native Ed25519 BIB (Story 70.5, port of TS Story 70.3) ────────────────
+
+
+def add_bib_ed25519(bundle: Dict[str, Any], private_key_b64: str) -> Dict[str, Any]:
+    """
+    Add an LTX-native Ed25519 BIB (LTX-SECURITY.md §8.2): the bundle is signed
+    with the originating node's NIK, giving per-bundle non-repudiation without
+    a pre-shared pairwise key. The input bundle is NOT mutated.
+
+    :param bundle:          Any LTX message bundle (plain Python dict)
+    :param private_key_b64: Base64url-encoded raw 32-byte Ed25519 private seed
+    :returns:               New bundle dict: { ...bundleWithoutBib,
+                            bib: { securityContext, targetBlockNumber, sig } }
+    """
+    from ._security import canonical_json  # local import to avoid circular deps
+    try:
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    except ImportError:
+        raise ImportError(
+            'add_bib_ed25519 requires the `cryptography` package. '
+            'Install it: pip install cryptography'
+        )
+
+    bundle_without_bib = {k: v for k, v in bundle.items() if k != 'bib'}
+    raw_seed = _urlsafe_b64decode(private_key_b64)
+    priv_key = Ed25519PrivateKey.from_private_bytes(raw_seed)
+    msg = canonical_json(bundle_without_bib).encode('utf-8')
+    sig = priv_key.sign(msg)
+
+    result = dict(bundle_without_bib)
+    result['bib'] = {
+        'securityContext': 'ltx-ed25519',
+        'targetBlockNumber': 0,
+        'sig': _urlsafe_b64encode(sig),
+    }
+    return result
+
+
+def verify_bib_ed25519(bundle: Dict[str, Any], nik: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Verify an LTX-native Ed25519 BIB against the sender's NIK.
+    Rejects HMAC-context BIBs (context-confusion defence).
+
+    :param bundle: Bundle dict containing a 'bib' field
+    :param nik:    Sender's NIK record (with base64url 'publicKey')
+    :returns:      {'valid': True} or {'valid': False, 'reason': <str>}
+    """
+    from ._security import canonical_json  # local import to avoid circular deps
+    try:
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+    except ImportError:
+        raise ImportError(
+            'verify_bib_ed25519 requires the `cryptography` package. '
+            'Install it: pip install cryptography'
+        )
+
+    bib = bundle.get('bib')
+    if not bib or not isinstance(bib, dict):
+        return {'valid': False, 'reason': 'missing_bib'}
+    if bib.get('securityContext') != 'ltx-ed25519' or not isinstance(bib.get('sig'), str):
+        return {'valid': False, 'reason': 'context_mismatch'}
+
+    bundle_without_bib = {k: v for k, v in bundle.items() if k != 'bib'}
+    msg = canonical_json(bundle_without_bib).encode('utf-8')
+    try:
+        raw_pub = _urlsafe_b64decode(nik['publicKey'])
+        pub_key = Ed25519PublicKey.from_public_bytes(raw_pub)
+        pub_key.verify(_urlsafe_b64decode(bib['sig']), msg)
+    except Exception:
+        return {'valid': False, 'reason': 'signature_invalid'}
     return {'valid': True}

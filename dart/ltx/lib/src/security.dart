@@ -110,13 +110,77 @@ String _serializeValue(dynamic v) {
   if (v is bool) return v ? 'true' : 'false';
   if (v is String) return json.encode(v);
   if (v is int) return v.toString();
-  if (v is double) return v.toString();
+  if (v is double) {
+    // RFC 8785: integral values serialise without a fractional part.
+    if (v == v.truncateToDouble() && v.isFinite) return v.toInt().toString();
+    return v.toString();
+  }
   if (v is num) return v.toString();
   if (v is Map) return canonicalJsonMap(v.cast<String, dynamic>());
   if (v is List) {
     return '[' + v.map(_serializeValue).toList().join(',') + ']';
   }
   return json.encode(v.toString());
+}
+
+/// Canonical JSON of any JSON-serialisable value (RFC 8785 subset).
+String canonicalJson(dynamic v) => _serializeValue(v);
+
+// ---- Raw Ed25519 + base64url helpers (shared by the v1.1 modules) ----
+
+/// Base64url encode without padding.
+String b64UrlEncode(List<int> bytes) => _toBase64Url(bytes);
+
+/// Base64url decode (padding optional).
+List<int> b64UrlDecode(String s) => _fromBase64Url(s);
+
+/// SHA-256 digest bytes.
+List<int> sha256Bytes(List<int> data) => _sha256(data);
+
+/// SHA-256 hex digest of a UTF-8 string.
+String sha256HexOfString(String s) => _sha256(utf8.encode(s))
+    .map((b) => b.toRadixString(16).padLeft(2, '0'))
+    .join();
+
+/// Raw 32-byte Ed25519 public key derived from a base64url seed.
+Future<List<int>> publicKeyFromSeed(String privKeyB64) async {
+  final algo = Ed25519();
+  final keyPair = await algo.newKeyPairFromSeed(_fromBase64Url(privKeyB64));
+  final pub = await keyPair.extractPublicKey();
+  return pub.bytes;
+}
+
+/// Sign raw bytes with an Ed25519 seed (base64url); returns base64url sig.
+Future<String> signBytesEd25519(List<int> message, String privKeyB64) async {
+  final algo = Ed25519();
+  final keyPair = await algo.newKeyPairFromSeed(_fromBase64Url(privKeyB64));
+  final sig = await algo.sign(message, keyPair: keyPair);
+  return _toBase64Url(sig.bytes);
+}
+
+/// Verify a raw Ed25519 signature (base64url) against a NIK's public key.
+Future<bool> verifyBytesEd25519(
+    List<int> message, String sigB64, Nik nik) async {
+  try {
+    final rawPub = _fromBase64Url(nik.publicKeyB64);
+    final algo = Ed25519();
+    final pub = SimplePublicKey(rawPub, type: KeyPairType.ed25519);
+    final sig = Signature(_fromBase64Url(sigB64), publicKey: pub);
+    return await algo.verify(message, signature: sig);
+  } catch (_) {
+    return false;
+  }
+}
+
+/// Look up a NIK by kid: exact key match, else a NIK whose nodeId starts
+/// with the kid (mirrors the TS keyCache semantics).
+Nik? lookupNik(String kid, Map<String, Nik> keyCache) {
+  final direct = keyCache[kid];
+  if (direct != null) return direct;
+  for (final nik in keyCache.values) {
+    if (nik.nodeId.startsWith(kid)) return nik;
+  }
+  return null;
 }
 
 // ---- GenerateNIK ----

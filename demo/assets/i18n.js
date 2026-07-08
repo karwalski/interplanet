@@ -511,6 +511,9 @@
       'ltx.setup.node_badge':         'NODE',
       'ltx.setup.ref_delay':          'Reference (0 s delay)',
       'ltx.setup.one_way':            's one-way',
+      'ltx.setup.pair_delays':        'Between-site delays (advanced)',
+      'ltx.setup.pair_delays_hint':   'How long a signal takes between two remote sites, in seconds. We estimate it automatically — change it only if you know the real path.',
+      'ltx.tl.arrives_at':            'reaches you {time}',
 
       // Quantum options
       'ltx.quantum.5':                '5 minutes',

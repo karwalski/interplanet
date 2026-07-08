@@ -1,6 +1,6 @@
 name: interplanet_ltx
 description: Dart port of the InterPlanet LTX meeting protocol SDK
-version: 1.0.0
+version: 1.1.0
 environment:
   sdk: ">=3.0.0 <4.0.0"
 dependencies:

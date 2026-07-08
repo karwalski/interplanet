@@ -30,7 +30,7 @@ public class TestInterplanetLTX {
         check("VERSION is string",             InterplanetLTX.VERSION != null);
         check("VERSION not empty",             !InterplanetLTX.VERSION.isEmpty());
         check("VERSION matches semver",        InterplanetLTX.VERSION.matches("\\d+\\.\\d+\\.\\d+"));
-        check("DEFAULT_QUANTUM == 3",          InterplanetLTX.DEFAULT_QUANTUM == 3);
+        check("DEFAULT_QUANTUM == 5",          InterplanetLTX.DEFAULT_QUANTUM == 5);
         check("DEFAULT_API_BASE has https",    InterplanetLTX.DEFAULT_API_BASE.startsWith("https://"));
         check("SEG_TYPES length >= 4",         InterplanetLTX.SEG_TYPES.length >= 4);
         check("SEG_TYPES has TX",              contains(InterplanetLTX.SEG_TYPES, "TX"));
@@ -47,7 +47,7 @@ public class TestInterplanetLTX {
         check("createPlan v == 2",             plan.v == 2);
         check("createPlan title == LTX Session", "LTX Session".equals(plan.title));
         check("createPlan start ISO format",   plan.start.matches("\\d{4}-\\d{2}-\\d{2}T.*"));
-        check("createPlan quantum == 3",       plan.quantum == 3);
+        check("createPlan quantum == 5",       plan.quantum == 5);
         check("createPlan mode == LTX",        "LTX".equals(plan.mode));
         check("createPlan nodes not null",     plan.nodes != null);
         check("createPlan 2 nodes",            plan.nodes.size() == 2);
@@ -82,8 +82,8 @@ public class TestInterplanetLTX {
         check("seg[0] q == 2",                 segs.get(0).q() == 2);
         check("seg[0] startMs > 0",            segs.get(0).startMs() > 0);
         check("seg[0] endMs > startMs",        segs.get(0).endMs() > segs.get(0).startMs());
-        check("seg[0] durMin == 6",            segs.get(0).durMin() == 6);  // q=2, quantum=3
-        check("seg[6] durMin == 3",            segs.get(6).durMin() == 3);  // q=1, quantum=3
+        check("seg[0] durMin == 10",           segs.get(0).durMin() == 10);  // q=2, quantum=5
+        check("seg[6] durMin == 5",            segs.get(6).durMin() == 5);   // q=1, quantum=5
         // Contiguous
         for (int i = 0; i < segs.size() - 1; i++) {
             check("seg[" + i + "] contiguous",  segs.get(i).endMs() == segs.get(i + 1).startMs());
@@ -93,7 +93,7 @@ public class TestInterplanetLTX {
 
         System.out.println("\n── totalMin ─────────────────────────────────");
         int total = InterplanetLTX.totalMin(fixed);
-        check("totalMin == 39",                total == 39);  // 13 quanta * 3 min
+        check("totalMin == 65",                total == 65);  // 13 quanta * 5 min
         int segSum = segs.stream().mapToInt(LtxSegment::durMin).sum();
         check("totalMin matches segSum",       segSum == total);
 
@@ -163,7 +163,7 @@ public class TestInterplanetLTX {
         check("ICS SUMMARY present",           ics.contains("SUMMARY:"));
         check("ICS LTX:1 present",             ics.contains("LTX:1"));
         check("ICS LTX-PLANID present",        ics.contains("LTX-PLANID:"));
-        check("ICS LTX-QUANTUM:PT3M",          ics.contains("LTX-QUANTUM:PT3M"));
+        check("ICS LTX-QUANTUM:PT5M",          ics.contains("LTX-QUANTUM:PT5M"));
         check("ICS LTX-NODE present",          ics.contains("LTX-NODE:"));
         check("ICS CRLF line endings",         ics.contains("\r\n"));
 

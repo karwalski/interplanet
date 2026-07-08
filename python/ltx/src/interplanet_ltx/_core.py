@@ -8,11 +8,11 @@ from ._models import LtxNode, LtxPlan, LtxSegment, LtxSegmentSpec, LtxNodeUrl
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
-VERSION = '1.0.0'
+VERSION = '1.1.0'
 
 SEG_TYPES = ['PLAN_CONFIRM', 'TX', 'RX', 'CAUCUS', 'BUFFER', 'MERGE']
 
-DEFAULT_QUANTUM = 3  # minutes per quantum
+DEFAULT_QUANTUM = 5  # minutes per quantum (LTX-SPECIFICATION.md §3.2; was 3 — bug B12)
 
 DEFAULT_SEGMENTS: List[Dict] = [
     {'type': 'PLAN_CONFIRM', 'q': 2},
@@ -54,8 +54,22 @@ def _plan_as_dict(plan: LtxPlan) -> dict:
              'delay': n.delay, 'location': n.location}
             for n in plan.nodes
         ],
-        'segments': [{'type': s.type, 'q': s.q} for s in plan.segments],
+        # speaker/label (conference mode, Epic 71) are emitted only when set so
+        # that pre-Epic-71 plans keep their frozen v2 planId hash byte-for-byte.
+        'segments': [
+            {'type': s.type, 'q': s.q,
+             **({'speaker': s.speaker} if getattr(s, 'speaker', None) else {}),
+             **({'label': s.label} if getattr(s, 'label', None) else {})}
+            for s in plan.segments
+        ],
     }
+
+
+def _as_plan_dict(plan) -> dict:
+    """Normalise a plan (LtxPlan dataclass, or v1/v2/v3 dict) to a plan dict."""
+    if isinstance(plan, LtxPlan):
+        return _plan_as_dict(plan)
+    return upgrade_config(plan)
 
 
 def _imul32(a: int, b: int) -> int:
@@ -90,6 +104,24 @@ def upgrade_config(cfg: dict) -> dict:
              'location': remote_loc},
         ],
     }
+
+
+def upgrade_plan_to_v3(plan, **extras) -> dict:
+    """Explicitly upgrade a plan to v3 (LTX-SPECIFICATION.md §4.4).
+
+    NEVER automatic: v3 fields must not be injected into a v2 plan, because the
+    frozen v2 planId hash is insertion-order-sensitive — the upgraded plan is a
+    NEW plan with a new (v3) planId.  The input is not mutated.
+
+    Accepts an LtxPlan dataclass or a plan dict (v1/v2); returns a new plan
+    dict with ``v=3`` and ``planVersion`` (default 1), merged with **extras
+    (e.g. ``delays={'N1|N2': 500}``).
+    """
+    c = _as_plan_dict(plan)
+    out = {**c, **extras}
+    out['v'] = 3
+    out['planVersion'] = extras.get('planVersion', 1)
+    return out
 
 
 def create_plan(
@@ -151,14 +183,119 @@ def compute_segments(plan: LtxPlan) -> List[LtxSegment]:
     return result
 
 
+def pair_delay(plan, node_id_a: str, node_id_b: str) -> float:
+    """One-way delay in seconds between two nodes (LTX-SPECIFICATION.md §3.7).
+
+    A v3 pair matrix (``plan['delays']``, sorted-id ``'A|B'`` keys) is
+    authoritative where present; otherwise the conservative fallback: HOST
+    pairs use the node's declared delay, non-HOST pairs the sum of both
+    HOST-relative delays (a safe upper bound via the HOST vertex).
+
+    Accepts an LtxPlan dataclass or a plan dict (v1/v2/v3).
+    """
+    c = _as_plan_dict(plan)
+    if node_id_a == node_id_b:
+        return 0
+    delays = c.get('delays')
+    key = '|'.join(sorted((node_id_a, node_id_b)))
+    if isinstance(delays, dict) and isinstance(delays.get(key), (int, float)):
+        return delays[key]
+    nodes = c.get('nodes', [])
+    a = next((n for n in nodes if n.get('id') == node_id_a), None)
+    b = next((n for n in nodes if n.get('id') == node_id_b), None)
+    if a is None or b is None:
+        raise ValueError(
+            f"pair_delay: unknown node {node_id_a if a is None else node_id_b}")
+    host_id = nodes[0].get('id')
+    if node_id_a == host_id:
+        return b.get('delay') or 0
+    if node_id_b == host_id:
+        return a.get('delay') or 0
+    return (a.get('delay') or 0) + (b.get('delay') or 0)
+
+
+def compute_segments_for(plan, viewer_node_id: str) -> List[dict]:
+    """Compute the timed segment list from viewer V's perspective
+    (LTX-SPECIFICATION.md §14.3): a segment attributed to speaker S starts for
+    V at seg_start + pair_delay(S, V).  Unattributed segments keep their times.
+
+    Accepts an LtxPlan dataclass or a plan dict (v1/v2/v3).  Returns a list of
+    dicts: ``{type, q, start, end, dur_min, speaker?, label?, perspective,
+    arrivalOffsetS}`` where perspective is 'transmit' (viewer presents),
+    'receive' (arrives after light-time) or 'neutral', and start/end are ISO
+    8601 strings.
+    """
+    c = _as_plan_dict(plan)
+    nodes = c.get('nodes', [])
+    if not any(n.get('id') == viewer_node_id for n in nodes):
+        raise ValueError(f'compute_segments_for: unknown viewer {viewer_node_id}')
+    q_sec = c['quantum'] * 60
+    t = datetime.fromisoformat(c['start'].replace('Z', '+00:00'))
+    result = []
+    for s in c.get('segments', []):
+        start = t
+        end = t + timedelta(seconds=s['q'] * q_sec)
+        t = end
+        speaker = s.get('speaker')
+        seg = {
+            'type': s['type'], 'q': s['q'],
+            'start': _to_iso(start), 'end': _to_iso(end),
+            'dur_min': s['q'] * c['quantum'],
+        }
+        if speaker:
+            seg['speaker'] = speaker
+        if s.get('label'):
+            seg['label'] = s['label']
+        if not speaker or s['type'] not in ('TX', 'SPEAK'):
+            seg['perspective'] = 'neutral'
+            seg['arrivalOffsetS'] = 0
+        elif speaker == viewer_node_id:
+            seg['perspective'] = 'transmit'
+            seg['arrivalOffsetS'] = 0
+        else:
+            shift_s = pair_delay(c, speaker, viewer_node_id)
+            seg['start'] = _to_iso(start + timedelta(seconds=shift_s))
+            seg['end'] = _to_iso(end + timedelta(seconds=shift_s))
+            seg['perspective'] = 'receive'
+            seg['arrivalOffsetS'] = shift_s
+        result.append(seg)
+    return result
+
+
 def total_min(plan: LtxPlan) -> int:
     """Total session duration in minutes."""
     return sum(s.q * plan.quantum for s in plan.segments)
 
 # ── Plan ID ────────────────────────────────────────────────────────────────────
 
-def make_plan_id(plan: LtxPlan) -> str:
-    """Compute the deterministic plan ID.  Matches ltx-sdk.js and ltx.html."""
+def make_plan_id(plan) -> str:
+    """Compute the deterministic plan ID.  Matches ltx-sdk.js and ltx.html.
+
+    Accepts an LtxPlan dataclass (v2) or a plain plan dict (v2 or v3).
+    v2 uses the FROZEN legacy polynomial hash (LTX-SPECIFICATION.md §4.3);
+    v3 dicts use SHA-256 over RFC 8785 canonical JSON (§4.5).
+    """
+    if isinstance(plan, dict):
+        c = plan
+        nodes_d = c.get('nodes', [])
+        date = c.get('start', '')[:10].replace('-', '')
+        host_str = (nodes_d[0].get('name', 'HOST').replace(' ', '').upper()[:8]
+                    if nodes_d else 'HOST')
+        if len(nodes_d) > 1:
+            node_str = '-'.join(n.get('name', '').replace(' ', '').upper()[:4]
+                                for n in nodes_d[1:])[:16]
+        else:
+            node_str = 'RX'
+        if c.get('v', 2) >= 3:
+            import hashlib
+            from ._security import canonical_json
+            digest = hashlib.sha256(canonical_json(c).encode('utf-8')).hexdigest()
+            return f'LTX-{date}-{host_str}-{node_str}-v3-{digest[:8]}'
+        # v2 dict: insertion-order-sensitive by design (frozen legacy rule);
+        # callers must supply the conformance key order.
+        raw = json.dumps(c, separators=(',', ':'))
+        return f'LTX-{date}-{host_str}-{node_str}-v2-{_djb2_hash(raw):08x}'
+
     c = _plan_as_dict(plan)
     date = plan.start[:10].replace('-', '')
     nodes = plan.nodes

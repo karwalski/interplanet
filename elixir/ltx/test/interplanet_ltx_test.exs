@@ -1,6 +1,6 @@
 # test/interplanet_ltx_test.exs
 # Standalone test script for the InterplanetLtx Elixir library.
-# Run with: elixir test/interplanet_ltx_test.exs
+# Run with: elixir -r test/test_helper.exs test/interplanet_ltx_test.exs
 
 # Load the library files
 Code.require_file("../lib/interplanet_ltx/constants.ex", __DIR__)
@@ -16,8 +16,8 @@ alias InterplanetLtx.Models.LtxPlan
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
-check InterplanetLtx.Constants.version() == "1.0.0",   "VERSION is 1.0.0"
-check InterplanetLtx.Constants.default_quantum() == 3, "DEFAULT_QUANTUM is 3"
+check InterplanetLtx.Constants.version() == "1.1.0",   "VERSION is 1.1.0"
+check InterplanetLtx.Constants.default_quantum() == 5, "DEFAULT_QUANTUM is 5"
 check InterplanetLtx.Constants.default_api_base() == "https://interplanet.live/api/ltx.php", "DEFAULT_API_BASE correct"
 check length(InterplanetLtx.Constants.default_segments()) == 7, "DEFAULT_SEGMENTS has 7 entries"
 check hd(InterplanetLtx.Constants.default_segments())[:type] == "PLAN_CONFIRM", "first default segment is PLAN_CONFIRM"
@@ -30,7 +30,7 @@ plan = create_plan(title: "LTX Session", start: "2024-01-15T14:00:00Z")
 check plan.v == 2,                              "create_plan v=2"
 check plan.title == "LTX Session",              "create_plan title"
 check plan.start == "2024-01-15T14:00:00Z",     "create_plan start"
-check plan.quantum == 3,                        "create_plan quantum default 3"
+check plan.quantum == 5,                        "create_plan quantum default 5"
 check plan.mode == "LTX",                       "create_plan mode LTX"
 check length(plan.nodes) == 2,                  "create_plan 2 nodes"
 check length(plan.segments) == 7,              "create_plan 7 segments"
@@ -73,30 +73,30 @@ segs = compute_segments(plan)
 check length(segs) == 7,               "compute_segments 7 segs"
 check hd(segs).type == "PLAN_CONFIRM", "first seg type PLAN_CONFIRM"
 check hd(segs).q == 2,                 "first seg q=2"
-check hd(segs).dur_min == 6,           "first seg dur_min 6"
+check hd(segs).dur_min == 10,          "first seg dur_min 10"
 check Enum.at(segs, 1).type == "TX",   "second seg type TX"
 check Enum.at(segs, 2).type == "RX",   "third seg type RX"
 check Enum.at(segs, 3).type == "CAUCUS", "fourth seg type CAUCUS"
 check List.last(segs).type == "BUFFER", "last seg type BUFFER"
 check List.last(segs).q == 1,          "last seg q=1"
-check List.last(segs).dur_min == 3,    "last seg dur_min 3"
+check List.last(segs).dur_min == 5,    "last seg dur_min 5"
 
 # Verify start_ms and end_ms match the ISO start
 start_epoch_ms = 1_705_327_200_000  # 2024-01-15T14:00:00Z
 check hd(segs).start_ms == start_epoch_ms, "first seg start_ms matches plan start"
-check hd(segs).end_ms == start_epoch_ms + 2 * 3 * 60 * 1000, "first seg end_ms = start + 6 min"
+check hd(segs).end_ms == start_epoch_ms + 2 * 5 * 60 * 1000, "first seg end_ms = start + 10 min"
 check Enum.at(segs, 1).start_ms == hd(segs).end_ms, "segs are contiguous"
 
 # ── total_min ─────────────────────────────────────────────────────────────────
 
-check total_min(plan) == 39,  "total_min default plan = 39"
+check total_min(plan) == 65,  "total_min default plan = 65"
 check total_min(plan2) == 65, "total_min quantum=5 plan = 65"
 
 # ── make_plan_id ──────────────────────────────────────────────────────────────
 
 # Golden value: LTX-20240115-EARTHHQ-MARS-v2-cc8a7fc0 (nodes-before-segments canonical order)
 pid = make_plan_id(plan)
-check pid == "LTX-20240115-EARTHHQ-MARS-v2-cc8a7fc0", "make_plan_id golden value"
+check pid == "LTX-20240115-EARTHHQ-MARS-v2-9d02c042", "make_plan_id golden value"
 check String.starts_with?(pid, "LTX-"), "plan_id starts with LTX-"
 check String.contains?(pid, "-v2-"),    "plan_id contains -v2-"
 check String.length(pid) > 20,          "plan_id length > 20"
@@ -114,7 +114,7 @@ check String.starts_with?(hash, "#l="), "encode_hash starts with #l="
 check byte_size(hash) > 10,             "encode_hash non-empty payload"
 
 # The golden base64 from JS:
-golden_b64 = "eyJ2IjoyLCJ0aXRsZSI6IkxUWCBTZXNzaW9uIiwic3RhcnQiOiIyMDI0LTAxLTE1VDE0OjAwOjAwWiIsInF1YW50dW0iOjMsIm1vZGUiOiJMVFgiLCJub2RlcyI6W3siaWQiOiJOMCIsIm5hbWUiOiJFYXJ0aCBIUSIsInJvbGUiOiJIT1NUIiwiZGVsYXkiOjAsImxvY2F0aW9uIjoiZWFydGgifSx7ImlkIjoiTjEiLCJuYW1lIjoiTWFycyBIYWItMDEiLCJyb2xlIjoiUEFSVElDSVBBTlQiLCJkZWxheSI6MCwibG9jYXRpb24iOiJtYXJzIn1dLCJzZWdtZW50cyI6W3sidHlwZSI6IlBMQU5fQ09ORklSTSIsInEiOjJ9LHsidHlwZSI6IlRYIiwicSI6Mn0seyJ0eXBlIjoiUlgiLCJxIjoyfSx7InR5cGUiOiJDQVVDVVMiLCJxIjoyfSx7InR5cGUiOiJUWCIsInEiOjJ9LHsidHlwZSI6IlJYIiwicSI6Mn0seyJ0eXBlIjoiQlVGRkVSIiwicSI6MX1dfQ"
+golden_b64 = "eyJ2IjoyLCJ0aXRsZSI6IkxUWCBTZXNzaW9uIiwic3RhcnQiOiIyMDI0LTAxLTE1VDE0OjAwOjAwWiIsInF1YW50dW0iOjUsIm1vZGUiOiJMVFgiLCJub2RlcyI6W3siaWQiOiJOMCIsIm5hbWUiOiJFYXJ0aCBIUSIsInJvbGUiOiJIT1NUIiwiZGVsYXkiOjAsImxvY2F0aW9uIjoiZWFydGgifSx7ImlkIjoiTjEiLCJuYW1lIjoiTWFycyBIYWItMDEiLCJyb2xlIjoiUEFSVElDSVBBTlQiLCJkZWxheSI6MCwibG9jYXRpb24iOiJtYXJzIn1dLCJzZWdtZW50cyI6W3sidHlwZSI6IlBMQU5fQ09ORklSTSIsInEiOjJ9LHsidHlwZSI6IlRYIiwicSI6Mn0seyJ0eXBlIjoiUlgiLCJxIjoyfSx7InR5cGUiOiJDQVVDVVMiLCJxIjoyfSx7InR5cGUiOiJUWCIsInEiOjJ9LHsidHlwZSI6IlJYIiwicSI6Mn0seyJ0eXBlIjoiQlVGRkVSIiwicSI6MX1dfQ"
 check hash == "#l=#{golden_b64}", "encode_hash matches JS golden base64"
 
 # decode_hash round trip
@@ -123,7 +123,7 @@ check decoded != nil,                           "decode_hash returns non-nil"
 check decoded.v == 2,                           "decoded plan v=2"
 check decoded.title == "LTX Session",           "decoded plan title"
 check decoded.start == "2024-01-15T14:00:00Z",  "decoded plan start"
-check decoded.quantum == 3,                     "decoded plan quantum"
+check decoded.quantum == 5,                     "decoded plan quantum"
 check decoded.mode == "LTX",                    "decoded plan mode"
 check length(decoded.nodes) == 2,               "decoded plan 2 nodes"
 check length(decoded.segments) == 7,            "decoded plan 7 segments"
@@ -188,7 +188,7 @@ check String.contains?(ics, "END:VEVENT"),        "ics has END:VEVENT"
 check String.contains?(ics, "DTSTART:20240115T140000Z"), "ics has correct DTSTART"
 check String.contains?(ics, "SUMMARY:LTX Session"), "ics has SUMMARY"
 check String.contains?(ics, "LTX-PLANID:"),       "ics has LTX-PLANID"
-check String.contains?(ics, "LTX-QUANTUM:PT3M"),  "ics has LTX-QUANTUM"
+check String.contains?(ics, "LTX-QUANTUM:PT5M"),  "ics has LTX-QUANTUM"
 check String.contains?(ics, "LTX-NODE:"),         "ics has LTX-NODE"
 check String.contains?(ics, "LTX-DELAY;"),        "ics has LTX-DELAY"
 check String.contains?(ics, "LTX-READINESS:"),    "ics has LTX-READINESS"

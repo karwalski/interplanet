@@ -5,11 +5,11 @@ module InterplanetLtx.Constants
 
 open InterplanetLtx.Models
 
-let VERSION = "1.0.0"
+let VERSION = "1.1.0"
 
 let SEG_TYPES = [| "PLAN_CONFIRM"; "TX"; "RX"; "CAUCUS"; "OPEN"; "BUFFER" |]
 
-let DEFAULT_QUANTUM = 3  // minutes per quantum
+let DEFAULT_QUANTUM = 5  // minutes per quantum (LTX-SPECIFICATION §3.2)
 
 let DEFAULT_API_BASE = "https://api.interplanet.app/ltx"
 

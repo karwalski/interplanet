@@ -34,7 +34,7 @@ const TEST_PLAN  = create_plan(
 # ── Constants ──────────────────────────────────────────────────────────────────
 @testset "Constants" begin
     @test PROTOCOL_VERSION == "1.0.0"
-    @test DEFAULT_QUANTUM == 3
+    @test DEFAULT_QUANTUM == 5
     @test length(SEG_TYPES) == 6
     @test "TX" in SEG_TYPES
     @test "RX" in SEG_TYPES

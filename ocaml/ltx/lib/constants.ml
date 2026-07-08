@@ -1,7 +1,7 @@
 (* constants.ml — LTX protocol constants *)
 
-let version = "1.0.0"
-let default_quantum = 3  (* minutes per quantum *)
+let version = "1.1.0"
+let default_quantum = 5  (* minutes per quantum *)
 let default_api_base = "https://interplanet.live/api/ltx.php"
 
 type segment_template = { seg_type: string; q: int }

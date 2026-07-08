@@ -81,7 +81,7 @@ typedef struct {
 
 extern const itx_seg_tmpl_t ITX_DEFAULT_SEGMENTS[7]; /**< Default 7-segment plan */
 extern const int             ITX_DEFAULT_SEG_COUNT;   /**< 7 */
-extern const int             ITX_DEFAULT_QUANTUM;     /**< 3 minutes per quantum */
+extern const int             ITX_DEFAULT_QUANTUM;     /**< 5 minutes per quantum */
 extern const char            ITX_DEFAULT_API_BASE[];  /**< REST API base URL */
 
 /* ── Plan creation ───────────────────────────────────────────────────────── */

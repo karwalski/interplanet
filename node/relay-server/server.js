@@ -32,7 +32,7 @@ const startTime = Date.now();
  * @returns {string}
  */
 function makePlanId(plan) {
-  const canonical = JSON.stringify({
+  const subset = {
     v:        plan.v,
     title:    plan.title,
     start:    plan.start,
@@ -40,7 +40,13 @@ function makePlanId(plan) {
     mode:     plan.mode,
     nodes:    plan.nodes,
     segments: plan.segments,
-  });
+  };
+  // v3 additive fields (LTX-SPECIFICATION.md §4.4) — included only when
+  // present, so v2 session ids are unchanged.
+  if (plan.delays !== undefined)       subset.delays       = plan.delays;
+  if (plan.planVersion !== undefined)  subset.planVersion  = plan.planVersion;
+  if (plan.prevPlanHash !== undefined) subset.prevPlanHash = plan.prevPlanHash;
+  const canonical = JSON.stringify(subset);
   let h = 0;
   for (const b of Buffer.from(canonical)) h = ((h * 31) + b) >>> 0;
   return Buffer.from(h.toString(16).padStart(8, '0')).toString('base64url');

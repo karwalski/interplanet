@@ -12,7 +12,7 @@ class LtxPlan
     public int    $v       = 2;
     public string $title   = 'LTX Session';
     public string $start   = '';
-    public int    $quantum = 3;
+    public int    $quantum = 5;
     public string $mode    = 'LTX';
 
     /** @var LtxNode[] */
@@ -66,7 +66,7 @@ class LtxPlan
         $plan->v        = (int)($data['v']       ?? 2);
         $plan->title    = (string)($data['title']   ?? 'LTX Session');
         $plan->start    = (string)($data['start']   ?? '');
-        $plan->quantum  = (int)($data['quantum'] ?? 3);
+        $plan->quantum  = (int)($data['quantum'] ?? 5);
         $plan->mode     = (string)($data['mode']    ?? 'LTX');
 
         if (isset($data['nodes']) && is_array($data['nodes'])) {

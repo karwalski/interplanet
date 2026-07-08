@@ -1,13 +1,21 @@
 /**
  * @interplanet/ltx — BPSec Bundle Integrity Block (BIB)
  * Story 28.3 — BPSec BIB (RFC 9173, Context ID 1) using HMAC-SHA-256
+ * Story 70.3 — LTX-native Ed25519 BIB (LTX-SECURITY.md §8.2, "ltx-ed25519")
  *
- * addBIB:        Attach a BIB HMAC-SHA-256 integrity tag to any LTX bundle.
- * verifyBIB:     Verify the BIB tag on a bundle.
- * generateBIBKey: Generate a fresh 32-byte base64url-encoded HMAC key.
+ * addBIB:            Attach a BIB HMAC-SHA-256 integrity tag to any LTX bundle.
+ * verifyBIB:         Verify the HMAC BIB tag on a bundle.
+ * addBIBEd25519:     Attach an Ed25519 NIK-signed BIB (non-repudiation, no
+ *                    pre-shared pairwise key).
+ * verifyBIBEd25519:  Verify an Ed25519 BIB against the sender's NIK.
+ * generateBIBKey:    Generate a fresh 32-byte base64url-encoded HMAC key.
+ *
+ * Context-confusion defence: each verifier rejects a BIB whose declared
+ * context does not match its verification method.
  */
 
 import { canonicalJSON } from './security.js';
+import type { NIK } from './security.js';
 
 // ── BIB types ─────────────────────────────────────────────────────────────────
 
@@ -19,6 +27,16 @@ export interface BIB {
   targetBlockNumber: number;
   /** Base64url-encoded HMAC-SHA-256 digest (no padding). */
   hmac: string;
+}
+
+/** LTX-native Ed25519 BIB (LTX-SECURITY.md §8.2). */
+export interface BIBEd25519 {
+  /** LTX application security context identifier. */
+  securityContext: 'ltx-ed25519';
+  /** Target block number (0 = primary block / whole bundle). */
+  targetBlockNumber: number;
+  /** Base64url-encoded Ed25519 signature over canonicalJSON(bundle sans bib). */
+  sig: string;
 }
 
 /** A bundle that carries a BIB field. */
@@ -101,8 +119,13 @@ export function verifyBIB(bundle: Record<string, unknown>, hmacKeyB64: string): 
   };
 
   const { bib, ...bundleWithoutBib } = bundle;
-  const bibObj = bib as BIB | undefined;
-  if (!bibObj || typeof bibObj.hmac !== 'string') {
+  const bibObj = bib as (BIB & Partial<BIBEd25519>) | undefined;
+  if (!bibObj) return { valid: false, reason: 'missing_bib' };
+  if (bibObj.securityContext === 'ltx-ed25519') {
+    // Context-confusion defence: an Ed25519 BIB must not pass HMAC verification.
+    return { valid: false, reason: 'context_mismatch' };
+  }
+  if (typeof bibObj.hmac !== 'string') {
     return { valid: false, reason: 'missing_bib' };
   }
 
@@ -121,4 +144,64 @@ export function verifyBIB(bundle: Record<string, unknown>, hmacKeyB64: string): 
 
   if (!valid) return { valid: false, reason: 'hmac_mismatch' };
   return { valid: true };
+}
+
+// ── LTX-native Ed25519 BIB (Story 70.3) ──────────────────────────────────────
+
+const PKCS8_HEADER = '302e020100300506032b657004220420';
+const SPKI_HEADER = '302a300506032b6570032100';
+
+/**
+ * Add an LTX-native Ed25519 BIB (LTX-SECURITY.md §8.2): the bundle is signed
+ * with the originating node's NIK, giving per-bundle non-repudiation without
+ * a pre-shared pairwise key. The input bundle is not mutated.
+ */
+export function addBIBEd25519(
+  bundle: Record<string, unknown>,
+  privateKeyB64: string,
+): Record<string, unknown> {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const crypto = require('node:crypto') as {
+    createPrivateKey: (opts: { key: Buffer; format: string; type: string }) => unknown;
+    sign: (alg: null, data: Buffer, key: unknown) => Buffer;
+  };
+  const { bib: _bib, ...bundleWithoutBib } = bundle;
+  const rawSeed = Buffer.from(privateKeyB64, 'base64url');
+  const privKey = crypto.createPrivateKey({
+    key: Buffer.concat([Buffer.from(PKCS8_HEADER, 'hex'), rawSeed]),
+    format: 'der', type: 'pkcs8',
+  });
+  const msg = Buffer.from(canonicalJSON(bundleWithoutBib), 'utf8');
+  const sig = crypto.sign(null, msg, privKey).toString('base64url');
+  const bib: BIBEd25519 = { securityContext: 'ltx-ed25519', targetBlockNumber: 0, sig };
+  return { ...bundleWithoutBib, bib };
+}
+
+/**
+ * Verify an LTX-native Ed25519 BIB against the sender's NIK.
+ * Rejects HMAC-context BIBs (context-confusion defence).
+ */
+export function verifyBIBEd25519(
+  bundle: Record<string, unknown>,
+  nik: NIK,
+): BIBVerifyResult {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const crypto = require('node:crypto') as {
+    createPublicKey: (opts: { key: Buffer; format: string; type: string }) => unknown;
+    verify: (alg: null, data: Buffer, key: unknown, sig: Buffer) => boolean;
+  };
+  const { bib, ...bundleWithoutBib } = bundle;
+  const bibObj = bib as (BIBEd25519 & Partial<BIB>) | undefined;
+  if (!bibObj) return { valid: false, reason: 'missing_bib' };
+  if (bibObj.securityContext !== 'ltx-ed25519' || typeof bibObj.sig !== 'string') {
+    return { valid: false, reason: 'context_mismatch' };
+  }
+  const rawPub = Buffer.from(nik.publicKey, 'base64url');
+  const pubKey = crypto.createPublicKey({
+    key: Buffer.concat([Buffer.from(SPKI_HEADER, 'hex'), rawPub]),
+    format: 'der', type: 'spki',
+  });
+  const msg = Buffer.from(canonicalJSON(bundleWithoutBib), 'utf8');
+  const ok = crypto.verify(null, msg, pubKey, Buffer.from(bibObj.sig, 'base64url'));
+  return ok ? { valid: true } : { valid: false, reason: 'signature_invalid' };
 }

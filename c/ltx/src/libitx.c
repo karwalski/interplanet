@@ -13,7 +13,7 @@
 
 /* ── Constants ───────────────────────────────────────────────────────────── */
 
-const int  ITX_DEFAULT_QUANTUM   = 3;
+const int  ITX_DEFAULT_QUANTUM   = 5;
 const int  ITX_DEFAULT_SEG_COUNT = 7;
 const char ITX_DEFAULT_API_BASE[] = "https://interplanet.live/api/ltx.php";
 

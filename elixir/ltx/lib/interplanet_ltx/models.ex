@@ -11,9 +11,13 @@ defmodule InterplanetLtx.Models do
   end
 
   defmodule LtxSegmentTemplate do
-    @moduledoc "Segment template: type and quantum multiplier."
+    @moduledoc """
+    Segment template: type and quantum multiplier.
+    `speaker`/`label` (Epic 71 conference mode, v1.1) are optional and nil for
+    classic two-node plans, so pre-Epic-71 plans keep their frozen v2 planId.
+    """
     @enforce_keys [:type, :q]
-    defstruct [:type, :q]
+    defstruct [:type, :q, :speaker, :label]
   end
 
   defmodule LtxSegment do

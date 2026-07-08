@@ -430,7 +430,9 @@ defmodule InterplanetLtx do
   defp coerce_segment_template(s) when is_map(s) do
     %LtxSegmentTemplate{
       type: to_string(s[:type] || s["type"] || "TX"),
-      q: s[:q] || s["q"] || 2
+      q: s[:q] || s["q"] || 2,
+      speaker: s[:speaker] || s["speaker"],
+      label: s[:label] || s["label"]
     }
   end
 
@@ -508,10 +510,15 @@ defmodule InterplanetLtx do
       end)
       |> Enum.join(",")
 
+    # speaker/label (Epic 71 conference mode) are emitted only when set so
+    # that pre-Epic-71 plans keep their frozen v2 planId hash byte-for-byte.
     segs_json =
       plan.segments
       |> Enum.map(fn s ->
-        ~s({"type":#{json_str(s.type)},"q":#{s.q}})
+        extra =
+          (if s |> Map.get(:speaker), do: ~s(,"speaker":#{json_str(s.speaker)}), else: "") <>
+          (if s |> Map.get(:label),   do: ~s(,"label":#{json_str(s.label)}),     else: "")
+        ~s({"type":#{json_str(s.type)},"q":#{s.q}#{extra}})
       end)
       |> Enum.join(",")
 

@@ -354,7 +354,7 @@ ltx_segment_spec <- function(type, q) {
 #' @param delay           numeric one-way signal delay in seconds (default 0)
 #' @param title           character session title (default "LTX Session")
 #' @param start_iso       character ISO 8601 UTC start; default: 5 min from now
-#' @param quantum         integer minutes per quantum (default DEFAULT_QUANTUM = 3)
+#' @param quantum         integer minutes per quantum (default DEFAULT_QUANTUM = 5)
 #' @param mode            character protocol mode (default "LTX")
 #' @param host_location   character host location key (default "earth")
 #' @param remote_location character participant location key (default "mars")

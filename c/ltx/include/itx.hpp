@@ -183,7 +183,7 @@ inline std::string formatUTC(long long epoch_ms) {
 /* ── Constants ───────────────────────────────────────────────────────────── */
 
 constexpr const char *VERSION         = ITX_VERSION_STRING;
-constexpr int         DEFAULT_QUANTUM = 3;
+constexpr int         DEFAULT_QUANTUM = 5;
 constexpr int         DEFAULT_SEG_COUNT = 7;
 
 } /* namespace itx */

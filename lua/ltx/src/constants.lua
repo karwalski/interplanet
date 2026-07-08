@@ -3,14 +3,14 @@
 
 local M = {}
 
-M.VERSION = "1.0.0"
+M.VERSION = "1.1.0"
 
 M.SEG_TYPES = {
   "PLAN_CONFIRM", "TX", "RX", "CAUCUS", "BUFFER", "MERGE",
   "SPEAK", "RELAY", "REST", "PAD",
 }
 
-M.DEFAULT_QUANTUM = 3  -- minutes per quantum
+M.DEFAULT_QUANTUM = 5  -- minutes per quantum
 
 M.DEFAULT_SEGMENTS = {
   { type = "PLAN_CONFIRM", q = 2 },

@@ -69,7 +69,7 @@ println("Total: $(total_min(plan)) minutes")
 | Name | Value | Description |
 |------|-------|-------------|
 | `PROTOCOL_VERSION` | "1.0.0" | SDK version |
-| `DEFAULT_QUANTUM` | 3 | Default minutes per quantum |
+| `DEFAULT_QUANTUM` | 5 | Default minutes per quantum |
 | `SEG_TYPES` | [...] | Valid segment type strings |
 | `DEFAULT_SEGMENTS` | 7 segments | PLAN_CONFIRM, TX, RX, CAUCUS, TX, RX, BUFFER |
 

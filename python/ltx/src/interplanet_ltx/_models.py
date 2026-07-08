@@ -17,6 +17,8 @@ class LtxNode:
 class LtxSegmentSpec:
     type: str   # 'PLAN_CONFIRM' | 'TX' | 'RX' | 'CAUCUS' | 'BUFFER' | 'MERGE'
     q: int      # number of quanta
+    speaker: Optional[str] = None   # presenting node id (conference mode, Epic 71)
+    label: Optional[str] = None     # agenda label (conference mode, Epic 71)
 
 
 @dataclass

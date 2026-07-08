@@ -13,7 +13,7 @@ namespace InterplanetLtx;
 
 public static class InterplanetLTX
 {
-    public const string VERSION = "1.0.0";
+    public const string VERSION = "1.1.0";
 
     // ── Polynomial hash ──────────────────────────────────────────────────────
     // Matches JS: h = (Math.imul(31, h) + raw.charCodeAt(i)) >>> 0
@@ -62,7 +62,7 @@ public static class InterplanetLTX
     public static LtxPlan CreatePlan(
         string title = "LTX Session",
         string? start = null,
-        int quantum = 3,
+        int quantum = 5,
         string mode = "LTX",
         List<LtxNode>? nodes = null,
         string hostName = "Earth HQ",

@@ -25,6 +25,8 @@ export type {
   LtxNode,
   LtxPlan,
   LtxPlanV1,
+  LtxPlanV3,
+  AnyLtxPlan,
   LtxSegment,
   CreatePlanOptions,
   NodeUrl,
@@ -36,13 +38,72 @@ export {
   DEFAULT_QUANTUM,
   DEFAULT_SEGMENTS,
   DEFAULT_API_BASE,
+  DELAY_VIOLATION_WARN_S,
+  DELAY_VIOLATION_DEGRADE_S,
+  LOCK_TIMEOUT_FACTOR,
 } from './constants.js';
 
-export { createPlan, upgradeConfig }          from './plan.js';
-export { computeSegments, totalMin, makePlanId } from './segments.js';
+export { createSession, transition, lockTimeoutMs } from './session.js';
+export type {
+  SessionState,
+  SessionEvent,
+  SessionEffect,
+  SessionContext,
+  SessionOptions,
+  StateTransitionEntry,
+  PendingAmendment,
+  TransitionResult,
+  LockKind,
+} from './session.js';
+
+export {
+  planHash,
+  createAmendment,
+  verifyAmendmentChain,
+  insertBufferViaAmendment,
+} from './amend.js';
+
+export {
+  createRegisterEntry,
+  verifyRegisterEntry,
+  compareEntries,
+  orderEntries,
+  reduceQuestions,
+  reduceActions,
+  emitQuestionSeeds,
+} from './registers.js';
+export type {
+  RegisterEntryType,
+  RegisterEntry,
+  CreateEntryOptions,
+  EntryVerifyResult,
+  QuestionState,
+  ActionState,
+  RegisterReduction,
+} from './registers.js';
+
+export {
+  mergeLogs,
+  entriesRoot,
+  runMergeSegment,
+  recoverPartition,
+} from './merge.js';
+export type {
+  MergeResult,
+  PartitionOutcome,
+} from './merge.js';
+
+export { createPlan, upgradeConfig, upgradePlanToV3 } from './plan.js';
+export {
+  computeSegments, computeSegmentsFor, pairDelay, totalMin, makePlanId,
+} from './segments.js';
+export type { LtxViewerSegment } from './segments.js';
 export { encodeHash, decodeHash }             from './encoding.js';
 export { buildNodeUrls }                      from './urls.js';
 export { generateICS }                        from './ics.js';
+export type { GenerateICSOptions }            from './ics.js';
+export { buildConferenceAgenda, primeTimeReport } from './conference.js';
+export type { ConferenceAgendaOptions, PrimeTimeEntry } from './conference.js';
 export { formatHMS, formatUTC }              from './formatting.js';
 export {
   storeSession, getSession, downloadICS, submitFeedback,
@@ -70,6 +131,9 @@ export type {
 
 export {
   createSequenceTracker,
+  createGlobalSequenceTracker,
+  checkIssuedAt,
+  ISSUED_AT_MAX_AGE_DAYS,
   addSeq,
   checkSeq,
 } from './sequence.js';
@@ -77,7 +141,19 @@ export type {
   SeqCheckResult,
   SequenceTrackerStorage,
   SequenceTracker,
+  GlobalSequenceTracker,
 } from './sequence.js';
+
+export { encodeCbor, decodeCbor, CborTag } from './cbor.js';
+
+export {
+  signPlanCose,
+  verifyPlanCose,
+  verifyPlanAny,
+  COSE_SIGN1_TAG,
+  COSE_ALG_ED25519,
+} from './cose.js';
+export type { CoseSignedPlan } from './cose.js';
 
 export { createMerkleLog, verifyTreeHead } from './merkle.js';
 export type {
@@ -98,8 +174,11 @@ export type {
   KeyRevocation,
 } from './keydist.js';
 
-export { addBIB, verifyBIB, generateBIBKey } from './bib.js';
-export type { BIB, BIBBundle, BIBVerifyResult } from './bib.js';
+export {
+  addBIB, verifyBIB, generateBIBKey,
+  addBIBEd25519, verifyBIBEd25519,
+} from './bib.js';
+export type { BIB, BIBEd25519, BIBBundle, BIBVerifyResult } from './bib.js';
 export { generateSessionKey, encryptWindow, decryptWindow } from './bcb.js';
 export type { BCBBundle, DecryptResult } from './bcb.js';
 

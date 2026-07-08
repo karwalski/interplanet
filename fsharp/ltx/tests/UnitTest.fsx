@@ -25,8 +25,8 @@ let check (cond: bool) (msg: string) =
 
 // ── VERSION / Constants ───────────────────────────────────────────────────────
 
-check (VERSION = "1.0.0")                                   "VERSION is 1.0.0"
-check (DEFAULT_QUANTUM = 3)                                 "DEFAULT_QUANTUM is 3"
+check (VERSION = "1.1.0")                                   "VERSION is 1.1.0"
+check (DEFAULT_QUANTUM = 5)                                 "DEFAULT_QUANTUM is 5"
 check (DEFAULT_SEGMENTS.Length = 7)                         "DEFAULT_SEGMENTS has 7 entries"
 check (SEG_TYPES.Length = 6)                                "SEG_TYPES has 6 entries"
 check (SEG_TYPES.[0] = "PLAN_CONFIRM")                      "SEG_TYPES[0] is PLAN_CONFIRM"

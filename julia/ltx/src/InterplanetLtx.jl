@@ -20,7 +20,7 @@ export store_session, get_session
 # ── Constants ──────────────────────────────────────────────────────────────────
 
 const PROTOCOL_VERSION = "1.0.0"
-const DEFAULT_QUANTUM  = 3   # minutes per quantum
+const DEFAULT_QUANTUM  = 5   # minutes per quantum (LTX-SPECIFICATION.md §3.2)
 
 const SEG_TYPES = ["PLAN_CONFIRM", "TX", "RX", "CAUCUS", "BUFFER", "MERGE"]
 
@@ -502,7 +502,7 @@ the canonical 7-segment template.
 - `delay`            One-way signal delay in seconds (default: 0)
 - `title`            Session title (default: "LTX Session")
 - `start_iso`        ISO 8601 UTC start time (default: current time + 5 min)
-- `quantum`          Minutes per quantum (default: 3)
+- `quantum`          Minutes per quantum (default: 5)
 - `mode`             Protocol mode (default: "LTX")
 - `host_location`    Host location key (default: "earth")
 - `remote_location`  Remote location key (default: "mars")

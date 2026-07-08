@@ -17,6 +17,10 @@ export interface SegmentTemplate {
   type: SegmentType;
   /** Number of quanta. */
   q: number;
+  /** Presenting node id for attributed TX segments (LTX-SPECIFICATION.md §3.4.1). */
+  speaker?: string;
+  /** Agenda title for this segment (LTX-SPECIFICATION.md §3.4.1). */
+  label?: string;
 }
 
 /** A single node (party) in a session. */
@@ -41,6 +45,30 @@ export interface LtxPlan {
   nodes: LtxNode[];
   segments: SegmentTemplate[];
 }
+
+/**
+ * v3 plan — strictly additive extension of v2 (LTX-SPECIFICATION.md §4.4).
+ * v3 fields MUST NOT be injected into a v2 plan (the frozen v2 planId hash is
+ * insertion-order-sensitive); use upgradePlanToV3() / createAmendment().
+ */
+export interface LtxPlanV3 extends Omit<LtxPlan, 'v'> {
+  v: 3;
+  /** Pair-wise one-way delays in seconds, keyed "A|B" with A < B lexicographically. */
+  delays?: Record<string, number>;
+  /** Amendment counter; 1 for a root plan (LTX-SPECIFICATION.md §6.4). */
+  planVersion?: number;
+  /** SHA-256 hex of canonicalJSON of the predecessor plan in an amendment chain. */
+  prevPlanHash?: string;
+  /** Pre-polled question seeds (LTX-SPECIFICATION.md §9.2). */
+  questions?: unknown[];
+  /** Action register seeds (LTX-SPECIFICATION.md §10). */
+  actions?: unknown[];
+  /** Reserved (LTX-SPECIFICATION.md §3.5). MUST be absent or empty. */
+  streams?: unknown[];
+}
+
+/** Any current plan version accepted by session-level APIs. */
+export type AnyLtxPlan = LtxPlan | LtxPlanV3;
 
 /** A v1 plan config (legacy two-party format). */
 export interface LtxPlanV1 {

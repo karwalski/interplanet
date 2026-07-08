@@ -2,6 +2,7 @@
 // SecurityTest.fsx --- Epic 29, Stories 29.1 / 29.4 / 29.5
 // Run with: dotnet fsi tests/SecurityTest.fsx
 
+#r "nuget: NSec.Cryptography, 24.4.0"
 #load "../src/Security.fs"
 
 open InterplanetLtx.Security
@@ -78,6 +79,73 @@ let tampered = { sp with Plan = tamperedPlan }
 let (ok4, r4) = verifyPlan tampered cache
 check "verify fails tampered" (not ok4)
 checkEq "reason payload_mismatch" r4 "payload_mismatch"
+
+// Wrong public key under the right kid must fail (real crypto — the old
+// SHA-256 stub verified without ever touching the key).
+let wrongKeyCache = Dictionary<string,Nik>()
+wrongKeyCache.[nik1.Kid] <- { nik2 with Kid = nik1.Kid; NodeId = nik1.NodeId }
+let (ok5, r5) = verifyPlan sp wrongKeyCache
+check "verify fails wrong key" (not ok5)
+checkEq "reason signature_mismatch (wrong key)" r5 "signature_mismatch"
+
+// Corrupted signature must fail.
+let flipped =
+    let s = sp.CoseSign1.Signature
+    (if s.[0] = 'A' then "B" else "A") + s.Substring(1)
+let (ok6, r6) = verifyPlan { sp with CoseSign1 = { sp.CoseSign1 with Signature = flipped } } cache
+check "verify fails corrupted sig" (not ok6)
+checkEq "reason signature_mismatch (corrupt)" r6 "signature_mismatch"
+
+// ---- deterministic Ed25519 interop vector (conformance/vectors.json .v11) ----
+// Ed25519 is deterministic: signing the vector plan's canonical JSON with the
+// fixed vector seed must byte-equal the golden TRANSITIONAL-envelope signature
+// produced by the other ports (.v11.amendmentChain.chain[0].coseSign1).
+
+let VECTOR_SEED       = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+let VECTOR_NODE_ID    = "Vkdap1RjR0wChd9dvyvKtw"
+let VECTOR_PUBLIC_KEY = "A6EHv_POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg"
+let VECTOR_PROTECTED  = "eyJhbGciOi0xOX0"
+let VECTOR_ROOT_PAYLOAD = "eyJtb2RlIjoiTFRYLUFTWU5DIiwibm9kZXMiOlt7ImRlbGF5IjowLCJpZCI6Ik4wIiwibG9jYXRpb24iOiJlYXJ0aCIsIm5hbWUiOiJFYXJ0aCBIUSIsInJvbGUiOiJIT1NUIn0seyJkZWxheSI6OTAwLCJpZCI6Ik4xIiwibG9jYXRpb24iOiJtYXJzIiwibmFtZSI6Ik1hcnMgSGFiIiwicm9sZSI6IlBBUlRJQ0lQQU5UIn0seyJkZWxheSI6MiwiaWQiOiJOMiIsImxvY2F0aW9uIjoibW9vbiIsIm5hbWUiOiJMdW5hIEJhc2UiLCJyb2xlIjoiUEFSVElDSVBBTlQifV0sInF1YW50dW0iOjUsInNlZ21lbnRzIjpbeyJxIjoyLCJ0eXBlIjoiUExBTl9DT05GSVJNIn0seyJsYWJlbCI6Ik9wZW5pbmciLCJxIjozLCJzcGVha2VyIjoiTjAiLCJ0eXBlIjoiVFgifSx7ImxhYmVsIjoiTWFycyBSZXBvcnQiLCJxIjozLCJzcGVha2VyIjoiTjEiLCJ0eXBlIjoiVFgifSx7InEiOjIsInR5cGUiOiJNRVJHRSJ9XSwic3RhcnQiOiIyMDQwLTAyLTAxVDEyOjAwOjAwLjAwMFoiLCJ0aXRsZSI6IlZlY3RvciBTdW1taXQiLCJ2IjoyfQ"
+let VECTOR_ROOT_SIG   = "2zHRgtxRFQvcNfj-XPFtqB0qg-Ipbx0CsmxgKK9zWCguMfvVADHdEYQtE1ko5z2fZnxd2MPVrx6FrFsww5hgAw"
+
+let vnik = nikFromSeed VECTOR_SEED 7300 "Vector Node"
+checkEq "vector publicKey = raw 32-byte pub b64u" vnik.PublicKeyB64 VECTOR_PUBLIC_KEY
+checkEq "vector nodeId = b64u(sha256(pub)[0..15])" vnik.NodeId VECTOR_NODE_ID
+checkEq "vector privateKey round-trips seed" vnik.PrivateKeyB64 VECTOR_SEED
+
+let vNode (id: string) (name: string) (role: string) (delay: int) (location: string) : obj =
+    dict [ ("id", box id); ("name", box name); ("role", box role)
+           ("delay", box delay); ("location", box location) ] |> box
+
+let vectorPlan =
+    dict [
+        ("v", box 2)
+        ("title", box "Vector Summit")
+        ("start", box "2040-02-01T12:00:00.000Z")
+        ("quantum", box 5)
+        ("mode", box "LTX-ASYNC")
+        ("nodes", box [|
+            vNode "N0" "Earth HQ" "HOST" 0 "earth"
+            vNode "N1" "Mars Hab" "PARTICIPANT" 900 "mars"
+            vNode "N2" "Luna Base" "PARTICIPANT" 2 "moon" |])
+        ("segments", box [|
+            box (dict [ ("type", box "PLAN_CONFIRM"); ("q", box 2) ])
+            box (dict [ ("type", box "TX"); ("q", box 3); ("speaker", box "N0"); ("label", box "Opening") ])
+            box (dict [ ("type", box "TX"); ("q", box 3); ("speaker", box "N1"); ("label", box "Mars Report") ])
+            box (dict [ ("type", box "MERGE"); ("q", box 2) ]) |])
+    ] :> IDictionary<string,obj>
+
+let vsp = signPlan vectorPlan vnik
+checkEq "vector protected header matches golden" vsp.CoseSign1.ProtectedHdr VECTOR_PROTECTED
+checkEq "vector kid matches golden nodeId" vsp.CoseSign1.Kid VECTOR_NODE_ID
+checkEq "vector payload matches golden canonical JSON" vsp.CoseSign1.Payload VECTOR_ROOT_PAYLOAD
+checkEq "vector signature byte-equals golden (deterministic Ed25519)" vsp.CoseSign1.Signature VECTOR_ROOT_SIG
+
+let vCache = Dictionary<string,Nik>()
+vCache.[vnik.Kid] <- vnik
+let (vOk, vReason) = verifyPlan vsp vCache
+check "vector envelope verifies" vOk
+checkEq "vector verify reason" vReason "ok"
 
 // ---- SequenceTracker ----
 let st = SequenceTracker("plan-x")

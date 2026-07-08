@@ -13,9 +13,9 @@ void Check(bool condition, string label)
 
 // ── VERSION ────────────────────────────────────────────────────────────────
 
-Check(InterplanetLTX.VERSION == "1.0.0",                 "VERSION is 1.0.0");
-Check(Constants.VERSION == "1.0.0",                      "Constants.VERSION is 1.0.0");
-Check(Constants.DEFAULT_QUANTUM == 3,                    "DEFAULT_QUANTUM is 3");
+Check(InterplanetLTX.VERSION == "1.1.0",                 "VERSION is 1.1.0");
+Check(Constants.VERSION == "1.1.0",                      "Constants.VERSION is 1.1.0");
+Check(Constants.DEFAULT_QUANTUM == 5,                    "DEFAULT_QUANTUM is 5");
 Check(Constants.DEFAULT_SEGMENTS.Count == 7,             "DEFAULT_SEGMENTS has 7 entries");
 Check(Constants.SEG_TYPES.Length == 6,                   "SEG_TYPES has 6 entries");
 Check(Constants.SEG_TYPES[0] == "PLAN_CONFIRM",          "SEG_TYPES[0] is PLAN_CONFIRM");
@@ -27,7 +27,7 @@ Check(Constants.DEFAULT_API_BASE.Contains("interplanet.live"), "DEFAULT_API_BASE
 var plan = InterplanetLTX.CreatePlan();
 Check(plan.V == 2,                                       "CreatePlan v=2");
 Check(plan.Title == "LTX Session",                       "CreatePlan default title");
-Check(plan.Quantum == 3,                                 "CreatePlan quantum=3");
+Check(plan.Quantum == 5,                                 "CreatePlan quantum=5");
 Check(plan.Mode == "LTX",                                "CreatePlan mode=LTX");
 Check(plan.Nodes.Count == 2,                             "CreatePlan 2 nodes");
 Check(plan.Segments.Count == 7,                          "CreatePlan 7 segments");
@@ -87,39 +87,39 @@ var segs = InterplanetLTX.ComputeSegments(canonical);
 Check(segs.Count == 7,                                   "ComputeSegments count=7");
 Check(segs[0].Type == "PLAN_CONFIRM",                    "ComputeSegments[0] type=PLAN_CONFIRM");
 Check(segs[0].Q == 2,                                    "ComputeSegments[0] q=2");
-Check(segs[0].DurMin == 6,                               "ComputeSegments[0] durMin=6");
+Check(segs[0].DurMin == 10,                              "ComputeSegments[0] durMin=10");
 Check(segs[0].Start == "2024-01-15T14:00:00Z",           "ComputeSegments[0] start");
-Check(segs[0].End == "2024-01-15T14:06:00Z",             "ComputeSegments[0] end");
+Check(segs[0].End == "2024-01-15T14:10:00Z",             "ComputeSegments[0] end");
 Check(segs[0].StartMs == 1705327200000L,                 "ComputeSegments[0] startMs");
 Check(segs[1].Type == "TX",                              "ComputeSegments[1] type=TX");
 Check(segs[6].Type == "BUFFER",                          "ComputeSegments[6] type=BUFFER");
 Check(segs[6].Q == 1,                                    "ComputeSegments[6] q=1");
-Check(segs[6].DurMin == 3,                               "ComputeSegments[6] durMin=3");
-// End of last segment: 14:00 + (2+2+2+2+2+2+1)*3 = 14:00 + 39 min = 14:39
-Check(segs[6].End == "2024-01-15T14:39:00Z",             "ComputeSegments[6] end=14:39");
+Check(segs[6].DurMin == 5,                               "ComputeSegments[6] durMin=5");
+// End of last segment: 14:00 + (2+2+2+2+2+2+1)*5 = 14:00 + 65 min = 15:05
+Check(segs[6].End == "2024-01-15T15:05:00Z",             "ComputeSegments[6] end=15:05");
 
 // ── TotalMin ───────────────────────────────────────────────────────────────
 
-Check(InterplanetLTX.TotalMin(canonical) == 39,          "TotalMin=39 (default plan)");
+Check(InterplanetLTX.TotalMin(canonical) == 65,          "TotalMin=65 (default plan)");
 var plan3 = InterplanetLTX.CreatePlan(quantum: 5);
 Check(InterplanetLTX.TotalMin(plan3) == 65,              "TotalMin=65 (quantum=5)");
 
 // ── MakePlanId — golden hash test ─────────────────────────────────────────
 // Golden value from JS reference (nodes-before-segments canonical order):
-// LTX-20240115-EARTHHQ-MARS-v2-cc8a7fc0
+// LTX-20240115-EARTHHQ-MARS-v2-9d02c042
 
 var goldenPlan = InterplanetLTX.CreatePlan(
     title: "LTX Session",
     start: "2024-01-15T14:00:00Z");
 string planId = InterplanetLTX.MakePlanId(goldenPlan);
 
-Check(planId == "LTX-20240115-EARTHHQ-MARS-v2-cc8a7fc0", "MakePlanId golden hash matches JS");
+Check(planId == "LTX-20240115-EARTHHQ-MARS-v2-9d02c042", "MakePlanId golden hash matches JS");
 Check(planId.StartsWith("LTX-"),                          "MakePlanId starts with LTX-");
 Check(planId.Contains("20240115"),                        "MakePlanId contains date");
 Check(planId.Contains("EARTHHQ"),                         "MakePlanId contains EARTHHQ");
 Check(planId.Contains("MARS"),                            "MakePlanId contains MARS");
 Check(planId.Contains("-v2-"),                            "MakePlanId contains -v2-");
-Check(planId.EndsWith("cc8a7fc0"),                        "MakePlanId ends with golden hash");
+Check(planId.EndsWith("9d02c042"),                        "MakePlanId ends with golden hash");
 
 // Another plan with different start
 var plan4 = InterplanetLTX.CreatePlan(start: "2026-03-01T10:00:00Z");
@@ -133,7 +133,7 @@ string json = goldenPlan.ToJson();
 Check(json.Contains("\"v\":2"),                           "ToJson has v:2");
 Check(json.Contains("\"title\":\"LTX Session\""),         "ToJson has title");
 Check(json.Contains("\"start\":\"2024-01-15T14:00:00Z\""), "ToJson has start");
-Check(json.Contains("\"quantum\":3"),                     "ToJson has quantum");
+Check(json.Contains("\"quantum\":5"),                     "ToJson has quantum");
 Check(json.Contains("\"mode\":\"LTX\""),                  "ToJson has mode");
 Check(json.Contains("\"segments\":["),                    "ToJson has segments");
 Check(json.Contains("\"nodes\":["),                       "ToJson has nodes");
@@ -145,7 +145,7 @@ Check(rt != null,                                         "FromJson returns non-
 Check(rt!.V == 2,                                         "FromJson v=2");
 Check(rt.Title == "LTX Session",                          "FromJson title");
 Check(rt.Start == "2024-01-15T14:00:00Z",                 "FromJson start");
-Check(rt.Quantum == 3,                                    "FromJson quantum");
+Check(rt.Quantum == 5,                                    "FromJson quantum");
 Check(rt.Nodes.Count == 2,                                "FromJson 2 nodes");
 Check(rt.Segments.Count == 7,                             "FromJson 7 segments");
 Check(rt.Nodes[1].Name == "Mars Hab-01",                  "FromJson node1 name");
@@ -202,9 +202,9 @@ Check(ics.Contains("END:VEVENT"),                         "ICS has END:VEVENT");
 Check(ics.Contains("VERSION:2.0"),                        "ICS has VERSION:2.0");
 Check(ics.Contains("PRODID:-//InterPlanet//LTX"),         "ICS has PRODID");
 Check(ics.Contains("DTSTART:20240115T140000Z"),           "ICS has DTSTART");
-Check(ics.Contains("DTEND:20240115T143900Z"),             "ICS has DTEND (39 min)");
+Check(ics.Contains("DTEND:20240115T150500Z"),             "ICS has DTEND (65 min)");
 Check(ics.Contains($"LTX-PLANID:{planId}"),               "ICS has LTX-PLANID");
-Check(ics.Contains("LTX-QUANTUM:PT3M"),                   "ICS has LTX-QUANTUM:PT3M");
+Check(ics.Contains("LTX-QUANTUM:PT5M"),                   "ICS has LTX-QUANTUM:PT5M");
 Check(ics.Contains("LTX-SEGMENT-TEMPLATE:"),              "ICS has LTX-SEGMENT-TEMPLATE");
 Check(ics.Contains("LTX-MODE:LTX"),                       "ICS has LTX-MODE");
 Check(ics.Contains("LTX-NODE:ID=EARTH-HQ"),               "ICS has LTX-NODE earth");
@@ -306,6 +306,7 @@ try { InterplanetLTX.ComputeSegments(badPlan2); } catch (ArgumentException) { ba
 Check(badQuantumThrew2,                                                 "ComputeSegments quantum=-1 throws");
 
 SecurityTests.Run(Check);
+V11Tests.Run(Check);
 
 // ── Summary ───────────────────────────────────────────────────────────────
 

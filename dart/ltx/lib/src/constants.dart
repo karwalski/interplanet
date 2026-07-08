@@ -1,8 +1,8 @@
 // constants.dart — LTX SDK constants
 
-const String kVersion = '1.0.0';
+const String kVersion = '1.1.0';
 
-const int kDefaultQuantum = 3;
+const int kDefaultQuantum = 5;
 
 const String kDefaultApiBase = 'https://interplanet.live/api/ltx.php';
 

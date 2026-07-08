@@ -94,7 +94,7 @@ printfn "%s" (formatUTC 1705327200000L)  // => 2024-01-15T14:00:00Z
 ## Key constants
 
 - `VERSION = "1.0.0"`
-- `DEFAULT_QUANTUM = 3` (minutes per quantum)
+- `DEFAULT_QUANTUM = 5` (minutes per quantum)
 - `DEFAULT_API_BASE = "https://api.interplanet.app/ltx"`
 - `SEG_TYPES = [| "PLAN_CONFIRM"; "TX"; "RX"; "CAUCUS"; "OPEN"; "BUFFER" |]`
 

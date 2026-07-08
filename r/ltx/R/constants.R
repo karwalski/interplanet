@@ -25,7 +25,7 @@ LTX_MODE_LTX   <- "LTX"
 # ── Quantum ───────────────────────────────────────────────────────────────────
 
 #' Default quantum in minutes (matches ltx-sdk.js DEFAULT_QUANTUM)
-DEFAULT_QUANTUM <- 3L
+DEFAULT_QUANTUM <- 5L
 
 # ── Default segment template ──────────────────────────────────────────────────
 

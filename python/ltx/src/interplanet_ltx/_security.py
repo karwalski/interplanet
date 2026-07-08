@@ -400,6 +400,123 @@ class SequenceTracker:
         return dict(self._mem)
 
 
+# ── Global freshness scope (Story 70.5, port of TS Story 70.4 · LTX-SECURITY.md §11.1) ──
+
+
+#: Default issuedAt max age: 30 days (exceeds the longest conjunction blackout).
+ISSUED_AT_MAX_AGE_DAYS = 30
+
+
+class GlobalSequenceTracker:
+    """
+    Global-scope sequence tracker keyed (sender_node_id, msg_type) for
+    session-independent bundle types (LTX-SECURITY.md §11.1).
+
+    Session-independent bundles (KEY_BUNDLE, KEY_REVOCATION, release
+    manifests) exist outside any planId; this scope closes cross-session
+    replay. Storage keys: ``ltx_gseq_<sender>_<msgType>`` (outbound) and
+    ``ltx_gseq_<sender>_<msgType>_rx`` (inbound).
+
+    Parameters
+    ----------
+    storage : optional
+        Object with ``get(key, default)`` and ``set(key, val)`` methods.
+        Defaults to an in-memory dict.
+    """
+
+    def __init__(self, storage=None) -> None:
+        self._mem: Dict[str, int] = {}
+        self._storage = storage
+
+    def _get(self, key: str) -> int:
+        if self._storage is not None:
+            return self._storage.get(key, 0)
+        return self._mem.get(key, 0)
+
+    def _set(self, key: str, val: int) -> None:
+        if self._storage is not None:
+            self._storage.set(key, val)
+        else:
+            self._mem[key] = val
+
+    @staticmethod
+    def _key(sender_node_id: str, msg_type: str) -> str:
+        return f'ltx_gseq_{sender_node_id}_{msg_type}'
+
+    def next_seq(self, sender_node_id: str, msg_type: str) -> int:
+        """Increment and return the next outbound seq for (sender, msg_type)."""
+        key = self._key(sender_node_id, msg_type)
+        nxt = self._get(key) + 1
+        self._set(key, nxt)
+        return nxt
+
+    def record_seq(self, sender_node_id: str, msg_type: str, seq: int) -> Dict[str, Any]:
+        """
+        Record an inbound sequence number for (sender, msg_type).
+
+        Returns
+        -------
+        dict with keys: accepted (bool), gap (bool), gapSize (int),
+        reason (str, optional — 'replay' on rejection).
+        """
+        key = self._key(sender_node_id, msg_type) + '_rx'
+        last = self._get(key)
+        if seq <= last:
+            return {'accepted': False, 'gap': False, 'gapSize': 0, 'reason': 'replay'}
+        gap = seq > last + 1
+        self._set(key, seq)
+        return {'accepted': True, 'gap': gap, 'gapSize': seq - last - 1 if gap else 0}
+
+    def last_seen_seq(self, sender_node_id: str, msg_type: str) -> int:
+        """Return the last accepted inbound seq (0 if none seen)."""
+        return self._get(self._key(sender_node_id, msg_type) + '_rx')
+
+    def snapshot(self) -> Dict[str, int]:
+        """Export in-memory state snapshot for persistence."""
+        return dict(self._mem)
+
+
+def check_issued_at(
+    issued_at: str,
+    now_ms: int,
+    max_age_days: int = ISSUED_AT_MAX_AGE_DAYS,
+) -> Dict[str, Any]:
+    """
+    Enforce the issuedAt max-age window for global-scope bundles
+    (LTX-SECURITY.md §11.2). ``now_ms`` is injected for determinism.
+
+    Parameters
+    ----------
+    issued_at : str
+        ISO 8601 timestamp ('Z' suffix accepted).
+    now_ms : int
+        Current time in epoch milliseconds.
+    max_age_days : int
+        Maximum accepted age in days (default ISSUED_AT_MAX_AGE_DAYS = 30).
+
+    Returns
+    -------
+    dict
+        ``{'accepted': True}`` or ``{'accepted': False, 'reason': <str>}``
+        with reason 'invalid_issued_at', 'expired' (older than max age) or
+        'future_dated' (more than 1 day in the future).
+    """
+    try:
+        if not isinstance(issued_at, str):
+            raise ValueError('issued_at must be a string')
+        parsed = datetime.fromisoformat(issued_at.replace('Z', '+00:00'))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        issued_ms = parsed.timestamp() * 1000.0
+    except (ValueError, TypeError):
+        return {'accepted': False, 'reason': 'invalid_issued_at'}
+    if now_ms - issued_ms > max_age_days * 86400000:
+        return {'accepted': False, 'reason': 'expired'}
+    if issued_ms - now_ms > 86400000:
+        return {'accepted': False, 'reason': 'future_dated'}
+    return {'accepted': True}
+
+
 def add_seq(bundle: Dict[str, Any], tracker: SequenceTracker, node_id: str) -> Dict[str, Any]:
     """
     Add a ``seq`` field to a bundle dict using the tracker's next sequence number.

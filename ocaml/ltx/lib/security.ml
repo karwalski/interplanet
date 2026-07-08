@@ -1,6 +1,6 @@
 (* security.ml -- Epic 29 security cascade for InterplanetLtx (OCaml)
-   Stories 29.1, 29.4, 29.5
-   Pure-OCaml SHA-256; Ed25519 stubs via Bytes/Digest. *)
+   Stories 29.1, 29.4, 29.5; upgraded to real Ed25519 in Story 72.5.
+   Pure-OCaml SHA-256; Ed25519 via lib/ed25519.ml (TweetNaCl port). *)
 
 (* ---- base64url (shared with interplanet_ltx.ml) ---- *)
 
@@ -76,7 +76,7 @@ let sha256_k = [|
   0x19a4c116l; 0x1e376c08l; 0x2748774cl; 0x34b0bcb5l;
   0x391c0cb3l; 0x4ed8aa4al; 0x5b9cca4fl; 0x682e6ff3l;
   0x748f82eel; 0x78a5636fl; 0x84c87814l; 0x8cc70208l;
-  0x90beffal; 0xa4506cebl; 0xbef9a3f7l; 0xc67178f2l;
+  0x90befffal; 0xa4506cebl; 0xbef9a3f7l; 0xc67178f2l;
 |]
 
 let rotr32 x n = Int32.(logor (shift_right_logical x n) (shift_left x (32 - n)))
@@ -279,7 +279,7 @@ let pkcs8_hdr = String.init 16 (fun i -> Char.chr [|
 
 let generate_nik ?(valid_days=365) ?(node_label="") () =
   let priv_raw = random_bytes 32 in
-  let pub_raw  = random_bytes 32 in
+  let pub_raw  = Ed25519.pubkey_of_seed priv_raw in
   let h        = sha256 pub_raw in
   let node_id  = b64u_encode (String.sub h 0 16) in
   let kid      = node_id in
@@ -319,14 +319,19 @@ type signed_plan = {
 
 (* ---- sign_plan ---- *)
 
+(* Accept either a raw 32-byte Ed25519 seed (b64url) or the PKCS8-DER-wrapped
+   form emitted by generate_nik (48 bytes: 16-byte header + seed). *)
+let seed_of_private_key_b64 (private_key_b64 : string) : string =
+  let raw = b64u_decode private_key_b64 in
+  if String.length raw = 48 then String.sub raw 16 32 else raw
+
 let sign_plan (plan : json_val) (private_key_b64 : string) ?(kid="") () : signed_plan =
   let protected_b64 = b64u_encode (canonical_json (JObj [("alg", JInt (-19))])) in
   let payload_b64   = b64u_encode (canonical_json plan) in
   let sig_struct = canonical_json (JArr [
     JStr "Signature1"; JStr protected_b64; JStr ""; JStr payload_b64]) in
-  let _priv_raw = b64u_decode private_key_b64 in
-  (* stub: SHA-256 of sig_struct as signature bytes *)
-  let sig_bytes = sha256 sig_struct in
+  let seed      = seed_of_private_key_b64 private_key_b64 in
+  let sig_bytes = Ed25519.sign sig_struct seed in
   { plan;
     cose_sign1 = {
       protected_hdr = protected_b64;
@@ -351,8 +356,9 @@ let verify_plan (sp : signed_plan) (key_cache : (string * nik) list)
       else
         let sig_struct = canonical_json (JArr [
           JStr "Signature1"; JStr cs.protected_hdr; JStr ""; JStr cs.payload]) in
-        let expected_sig = b64u_encode (sha256 sig_struct) in
-        if cs.signature <> expected_sig then (false, "signature_mismatch")
+        let sig_bytes = b64u_decode cs.signature in
+        if not (Ed25519.verify sig_struct sig_bytes nik.pub_raw)
+        then (false, "signature_mismatch")
         else (true, "ok")
 
 (* ---- SequenceTracker ---- *)

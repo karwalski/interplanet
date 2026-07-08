@@ -5,6 +5,7 @@
 package.path = package.path .. ";../?.lua;../?/init.lua"
 
 local LTX = require("src.interplanet_ltx")
+local constants = require("src.constants")
 
 local passed = 0
 local failed = 0
@@ -59,7 +60,7 @@ assert_contains(LTX.VERSION, ".", "VERSION has dot separator")
 local plan = LTX.create_plan()
 assert_eq(plan.v, 2, "create_plan default v=2")
 assert_eq(plan.title, "LTX Session", "create_plan default title")
-assert_eq(plan.quantum, 3, "create_plan default quantum=3")
+assert_eq(plan.quantum, 5, "create_plan default quantum=5")
 assert_eq(plan.mode, "LTX", "create_plan default mode=LTX")
 assert_not_nil(plan.start, "create_plan has start")
 assert_not_nil(plan.segments, "create_plan has segments")
@@ -121,13 +122,13 @@ assert_not_nil(segs[1].start_iso, "segment has start_iso")
 assert_not_nil(segs[1].end_iso,   "segment has end_iso")
 assert_not_nil(segs[1].dur_min,   "segment has dur_min")
 assert_eq(segs[1].type, "PLAN_CONFIRM", "first segment is PLAN_CONFIRM")
-assert_eq(segs[1].dur_min, 6, "PLAN_CONFIRM q=2 × quantum=3 = 6 min")
+assert_eq(segs[1].dur_min, 10, "PLAN_CONFIRM q=2 × quantum=5 = 10 min")
 
 -- ── 7. total_min ─────────────────────────────────────────────────────────────
 
 local total = LTX.total_min(plan)
--- default: 2+2+2+2+2+2+1 = 13 quanta × 3 min = 39 min
-assert_eq(total, 39, "total_min default plan = 39 minutes")
+-- default: 2+2+2+2+2+2+1 = 13 quanta × 5 min = 65 min
+assert_eq(total, 65, "total_min default plan = 65 minutes")
 
 local plan_q5 = LTX.create_plan({ quantum = 5 })
 assert_eq(LTX.total_min(plan_q5), 65, "total_min with quantum=5 = 65 minutes")
@@ -227,7 +228,7 @@ assert_contains(ics, "BEGIN:VCALENDAR",  "ICS has VCALENDAR")
 assert_contains(ics, "BEGIN:VEVENT",     "ICS has VEVENT")
 assert_contains(ics, "END:VEVENT",       "ICS has END:VEVENT")
 assert_contains(ics, "LTX-PLANID:",      "ICS has LTX-PLANID")
-assert_contains(ics, "LTX-QUANTUM:PT3M","ICS has LTX-QUANTUM")
+assert_contains(ics, "LTX-QUANTUM:PT5M","ICS has LTX-QUANTUM")
 assert_contains(ics, "SUMMARY:Test Session", "ICS has correct SUMMARY")
 assert_contains(ics, "LTX-NODE:",        "ICS has LTX-NODE entries")
 

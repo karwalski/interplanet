@@ -18,3 +18,8 @@ export 'src/models.dart';
 export 'src/core.dart';
 export 'src/rest_client.dart';
 export 'src/security.dart';
+export 'src/session.dart';
+export 'src/amend.dart';
+export 'src/registers.dart';
+export 'src/cbor.dart';
+export 'src/cose.dart';

@@ -1,6 +1,6 @@
 .PHONY: test lint build clean
 
-SRC  = Sources/InterplanetLTX/InterplanetLTX.swift
+SRC  = $(wildcard Sources/InterplanetLTX/*.swift)
 TEST = Tests/InterplanetLTXTests/main.swift
 BIN  = /tmp/interplanet-ltx-swift-tests
 

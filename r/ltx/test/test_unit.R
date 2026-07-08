@@ -22,7 +22,7 @@ check <- function(cond, msg = "") {
 
 check(PROTOCOL_VERSION == "1.0",          "PROTOCOL_VERSION = 1.0")
 check(LTX_VERSION == "1.0.0",             "LTX_VERSION = 1.0.0")
-check(DEFAULT_QUANTUM == 3L,              "DEFAULT_QUANTUM = 3")
+check(DEFAULT_QUANTUM == 5L,              "DEFAULT_QUANTUM = 5")
 check(LTX_MODE_LIVE  == "LTX-LIVE",       "LTX_MODE_LIVE constant")
 check(LTX_MODE_RELAY == "LTX-RELAY",      "LTX_MODE_RELAY constant")
 check(LTX_MODE_ASYNC == "LTX-ASYNC",      "LTX_MODE_ASYNC constant")
@@ -89,9 +89,9 @@ check(plan_custom$quantum == 5L,          "create_plan: custom quantum")
 
 # ── Section 3: total_min ──────────────────────────────────────────────────────
 
-# Default segments: q = 2+2+2+2+2+2+1 = 13, quantum = 3 → 39 min
+# Default segments: q = 2+2+2+2+2+2+1 = 13, quantum = 5 → 65 min
 tm1 <- total_min(plan1)
-check(tm1 == 39L, "total_min default plan = 39")
+check(tm1 == 65L, "total_min default plan = 65")
 
 plan_q5 <- create_plan(quantum = 5L, start_iso = "2026-01-01T12:00:00Z")
 tm5 <- total_min(plan_q5)

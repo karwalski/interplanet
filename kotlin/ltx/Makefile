@@ -2,7 +2,9 @@ SRCS = src/main/kotlin/com/interplanet/ltx/Models.kt \
        src/main/kotlin/com/interplanet/ltx/InterplanetLTX.kt \
        src/main/kotlin/com/interplanet/ltx/RestClient.kt \
        src/main/kotlin/com/interplanet/ltx/Security.kt \
-       src/test/kotlin/com/interplanet/ltx/InterplanetLTXTest.kt
+       src/main/kotlin/com/interplanet/ltx/V11.kt \
+       src/test/kotlin/com/interplanet/ltx/InterplanetLTXTest.kt \
+       src/test/kotlin/com/interplanet/ltx/V11Test.kt
 
 test:
 	@if command -v kotlinc >/dev/null 2>&1; then \
@@ -16,6 +18,7 @@ lint:
 		        src/main/kotlin/com/interplanet/ltx/InterplanetLTX.kt \
 		        src/main/kotlin/com/interplanet/ltx/RestClient.kt \
 		        src/main/kotlin/com/interplanet/ltx/Security.kt \
+		        src/main/kotlin/com/interplanet/ltx/V11.kt \
 		        -include-runtime -d /tmp/kotlin-lint-out 2>&1; \
 	else echo "kotlinc not in PATH -- skipped"; fi
 

@@ -17,8 +17,8 @@ func check(_ name: String, _ cond: Bool) {
 
 // ── Constants (9) ──────────────────────────────────────────────────────────
 
-check("version is 1.0.0", InterplanetLTX.version == "1.0.0")
-check("defaultQuantum is 3", InterplanetLTX.defaultQuantum == 3)
+check("version is 1.1.0", InterplanetLTX.version == "1.1.0")
+check("defaultQuantum is 5", InterplanetLTX.defaultQuantum == 5)
 check("defaultAPIBase correct", InterplanetLTX.defaultAPIBase == "https://interplanet.live/api/ltx.php")
 check("defaultSegments count is 7", InterplanetLTX.defaultSegments.count == 7)
 check("defaultSegments[0] type PLAN_CONFIRM", InterplanetLTX.defaultSegments[0].type == "PLAN_CONFIRM")
@@ -33,7 +33,7 @@ let plan = InterplanetLTX.createPlan(start: "2026-03-15T14:00:00Z")
 check("createPlan v==2", plan.v == 2)
 check("createPlan title default", plan.title == "LTX Session")
 check("createPlan start preserved", plan.start == "2026-03-15T14:00:00Z")
-check("createPlan quantum==3", plan.quantum == 3)
+check("createPlan quantum==5", plan.quantum == 5)
 check("createPlan mode==LTX", plan.mode == "LTX")
 check("createPlan nodes count==2", plan.nodes.count == 2)
 check("createPlan nodes[0].id==N0", plan.nodes[0].id == "N0")
@@ -79,15 +79,15 @@ let segs = (try? InterplanetLTX.computeSegments(plan)) ?? []
 check("computeSegments count==7", segs.count == 7)
 check("computeSegments[0] type", segs[0].type == "PLAN_CONFIRM")
 check("computeSegments[0] q==2", segs[0].q == 2)
-check("computeSegments[0] durMin==6", segs[0].durMin == 6)
+check("computeSegments[0] durMin==10", segs[0].durMin == 10)
 check("computeSegments[0] startMs>0", segs[0].startMs > 0)
 let startMs0 = segs[0].startMs
-let expectedEnd0 = startMs0 + 2 * 3 * 60 * 1000
+let expectedEnd0 = startMs0 + 2 * 5 * 60 * 1000
 check("computeSegments[0] endMs correct", segs[0].endMs == expectedEnd0)
 check("computeSegments[1] startMs==segs[0].endMs", segs[1].startMs == segs[0].endMs)
 check("computeSegments[6] type BUFFER", segs[6].type == "BUFFER")
 check("computeSegments[6] q==1", segs[6].q == 1)
-check("computeSegments[6] durMin==3", segs[6].durMin == 3)
+check("computeSegments[6] durMin==5", segs[6].durMin == 5)
 check("computeSegments sequential", segs[2].startMs == segs[1].endMs)
 // quantum guard
 var badPlan = InterplanetLTX.createPlan(start: "2026-03-15T14:00:00Z")
@@ -102,9 +102,9 @@ check("computeSegments quantum=-1 throws", badResult2 == nil)
 // ── totalMin (2) ───────────────────────────────────────────────────────────
 
 let total = InterplanetLTX.totalMin(plan)
-check("totalMin default plan==39", total == 39)
+check("totalMin default plan==65", total == 65)
 let plan2 = LtxPlan(segments: [LtxSegmentTemplate(type: "TX", q: 4)])
-check("totalMin single segment", InterplanetLTX.totalMin(plan2) == 12) // 4*3
+check("totalMin single segment", InterplanetLTX.totalMin(plan2) == 20) // 4*5
 
 // ── makePlanID (6) ─────────────────────────────────────────────────────────
 
@@ -164,7 +164,7 @@ check("generateICS contains BEGIN:VEVENT", ics.contains("BEGIN:VEVENT"))
 check("generateICS contains END:VEVENT", ics.contains("END:VEVENT"))
 check("generateICS contains LTX:1", ics.contains("LTX:1"))
 check("generateICS contains LTX-PLANID", ics.contains("LTX-PLANID:"))
-check("generateICS contains LTX-QUANTUM", ics.contains("LTX-QUANTUM:PT3M"))
+check("generateICS contains LTX-QUANTUM", ics.contains("LTX-QUANTUM:PT5M"))
 check("generateICS contains LTX-SEGMENT-TEMPLATE", ics.contains("LTX-SEGMENT-TEMPLATE:"))
 check("generateICS contains LTX-NODE", ics.contains("LTX-NODE:"))
 check("generateICS contains LTX-DELAY", ics.contains("LTX-DELAY;"))
@@ -315,6 +315,304 @@ check("checkSeq detects gap", cr_gap.accepted && cr_gap.gap && cr_gap.gapSize ==
 var bundleNoSeq: [String: Any] = ["type": "MSG"]
 let cr_missing = InterplanetLTX.checkSeq(bundleNoSeq, tracker: tracker, senderNodeId: "N0")
 check("checkSeq missing_seq", !cr_missing.accepted && cr_missing.reason == "missing_seq")
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LTX v1.1 core subset — golden conformance vectors (Epic 72.4)
+// ═══════════════════════════════════════════════════════════════════════════
+
+let vectorsPath = "../../../conformance/vectors.json"
+let vectorsData = FileManager.default.contents(atPath: vectorsPath)
+check("v11: conformance/vectors.json found", vectorsData != nil)
+let vectorsRoot = (try? JSONSerialization.jsonObject(with: vectorsData ?? Data())) as? [String: Any]
+let v11 = vectorsRoot?["v11"] as? [String: Any] ?? [:]
+check("v11: v11 section parsed", !v11.isEmpty)
+
+let keyVec = v11["key"] as? [String: Any] ?? [:]
+let nikVec = keyVec["nik"] as? [String: Any] ?? [:]
+let seedB64 = keyVec["privateSeedB64"] as? String ?? ""
+let vecNIK = InterplanetLTX.LtxNIK(
+    nodeId:     nikVec["nodeId"] as? String ?? "",
+    publicKey:  nikVec["publicKey"] as? String ?? "",
+    algorithm:  nikVec["algorithm"] as? String ?? "Ed25519",
+    validFrom:  nikVec["validFrom"] as? String ?? "",
+    validUntil: nikVec["validUntil"] as? String ?? "",
+    keyVersion: nikVec["keyVersion"] as? Int ?? 1,
+    label: ""
+)
+check("v11: vector NIK not expired", !InterplanetLTX.isNIKExpired(vecNIK))
+
+// ── 1. v3 planId + v2 regression ───────────────────────────────────────────
+
+let planV3Vec = v11["planIdV3"] as? [String: Any] ?? [:]
+let planV3Map = planV3Vec["plan"] as? [String: Any] ?? [:]
+check("v11: v3 plan canonical JSON matches vector",
+      InterplanetLTX.canonicalJSON(planV3Map) == (planV3Vec["canonicalJson"] as? String))
+let planV3 = InterplanetLTX.upgradeConfig(planV3Map)
+check("v11: v3 plan dict canonicalises identically",
+      InterplanetLTX.canonicalJSON(InterplanetLTX.planToDict(planV3)) == (planV3Vec["canonicalJson"] as? String))
+check("v11: makePlanID v3 == expected",
+      InterplanetLTX.makePlanID(planV3) == (planV3Vec["expectedPlanId"] as? String))
+
+let planV2Vec = v11["planIdV2Regression"] as? [String: Any] ?? [:]
+let planV2 = InterplanetLTX.upgradeConfig(planV2Vec["plan"] as? [String: Any] ?? [:])
+check("v11: FROZEN v2 planId regression",
+      InterplanetLTX.makePlanID(planV2) == (planV2Vec["expectedPlanId"] as? String))
+
+// ── 2. pairDelay + computeSegmentsFor ──────────────────────────────────────
+
+let pdVec = v11["pairDelay"] as? [String: Any] ?? [:]
+let pdPlan = InterplanetLTX.upgradeConfig(pdVec["plan"] as? [String: Any] ?? [:])
+for c in (pdVec["cases"] as? [[String: Any]] ?? []) {
+    let a = c["a"] as? String ?? "", b = c["b"] as? String ?? ""
+    let expected = c["expected"] as? Int ?? -1
+    check("v11: pairDelay(\(a),\(b)) == \(expected)",
+          InterplanetLTX.pairDelay(pdPlan, a, b) == expected)
+}
+let fbVec = pdVec["fallbackCase"] as? [String: Any] ?? [:]
+let fbPlan = InterplanetLTX.upgradeConfig(fbVec["plan"] as? [String: Any] ?? [:])
+check("v11: pairDelay fallback == \(fbVec["expected"] as? Int ?? -1)",
+      InterplanetLTX.pairDelay(fbPlan, fbVec["a"] as? String ?? "", fbVec["b"] as? String ?? "")
+          == (fbVec["expected"] as? Int))
+check("v11: pairDelay unknown node is nil",
+      InterplanetLTX.pairDelay(fbPlan, "N1", "N9") == nil)
+
+let baseSegs = (try? InterplanetLTX.computeSegments(pdPlan)) ?? []
+let segN2 = (try? InterplanetLTX.computeSegmentsFor(pdPlan, viewerNodeId: "N2")) ?? []
+check("v11: computeSegmentsFor 4 segments", segN2.count == 4)
+check("v11: PLAN_CONFIRM neutral for N2",
+      segN2[0].perspective == "neutral" && segN2[0].arrivalOffsetS == 0)
+check("v11: N0 TX received by N2 with +2s (HOST row)",
+      segN2[1].perspective == "receive" && segN2[1].arrivalOffsetS == 2)
+check("v11: N1 TX received by N2 with +500s (pair matrix)",
+      segN2[2].perspective == "receive" && segN2[2].arrivalOffsetS == 500)
+check("v11: receive segment start shifted by pairDelay",
+      segN2[2].startMs == baseSegs[2].startMs + 500_000)
+check("v11: viewer segment keeps speaker/label",
+      segN2[2].speaker == "N1" && segN2[2].label == "Mars Report")
+let segN1 = (try? InterplanetLTX.computeSegmentsFor(pdPlan, viewerNodeId: "N1")) ?? []
+check("v11: own TX is transmit with no shift",
+      segN1[2].perspective == "transmit" && segN1[2].arrivalOffsetS == 0
+          && segN1[2].startMs == baseSegs[2].startMs)
+check("v11: computeSegmentsFor unknown viewer throws",
+      (try? InterplanetLTX.computeSegmentsFor(pdPlan, viewerNodeId: "N9")) == nil)
+
+// ── 3. Amendment-chain verify ──────────────────────────────────────────────
+
+let chainVec = v11["amendmentChain"] as? [String: Any] ?? [:]
+let chainDicts = chainVec["chain"] as? [[String: Any]] ?? []
+let chain = chainDicts.compactMap { InterplanetLTX.signedPlanFromDict($0) }
+check("v11: chain has 2 parsed links", chain.count == 2)
+var v11KeyCache: [String: InterplanetLTX.LtxNIK] = [vecNIK.nodeId: vecNIK]
+let rootPlan = chainDicts.first?["plan"] as? [String: Any] ?? [:]
+check("v11: planHash(root) matches vector rootPlanHash",
+      InterplanetLTX.planHash(rootPlan) == (chainVec["rootPlanHash"] as? String))
+let chainResult = InterplanetLTX.verifyAmendmentChain(chain, keyCache: v11KeyCache)
+check("v11: amendment chain verifies (\(chainResult.reason))", chainResult.valid)
+
+// Tamper the amended link's title → chain must fail.
+var tamperedDicts = chainDicts
+var tamperedLink = tamperedDicts[1]
+var tamperedPlanDict = tamperedLink["plan"] as? [String: Any] ?? [:]
+tamperedPlanDict["title"] = "Tampered Summit"
+tamperedLink["plan"] = tamperedPlanDict
+tamperedDicts[1] = tamperedLink
+let tamperedChain = tamperedDicts.compactMap { InterplanetLTX.signedPlanFromDict($0) }
+check("v11: tampered amendment chain rejected",
+      !InterplanetLTX.verifyAmendmentChain(tamperedChain, keyCache: v11KeyCache).valid)
+
+// createAmendment roundtrip with the fixed seed.
+let signedRoot = InterplanetLTX.signPlan(rootPlan, privateKeyB64: seedB64)
+check("v11: signPlan(root) kid matches vector nodeId",
+      signedRoot?.coseSign1.unprotected["kid"] == vecNIK.nodeId)
+if let signedRoot = signedRoot,
+   let amended = InterplanetLTX.createAmendment(signedRoot,
+       changes: ["title": "Vector Summit (amended)"], privateKeyB64: seedB64) {
+    check("v11: createAmendment sets planVersion+1 and prevPlanHash",
+          amended.plan["planVersion"] as? Int == 2
+              && amended.plan["prevPlanHash"] as? String == InterplanetLTX.planHash(rootPlan))
+    let rtChain = InterplanetLTX.verifyAmendmentChain([signedRoot, amended], keyCache: v11KeyCache)
+    check("v11: createAmendment chain verifies (\(rtChain.reason))", rtChain.valid)
+} else {
+    check("v11: createAmendment produced a chain", false)
+}
+
+// ── 4. Register entries + reducers + entriesRoot ───────────────────────────
+
+let regVec = v11["registerEntries"] as? [String: Any] ?? [:]
+let regEntries = regVec["entries"] as? [[String: Any]] ?? []
+let regKeyCache: [String: InterplanetLTX.LtxNIK] = ["N0": vecNIK, "N1": vecNIK]
+for e in regEntries {
+    let vr = InterplanetLTX.verifyRegisterEntry(e, keyCache: regKeyCache)
+    check("v11: register entry \(e["entryId"] as? String ?? "?") verifies (\(vr.reason))", vr.valid)
+}
+var tamperedEntry = regEntries[0]
+var tamperedContent = tamperedEntry["content"] as? [String: Any] ?? [:]
+tamperedContent["text"] = "Tampered?"
+tamperedEntry["content"] = tamperedContent
+let tamperedEntryResult = InterplanetLTX.verifyRegisterEntry(tamperedEntry, keyCache: regKeyCache)
+check("v11: tampered register entry rejected",
+      !tamperedEntryResult.valid && tamperedEntryResult.reason == "signature_invalid")
+
+let reduced = InterplanetLTX.reduceQuestions(regEntries)
+let expQuestionState = regVec["expectedQuestionState"] as? [String: Any] ?? [:]
+check("v11: reduceQuestions state matches vector",
+      InterplanetLTX.canonicalJSON(reduced.byId) == InterplanetLTX.canonicalJSON(expQuestionState))
+check("v11: no superseded entries in vector", reduced.superseded.isEmpty)
+let reducedRev = InterplanetLTX.reduceQuestions(regEntries.reversed())
+check("v11: reduceQuestions is input-order independent",
+      InterplanetLTX.canonicalJSON(reducedRev.byId) == InterplanetLTX.canonicalJSON(reduced.byId))
+
+check("v11: entriesRoot matches vector",
+      InterplanetLTX.entriesRoot(regEntries) == (regVec["entriesRoot"] as? String))
+check("v11: entriesRoot input-order independent",
+      InterplanetLTX.entriesRoot(regEntries.reversed()) == (regVec["entriesRoot"] as? String))
+
+// createRegisterEntry roundtrip.
+if let newEntry = InterplanetLTX.createRegisterEntry(
+    type: "action", content: ["description": "Test action"],
+    sessionId: "VEC-SESSION", nodeId: "N1", seq: 2,
+    timestamp: "2040-02-01T11:10:00.000Z", privateKeyB64: seedB64) {
+    check("v11: createRegisterEntry id", newEntry["entryId"] as? String == "ACT-N1-2")
+    check("v11: created register entry verifies",
+          InterplanetLTX.verifyRegisterEntry(newEntry, keyCache: regKeyCache).valid)
+    let actions = InterplanetLTX.reduceActions([newEntry])
+    check("v11: reduceActions PROPOSED",
+          actions.byId["ACT-N1-2"]?["status"] as? String == "PROPOSED")
+} else {
+    check("v11: createRegisterEntry returned entry", false)
+}
+
+// ── 5. CBOR decode + COSE_Sign1 verify ─────────────────────────────────────
+
+let coseVec = v11["coseSign1"] as? [String: Any] ?? [:]
+let coseB64 = coseVec["coseSign1CborB64"] as? String ?? ""
+let coseEnvelope: [String: Any] = [
+    "plan": coseVec["plan"] as? [String: Any] ?? [:],
+    "coseSign1CborB64": coseB64,
+]
+let coseKeyCache: [String: InterplanetLTX.LtxNIK] = [vecNIK.nodeId: vecNIK]
+let coseResult = InterplanetLTX.verifyPlanCose(coseEnvelope, keyCache: coseKeyCache)
+check("v11: COSE_Sign1 vector verifies (\(coseResult.reason))",
+      coseResult.valid == (coseVec["expectedValid"] as? Bool ?? true))
+
+let cborBytes = InterplanetLTX.nikB64urlDecode(coseB64) ?? Data()
+check("v11: CBOR b64 == hex vector",
+      cborBytes.map { String(format: "%02x", $0) }.joined() == (coseVec["coseSign1CborHex"] as? String))
+
+var cosePlanTampered = coseVec["plan"] as? [String: Any] ?? [:]
+cosePlanTampered["title"] = "X"
+let coseTampered = InterplanetLTX.verifyPlanCose(
+    ["plan": cosePlanTampered, "coseSign1CborB64": coseB64], keyCache: coseKeyCache)
+check("v11: COSE tampered plan rejected",
+      !coseTampered.valid && coseTampered.reason == "payload_mismatch")
+let coseNoKey = InterplanetLTX.verifyPlanCose(coseEnvelope, keyCache: [:])
+check("v11: COSE unknown key rejected",
+      !coseNoKey.valid && coseNoKey.reason == "key_not_in_cache")
+
+// CBOR codec unit checks.
+if let decodedCose = try? InterplanetLTX.decodeCbor(cborBytes) {
+    if case .tag(let t, _) = decodedCose {
+        check("v11: CBOR decodes to tag 18", t == 18)
+    } else {
+        check("v11: CBOR decodes to tag 18", false)
+    }
+    check("v11: CBOR deterministic re-encode roundtrip",
+          InterplanetLTX.nikB64url(InterplanetLTX.encodeCbor(decodedCose)) == coseB64)
+} else {
+    check("v11: CBOR vector decodes", false)
+}
+check("v11: CBOR {1:-19} == a10132",
+      InterplanetLTX.encodeCbor(.map([(.int(1), .int(-19))])) == Data([0xa1, 0x01, 0x32]))
+check("v11: CBOR trailing bytes rejected",
+      (try? InterplanetLTX.decodeCbor(Data([0x01, 0x02]))) == nil)
+check("v11: CBOR floats rejected",
+      (try? InterplanetLTX.decodeCbor(Data([0xf9, 0x3c, 0x00]))) == nil)
+check("v11: CBOR indefinite length rejected",
+      (try? InterplanetLTX.decodeCbor(Data([0x9f, 0x01, 0xff]))) == nil)
+
+// signPlanCose roundtrip with the fixed seed. CryptoKit Ed25519 signatures
+// are randomized (RFC 8032 determinism is not guaranteed), so compare the
+// protected/kid/payload prefix and verify rather than expecting exact bytes.
+if let coseSigned = InterplanetLTX.signPlanCose(coseVec["plan"] as? [String: Any] ?? [:],
+                                                privateKeyB64: seedB64),
+   let signedB64 = coseSigned["coseSign1CborB64"] as? String,
+   let signedBytes = InterplanetLTX.nikB64urlDecode(signedB64) {
+    // Everything before the 64-byte signature bstr must match the vector.
+    let prefixLen = cborBytes.count - 66 // 0x58 0x40 + 64 signature bytes
+    check("v11: signPlanCose matches vector envelope (sans signature)",
+          signedBytes.count == cborBytes.count
+              && signedBytes.prefix(prefixLen) == cborBytes.prefix(prefixLen))
+    check("v11: signPlanCose roundtrip verifies",
+          InterplanetLTX.verifyPlanCose(coseSigned, keyCache: coseKeyCache).valid)
+} else {
+    check("v11: signPlanCose returned envelope", false)
+}
+
+// ── 6. transition() state machine (golden table) ───────────────────────────
+
+let smVec = v11["stateMachine"] as? [String: Any] ?? [:]
+let smPlan = InterplanetLTX.upgradeConfig(smVec["plan"] as? [String: Any] ?? [:])
+let smPlanId = smVec["planId"] as? String ?? ""
+check("v11: state machine planId matches vector", InterplanetLTX.makePlanID(smPlan) == smPlanId)
+var smCtx = InterplanetLTX.createSession(smPlan, planId: smPlanId,
+                                         quorum: .count(smVec["quorum"] as? Int ?? 1))
+check("v11: createSession starts DRAFT", smCtx.state == "DRAFT" && smCtx.lock == nil)
+check("v11: lock timeout 2×maxDelay", smCtx.lockTimeoutMs == 1_800_000)
+var smStepsOk = true
+for (idx, rawStep) in (smVec["steps"] as? [[String: Any]] ?? []).enumerated() {
+    let event = rawStep["event"] as? [String: Any] ?? [:]
+    let result = InterplanetLTX.transition(smCtx, event)
+    smCtx = result.ctx
+    let expectState = rawStep["expectState"] as? String
+    let expectLock = rawStep["expectLock"] as? String  // nil for JSON null
+    if smCtx.state != expectState || smCtx.lock != expectLock {
+        smStepsOk = false
+        print("  v11 state machine step \(idx): got (\(smCtx.state), \(smCtx.lock ?? "nil")) expected (\(expectState ?? "?"), \(expectLock ?? "nil"))")
+    }
+}
+check("v11: golden transition table replay", smStepsOk)
+check("v11: subset cleared after late full-lock recovery", smCtx.subset == nil)
+check("v11: quorum subset [N0,N2] recorded at degrade time",
+      smCtx.degradedReasons.first?.contains("[N0,N2]") == true)
+check("v11: two degraded reasons logged", smCtx.degradedReasons.count == 2)
+
+let afterEnd = InterplanetLTX.transition(smCtx, ["type": "SESSION_START", "nowMs": 6_000_000])
+check("v11: invalid event ignored in COMPLETE",
+      afterEnd.ctx.state == "COMPLETE"
+          && afterEnd.effects.contains { $0["code"] as? String == "INVALID_EVENT" })
+
+// EOK override + resume + amendment path (not covered by the golden table).
+var eokCtx = InterplanetLTX.createSession(smPlan, planId: smPlanId, quorum: .all)
+eokCtx = InterplanetLTX.transition(eokCtx, ["type": "START_LOCK", "nowMs": 0]).ctx
+for nid in ["N1", "N2"] {
+    eokCtx = InterplanetLTX.transition(eokCtx,
+        ["type": "PLAN_CONFIRM", "nowMs": 1, "nodeId": nid, "planId": smPlanId]).ctx
+}
+check("v11: full lock with quorum=all", eokCtx.state == "LOCKED" && eokCtx.lock == "FULL")
+eokCtx = InterplanetLTX.transition(eokCtx, ["type": "SESSION_START", "nowMs": 2]).ctx
+eokCtx = InterplanetLTX.transition(eokCtx,
+    ["type": "EOK_OVERRIDE", "nowMs": 3, "verified": true]).ctx
+check("v11: verified EOK holds session", eokCtx.state == "EMERGENCY_HOLD")
+eokCtx = InterplanetLTX.transition(eokCtx,
+    ["type": "HOST_DECISION", "nowMs": 4, "decision": "resume"]).ctx
+check("v11: HOST resume returns to prior state", eokCtx.state == "ACTIVE")
+let rejectedEok = InterplanetLTX.transition(eokCtx,
+    ["type": "EOK_OVERRIDE", "nowMs": 5, "verified": false])
+check("v11: unverified EOK rejected",
+      rejectedEok.ctx.state == "ACTIVE"
+          && rejectedEok.effects.contains { $0["code"] as? String == "OVERRIDE_REJECTED" })
+eokCtx = InterplanetLTX.transition(eokCtx, [
+    "type": "AMENDMENT_PROPOSED", "nowMs": 6, "planId": "PLAN-2",
+    "planVersion": 2, "affectedNodeIds": ["N1"],
+]).ctx
+eokCtx = InterplanetLTX.transition(eokCtx, [
+    "type": "AMENDMENT_CONFIRMED", "nowMs": 7, "nodeId": "N1", "planId": "PLAN-2",
+]).ctx
+check("v11: amendment applied after all confirms",
+      eokCtx.planId == "PLAN-2" && eokCtx.planVersion == 2)
+eokCtx = InterplanetLTX.transition(eokCtx,
+    ["type": "HOST_DECISION", "nowMs": 8, "decision": "abort"]).ctx
+check("v11: HOST abort", eokCtx.state == "ABORTED")
 
 // ── Summary ────────────────────────────────────────────────────────────────
 

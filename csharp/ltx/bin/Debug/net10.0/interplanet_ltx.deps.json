@@ -6,7 +6,7 @@
   "compilationOptions": {},
   "targets": {
     ".NETCoreApp,Version=v10.0": {
-      "interplanet_ltx/1.0.0": {
+      "interplanet_ltx/1.1.0": {
         "dependencies": {
           "NSec.Cryptography": "24.4.0"
         },
@@ -82,7 +82,7 @@
     }
   },
   "libraries": {
-    "interplanet_ltx/1.0.0": {
+    "interplanet_ltx/1.1.0": {
       "type": "project",
       "serviceable": false,
       "sha512": ""

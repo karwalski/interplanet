@@ -33,10 +33,16 @@ public struct LtxNode: Codable {
 public struct LtxSegmentTemplate: Codable {
     public var type: String
     public var q: Int
+    /// v3: presenting node id for attributed TX segments (§14.3).
+    public var speaker: String?
+    /// v3: agenda label.
+    public var label: String?
 
-    public init(type: String, q: Int) {
+    public init(type: String, q: Int, speaker: String? = nil, label: String? = nil) {
         self.type = type
         self.q = q
+        self.speaker = speaker
+        self.label = label
     }
 }
 
@@ -63,15 +69,24 @@ public struct LtxPlan: Codable {
     public var mode: String
     public var nodes: [LtxNode]
     public var segments: [LtxSegmentTemplate]
+    /// v3 pair-delay matrix: key "A|B" (node ids sorted) → one-way delay (s).
+    public var delays: [String: Int]?
+    /// v3 amendment-chain version (LTX-SPECIFICATION.md §4.4).
+    public var planVersion: Int?
+    /// SHA-256 hex of the canonical JSON of the predecessor plan (§6.4).
+    public var prevPlanHash: String?
 
     public init(
         v: Int = 2,
         title: String = "LTX Session",
         start: String = "",
-        quantum: Int = 3,
+        quantum: Int = 5,
         mode: String = "LTX",
         nodes: [LtxNode] = [],
-        segments: [LtxSegmentTemplate] = []
+        segments: [LtxSegmentTemplate] = [],
+        delays: [String: Int]? = nil,
+        planVersion: Int? = nil,
+        prevPlanHash: String? = nil
     ) {
         self.v = v
         self.title = title
@@ -80,6 +95,9 @@ public struct LtxPlan: Codable {
         self.mode = mode
         self.nodes = nodes
         self.segments = segments
+        self.delays = delays
+        self.planVersion = planVersion
+        self.prevPlanHash = prevPlanHash
     }
 }
 
@@ -87,8 +105,8 @@ public struct LtxPlan: Codable {
 
 public enum InterplanetLTX {
 
-    public static let version = "1.0.0"
-    public static let defaultQuantum = 3
+    public static let version = "1.1.0"
+    public static let defaultQuantum = 5
     public static let defaultAPIBase = "https://interplanet.live/api/ltx.php"
 
     // ── Story 26.3/26.4 additions ───────────────────────────────────────────
@@ -198,11 +216,19 @@ public enum InterplanetLTX {
         if let rawSegs = raw["segments"] as? [[String: Any]] {
             plan.segments = rawSegs.map { s in
                 LtxSegmentTemplate(
-                    type: (s["type"] as? String) ?? "TX",
-                    q:    (s["q"]    as? Int)    ?? 2
+                    type:    (s["type"]    as? String) ?? "TX",
+                    q:       (s["q"]       as? Int)    ?? 2,
+                    speaker: s["speaker"]  as? String,
+                    label:   s["label"]    as? String
                 )
             }
         }
+
+        // v3 fields (LTX v1.1).
+        if let v = raw["v"] as? Int { plan.v = v }
+        if let delays = raw["delays"] as? [String: Int] { plan.delays = delays }
+        if let pv = raw["planVersion"] as? Int { plan.planVersion = pv }
+        if let pph = raw["prevPlanHash"] as? String { plan.prevPlanHash = pph }
 
         return plan
     }
@@ -244,6 +270,12 @@ public enum InterplanetLTX {
     // ── Plan ID ─────────────────────────────────────────────────────────────
 
     /// Compute the deterministic plan ID string.
+    ///
+    /// v2 plans use the FROZEN legacy 32-bit polynomial hash over the
+    /// fixed-order JSON (LTX-SPECIFICATION.md §4.3). v3 plans (v >= 3) hash
+    /// SHA-256 over the RFC 8785 canonical JSON (§4.5); the `-v3-` infix
+    /// keeps the two id spaces disjoint.
+    ///
     /// Format: "LTX-YYYYMMDD-HOST-NODE-v2-XXXXXXXX"
     public static func makePlanID(_ plan: LtxPlan) -> String {
         let startMs = parseISOMs(plan.start)
@@ -261,9 +293,16 @@ public enum InterplanetLTX {
 
         var nodeStr = "RX"
         if plan.nodes.count > 1 {
-            nodeStr = plan.nodes.dropFirst().map { n in
+            nodeStr = String(plan.nodes.dropFirst().map { n in
                 String(n.name.replacingOccurrences(of: " ", with: "").uppercased().prefix(4))
-            }.joined(separator: "-")
+            }.joined(separator: "-").prefix(16))
+        }
+
+        if plan.v >= 3 {
+            let canonical = canonicalJSON(planToDict(plan))
+            let digest = SHA256.hash(data: Data(canonical.utf8))
+                .map { String(format: "%02x", $0) }.joined()
+            return "LTX-\(dateStr)-\(hostStr)-\(nodeStr)-v3-\(String(digest.prefix(8)))"
         }
 
         return "LTX-\(dateStr)-\(hostStr)-\(nodeStr)-v2-\(planHashHex(plan))"
@@ -539,15 +578,46 @@ public enum InterplanetLTX {
     }
 
     /// Serialise a plan to compact JSON with keys in canonical order:
-    /// v, title, start, quantum, mode, nodes, segments
+    /// v, title, start, quantum, mode, nodes, segments.
+    /// v3 speaker/label appear after q when present (schema order); the byte
+    /// sequence for plans without them is FROZEN (v2 planId hash input).
     static func planToJSON(_ plan: LtxPlan) -> String {
         let nodesJSON = plan.nodes.map { n in
             "{\"id\":\"\(escapeJSON(n.id))\",\"name\":\"\(escapeJSON(n.name))\",\"role\":\"\(escapeJSON(n.role))\",\"delay\":\(n.delay),\"location\":\"\(escapeJSON(n.location))\"}"
         }.joined(separator: ",")
         let segsJSON = plan.segments.map { s in
-            "{\"type\":\"\(escapeJSON(s.type))\",\"q\":\(s.q)}"
+            var out = "{\"type\":\"\(escapeJSON(s.type))\",\"q\":\(s.q)"
+            if let sp = s.speaker { out += ",\"speaker\":\"\(escapeJSON(sp))\"" }
+            if let lb = s.label   { out += ",\"label\":\"\(escapeJSON(lb))\"" }
+            return out + "}"
         }.joined(separator: ",")
         return "{\"v\":\(plan.v),\"title\":\"\(escapeJSON(plan.title))\",\"start\":\"\(escapeJSON(plan.start))\",\"quantum\":\(plan.quantum),\"mode\":\"\(escapeJSON(plan.mode))\",\"nodes\":[\(nodesJSON)],\"segments\":[\(segsJSON)]}"
+    }
+
+    /// Dictionary form of a plan for canonical-JSON hashing (v3 planId,
+    /// planHash): every declared field, integral values as Int.
+    static func planToDict(_ plan: LtxPlan) -> [String: Any] {
+        var dict: [String: Any] = [
+            "v": plan.v,
+            "title": plan.title,
+            "start": plan.start,
+            "quantum": plan.quantum,
+            "mode": plan.mode,
+            "nodes": plan.nodes.map { n -> [String: Any] in
+                ["id": n.id, "name": n.name, "role": n.role,
+                 "delay": n.delay, "location": n.location]
+            },
+            "segments": plan.segments.map { s -> [String: Any] in
+                var seg: [String: Any] = ["type": s.type, "q": s.q]
+                if let sp = s.speaker { seg["speaker"] = sp }
+                if let lb = s.label   { seg["label"] = lb }
+                return seg
+            },
+        ]
+        if let delays = plan.delays { dict["delays"] = delays }
+        if let pv = plan.planVersion { dict["planVersion"] = pv }
+        if let pph = plan.prevPlanHash { dict["prevPlanHash"] = pph }
+        return dict
     }
 
     /// Escape a string for embedding in a JSON string value.
@@ -625,6 +695,22 @@ public enum InterplanetLTX {
             return "[\(parts.joined(separator: ","))]"
         }
         if let s = value as? String  { return canonicalJSONStr(s) }
+        // NSNumber-safe numeric/boolean handling: JSONSerialization returns
+        // NSNumber for every scalar, and `as? Bool` would also match 0/1
+        // integers. Inspect the underlying CF type / objCType instead.
+        if let num = value as? NSNumber {
+            if CFGetTypeID(num) == CFBooleanGetTypeID() {
+                return num.boolValue ? "true" : "false"
+            }
+            let objCType = String(cString: num.objCType)
+            if objCType == "f" || objCType == "d" {
+                let d = num.doubleValue
+                // RFC 8785: integral values serialise without a fraction.
+                if d.rounded() == d && abs(d) < 9e15 { return "\(Int64(d))" }
+                return "\(d)"
+            }
+            return "\(num.int64Value)"
+        }
         if let b = value as? Bool    { return b ? "true" : "false" }
         if let n = value as? Int     { return "\(n)" }
         if let n = value as? Int64   { return "\(n)" }
@@ -701,6 +787,9 @@ public enum InterplanetLTX {
     public static func isNIKExpired(_ nik: LtxNIK) -> Bool {
         let fmt = ISO8601DateFormatter()
         fmt.formatOptions = [.withInternetDateTime]
+        if let t = fmt.date(from: nik.validUntil) { return Date() > t }
+        // Cross-port NIKs may carry fractional seconds (e.g. ".000Z").
+        fmt.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         guard let t = fmt.date(from: nik.validUntil) else { return true }
         return Date() > t
     }

@@ -22,7 +22,7 @@ int main(void) {
     SECTION("Constants");
     CHECK("VERSION not empty",              strlen(ITX_VERSION_STRING) > 0);
     CHECK("VERSION is 1.0.0",              strcmp(ITX_VERSION_STRING, "1.0.0") == 0);
-    CHECK("DEFAULT_QUANTUM == 3",          ITX_DEFAULT_QUANTUM == 3);
+    CHECK("DEFAULT_QUANTUM == 5",          ITX_DEFAULT_QUANTUM == 5);
     CHECK("DEFAULT_SEG_COUNT == 7",        ITX_DEFAULT_SEG_COUNT == 7);
     CHECK("DEFAULT_API_BASE has https",    strncmp(ITX_DEFAULT_API_BASE, "https://", 8) == 0);
     CHECK("DEFAULT_SEGMENTS[0] PLAN_CONFIRM", strcmp(ITX_DEFAULT_SEGMENTS[0].type, "PLAN_CONFIRM") == 0);
@@ -39,7 +39,7 @@ int main(void) {
     CHECK("v == 2",                        plan.v == 2);
     CHECK("title == LTX Session",          strcmp(plan.title, "LTX Session") == 0);
     CHECK("start preserved",               strcmp(plan.start, "2026-03-15T14:00:00Z") == 0);
-    CHECK("quantum == 3",                  plan.quantum == 3);
+    CHECK("quantum == 5",                  plan.quantum == 5);
     CHECK("mode == LTX",                   strcmp(plan.mode, "LTX") == 0);
     CHECK("node_count == 2",              plan.node_count == 2);
     CHECK("nodes[0].id == N0",             strcmp(plan.nodes[0].id, "N0") == 0);
@@ -67,8 +67,8 @@ int main(void) {
     CHECK("segs[0].q == 2",               segs[0].q == 2);
     CHECK("segs[0].start_ms > 0",         segs[0].start_ms > 0);
     CHECK("segs[0].end_ms > start_ms",     segs[0].end_ms > segs[0].start_ms);
-    CHECK("segs[0].dur_min == 6",         segs[0].dur_min == 6);
-    CHECK("segs[6].dur_min == 3",         segs[6].dur_min == 3);
+    CHECK("segs[0].dur_min == 10",        segs[0].dur_min == 10);
+    CHECK("segs[6].dur_min == 5",         segs[6].dur_min == 5);
     /* Contiguous segments */
     for (int i = 0; i < seg_count - 1; i++) {
         char name[64];
@@ -79,8 +79,8 @@ int main(void) {
     /* ── itx_total_min ──────────────────────────────────────────────── */
     SECTION("itx_total_min");
     int total = itx_total_min(&plan);
-    CHECK("totalMin == 39",               total == 39);
-    /* Verify: 13 quanta × 3 min = 39 */
+    CHECK("totalMin == 65",               total == 65);
+    /* Verify: 13 quanta × 5 min = 65 */
     int seg_sum = 0;
     for (int i = 0; i < seg_count; i++) seg_sum += segs[i].dur_min;
     CHECK("totalMin matches seg sum",      seg_sum == total);
@@ -157,7 +157,7 @@ int main(void) {
     CHECK("ICS has SUMMARY",             strstr(ics, "SUMMARY:") != NULL);
     CHECK("ICS has LTX:1",              strstr(ics, "LTX:1") != NULL);
     CHECK("ICS has LTX-PLANID",         strstr(ics, "LTX-PLANID:") != NULL);
-    CHECK("ICS has LTX-QUANTUM:PT3M",   strstr(ics, "LTX-QUANTUM:PT3M") != NULL);
+    CHECK("ICS has LTX-QUANTUM:PT5M",   strstr(ics, "LTX-QUANTUM:PT5M") != NULL);
     CHECK("ICS has LTX-NODE",           strstr(ics, "LTX-NODE:") != NULL);
     CHECK("ICS has CRLF",               strstr(ics, "\r\n") != NULL);
 

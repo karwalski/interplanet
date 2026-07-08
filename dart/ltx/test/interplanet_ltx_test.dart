@@ -1,5 +1,9 @@
 // test/interplanet_ltx_test.dart — LTX SDK unit tests (≥80 check() assertions)
 
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:interplanet_ltx/interplanet_ltx.dart';
 
 int passed = 0;
@@ -18,8 +22,8 @@ void check(bool condition, String label) {
 void main() async {
   // ── Constants ──────────────────────────────────────────────────────────────
 
-  check(kVersion == '1.0.0', 'VERSION is 1.0.0');
-  check(kDefaultQuantum == 3, 'DEFAULT_QUANTUM is 3');
+  check(kVersion == '1.1.0', 'VERSION is 1.1.0');
+  check(kDefaultQuantum == 5, 'DEFAULT_QUANTUM is 5');
   check(kDefaultApiBase == 'https://interplanet.live/api/ltx.php', 'DEFAULT_API_BASE correct');
   check(kDefaultSegments.length == 7, 'DEFAULT_SEGMENTS has 7 entries');
   check(kDefaultSegments[0]['type'] == 'PLAN_CONFIRM', 'DEFAULT_SEGMENTS[0] is PLAN_CONFIRM');
@@ -43,7 +47,7 @@ void main() async {
   check(plan.v == 2, 'createPlan v=2');
   check(plan.title == 'LTX Session', 'createPlan title correct');
   check(plan.start == '2024-01-15T14:00:00Z', 'createPlan start correct');
-  check(plan.quantum == 3, 'createPlan quantum=3');
+  check(plan.quantum == 5, 'createPlan quantum=5');
   check(plan.mode == 'LTX', 'createPlan mode=LTX');
   check(plan.nodes.length == 2, 'createPlan 2 nodes');
   check(plan.nodes[0].id == 'N0', 'first node id=N0');
@@ -87,7 +91,7 @@ void main() async {
   check(segs.length == 7, 'computeSegments 7 segments');
   check(segs[0].type == 'PLAN_CONFIRM', 'first segment PLAN_CONFIRM');
   check(segs[0].q == 2, 'first segment q=2');
-  check(segs[0].durMin == 6, 'first segment 6 min (q=2, quantum=3)');
+  check(segs[0].durMin == 10, 'first segment 10 min (q=2, quantum=5)');
   check(segs[1].type == 'TX', 'second segment TX');
   check(segs[2].type == 'RX', 'third segment RX');
   check(segs[3].type == 'CAUCUS', 'fourth segment CAUCUS');
@@ -95,20 +99,20 @@ void main() async {
   check(segs[5].type == 'RX', 'sixth segment RX');
   check(segs[6].type == 'BUFFER', 'seventh segment BUFFER');
   check(segs[6].q == 1, 'BUFFER q=1');
-  check(segs[6].durMin == 3, 'BUFFER 3 min (q=1, quantum=3)');
+  check(segs[6].durMin == 5, 'BUFFER 5 min (q=1, quantum=5)');
 
   // Timing checks
   final t0 = DateTime.parse(segs[0].start).millisecondsSinceEpoch;
   final t1 = DateTime.parse(segs[1].start).millisecondsSinceEpoch;
-  check(t1 - t0 == 6 * 60 * 1000, 'segment 1 starts 6 min after segment 0');
+  check(t1 - t0 == 10 * 60 * 1000, 'segment 1 starts 10 min after segment 0');
   check(segs[0].startMs == DateTime.parse('2024-01-15T14:00:00Z').millisecondsSinceEpoch,
       'first segment startMs correct');
   check(segs[0].endMs == segs[1].startMs, 'segment end = next segment start');
 
   // ── totalMin ──────────────────────────────────────────────────────────────
 
-  check(totalMin(plan) == 39, 'totalMin 39');
-  // 2+2+2+2+2+2+1 = 13 quanta × 3 min = 39 min
+  check(totalMin(plan) == 65, 'totalMin 65');
+  // 2+2+2+2+2+2+1 = 13 quanta × 5 min = 65 min
   check(totalMin(plan2) == 65, 'totalMin custom plan (13 quanta × 5 min = 65)');
 
   // ── makePlanId ────────────────────────────────────────────────────────────
@@ -165,7 +169,7 @@ void main() async {
   check(json.contains('"v":2'), 'toJson contains "v":2');
   check(json.contains('"title":"LTX Session"'), 'toJson contains title');
   check(json.contains('"start":"2024-01-15T14:00:00Z"'), 'toJson contains start');
-  check(json.contains('"quantum":3'), 'toJson contains quantum');
+  check(json.contains('"quantum":5'), 'toJson contains quantum');
   check(json.contains('"mode":"LTX"'), 'toJson contains mode');
   check(json.contains('"nodes"'), 'toJson contains nodes');
   check(json.contains('"segments"'), 'toJson contains segments');
@@ -205,7 +209,7 @@ void main() async {
   check(ics.contains('END:VEVENT'), 'ICS has END:VEVENT');
   check(ics.contains('LTX-PLANID:'), 'ICS has LTX-PLANID');
   check(ics.contains('LTX-QUANTUM:'), 'ICS has LTX-QUANTUM');
-  check(ics.contains('LTX-QUANTUM:PT3M'), 'ICS LTX-QUANTUM correct');
+  check(ics.contains('LTX-QUANTUM:PT5M'), 'ICS LTX-QUANTUM correct');
   check(ics.contains('LTX-MODE:LTX'), 'ICS has LTX-MODE');
   check(ics.contains('LTX-SEGMENT-TEMPLATE:'), 'ICS has LTX-SEGMENT-TEMPLATE');
   check(ics.contains('LTX-NODE:'), 'ICS has LTX-NODE');
@@ -457,6 +461,346 @@ void main() async {
   check(gr5.accepted, 'checkSeq gap: seq=5 accepted');
   check(gr5.gap, 'checkSeq gap: Gap=true');
   check(gr5.gapSize == 2, 'checkSeq gap: GapSize=2');
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // LTX v1.1 core subset — golden conformance vectors (Epic 72.4)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  final vectorsFile = File('../../../conformance/vectors.json');
+  check(vectorsFile.existsSync(), 'v11: conformance/vectors.json found');
+  final v11 = (jsonDecode(vectorsFile.readAsStringSync())
+      as Map<String, dynamic>)['v11'] as Map<String, dynamic>;
+
+  final keyVec = v11['key'] as Map<String, dynamic>;
+  final nikVec = keyVec['nik'] as Map<String, dynamic>;
+  final seedB64 = keyVec['privateSeedB64'] as String;
+  final vecNik = Nik(
+    nodeId: nikVec['nodeId'] as String,
+    publicKeyB64: nikVec['publicKey'] as String,
+    validFrom: nikVec['validFrom'] as String,
+    validUntil: nikVec['validUntil'] as String,
+  );
+
+  // Fixed seed reproduces the vector public key.
+  final derivedPub = b64UrlEncode(await publicKeyFromSeed(seedB64));
+  check(derivedPub == vecNik.publicKeyB64, 'v11: seed derives vector pubkey');
+
+  // ── 1. v3 planId + v2 regression ─────────────────────────────────────────
+
+  final planV3Map = (v11['planIdV3'] as Map)['plan'] as Map<String, dynamic>;
+  check(canonicalJson(planV3Map) == (v11['planIdV3'] as Map)['canonicalJson'],
+      'v11: v3 plan canonical JSON matches vector');
+  check(
+      sha256HexOfString(canonicalJson(planV3Map)) ==
+          (v11['planIdV3'] as Map)['sha256'],
+      'v11: v3 plan canonical sha256 matches vector');
+  final planV3 = LtxPlan.fromJson(jsonEncode(planV3Map))!;
+  check(makePlanId(planV3) == (v11['planIdV3'] as Map)['expectedPlanId'],
+      'v11: makePlanId v3 == ${(v11['planIdV3'] as Map)['expectedPlanId']}');
+
+  final planV2Map =
+      (v11['planIdV2Regression'] as Map)['plan'] as Map<String, dynamic>;
+  final planV2 = LtxPlan.fromJson(jsonEncode(planV2Map))!;
+  check(
+      makePlanId(planV2) ==
+          (v11['planIdV2Regression'] as Map)['expectedPlanId'],
+      'v11: FROZEN v2 planId regression (${makePlanId(planV2)})');
+
+  // ── 2. pairDelay + computeSegmentsFor ────────────────────────────────────
+
+  final pdVec = v11['pairDelay'] as Map<String, dynamic>;
+  final pdPlan = LtxPlan.fromJson(jsonEncode(pdVec['plan']))!;
+  for (final c in (pdVec['cases'] as List)) {
+    final cm = c as Map<String, dynamic>;
+    check(pairDelay(pdPlan, cm['a'] as String, cm['b'] as String) == cm['expected'],
+        'v11: pairDelay(${cm['a']},${cm['b']}) == ${cm['expected']}');
+  }
+  final fbVec = pdVec['fallbackCase'] as Map<String, dynamic>;
+  final fbPlan = LtxPlan.fromJson(jsonEncode(fbVec['plan']))!;
+  check(
+      pairDelay(fbPlan, fbVec['a'] as String, fbVec['b'] as String) ==
+          fbVec['expected'],
+      'v11: pairDelay fallback == ${fbVec['expected']}');
+
+  // Viewer-perspective segments over the v3 pair-delay plan.
+  final segN2 = computeSegmentsFor(pdPlan, 'N2');
+  check(segN2.length == 4, 'v11: computeSegmentsFor 4 segments');
+  check(segN2[0].perspective == 'neutral' && segN2[0].arrivalOffsetS == 0,
+      'v11: PLAN_CONFIRM neutral for N2');
+  check(segN2[1].perspective == 'receive' && segN2[1].arrivalOffsetS == 2,
+      'v11: N0 TX received by N2 with +2s (HOST row)');
+  check(segN2[2].perspective == 'receive' && segN2[2].arrivalOffsetS == 500,
+      'v11: N1 TX received by N2 with +500s (pair matrix)');
+  final baseSegs = computeSegments(pdPlan);
+  check(segN2[2].startMs == baseSegs[2].startMs + 500 * 1000,
+      'v11: receive segment start shifted by pairDelay');
+  check(segN2[2].speaker == 'N1' && segN2[2].label == 'Mars Report',
+      'v11: viewer segment keeps speaker/label');
+  final segN1 = computeSegmentsFor(pdPlan, 'N1');
+  check(segN1[2].perspective == 'transmit' && segN1[2].arrivalOffsetS == 0,
+      'v11: own TX is transmit with no shift');
+  check(segN1[2].startMs == baseSegs[2].startMs,
+      'v11: transmit segment unshifted');
+  bool unknownViewerThrew = false;
+  try {
+    computeSegmentsFor(pdPlan, 'N9');
+  } on ArgumentError {
+    unknownViewerThrew = true;
+  }
+  check(unknownViewerThrew, 'v11: computeSegmentsFor unknown viewer throws');
+
+  // ── 3. Amendment-chain verify ────────────────────────────────────────────
+
+  final chainVec = (v11['amendmentChain'] as Map<String, dynamic>);
+  final chain = (chainVec['chain'] as List)
+      .map((e) => (e as Map).cast<String, dynamic>())
+      .toList();
+  final v11KeyCache = <String, Nik>{vecNik.nodeId: vecNik};
+  final rootPlan = (chain[0]['plan'] as Map).cast<String, dynamic>();
+  check(planHash(rootPlan) == chainVec['rootPlanHash'],
+      'v11: planHash(root) matches vector rootPlanHash');
+  final chainOk = await verifyAmendmentChain(chain, v11KeyCache);
+  check(chainOk.valid, 'v11: amendment chain verifies (${chainOk.reason})');
+
+  // Tamper the amended link's title → chain must fail.
+  final tamperedChain = (jsonDecode(jsonEncode(chain)) as List)
+      .map((e) => (e as Map).cast<String, dynamic>())
+      .toList();
+  (tamperedChain[1]['plan'] as Map)['title'] = 'Tampered Summit';
+  final chainBad = await verifyAmendmentChain(tamperedChain, v11KeyCache);
+  check(!chainBad.valid, 'v11: tampered amendment chain rejected');
+
+  // createAmendment roundtrip with the fixed seed.
+  final signedRoot = await signPlanEnvelope(rootPlan, seedB64);
+  final rootVerify = await verifyPlanEnvelope(signedRoot, v11KeyCache);
+  check(rootVerify.valid, 'v11: signPlanEnvelope roundtrip verifies');
+  final amended = await createAmendment(
+      signedRoot, {'title': 'Vector Summit (amended)'}, seedB64);
+  check((amended['plan'] as Map)['planVersion'] == 2 &&
+          (amended['plan'] as Map)['prevPlanHash'] == planHash(rootPlan),
+      'v11: createAmendment sets planVersion+1 and prevPlanHash');
+  final rtChain = await verifyAmendmentChain([signedRoot, amended], v11KeyCache);
+  check(rtChain.valid, 'v11: createAmendment chain verifies (${rtChain.reason})');
+
+  // ── 4. Register entries + reducers + entriesRoot ─────────────────────────
+
+  final regVec = v11['registerEntries'] as Map<String, dynamic>;
+  final regEntries = (regVec['entries'] as List)
+      .map((e) => (e as Map).cast<String, dynamic>())
+      .toList();
+  final regKeyCache = <String, Nik>{'N0': vecNik, 'N1': vecNik};
+  for (final e in regEntries) {
+    final vr = await verifyRegisterEntry(e, regKeyCache);
+    check(vr.valid, 'v11: register entry ${e['entryId']} verifies (${vr.reason})');
+  }
+  final tamperedEntry =
+      (jsonDecode(jsonEncode(regEntries[0])) as Map).cast<String, dynamic>();
+  (tamperedEntry['content'] as Map)['text'] = 'Tampered?';
+  final tv = await verifyRegisterEntry(tamperedEntry, regKeyCache);
+  check(!tv.valid && tv.reason == 'signature_invalid',
+      'v11: tampered register entry rejected');
+
+  final reduced = reduceQuestions(regEntries);
+  final expState = (regVec['expectedQuestionState'] as Map)
+      .cast<String, dynamic>();
+  check(reduced.byId.length == expState.length,
+      'v11: reduceQuestions question count');
+  var qMatches = true;
+  expState.forEach((qid, expected) {
+    final got = reduced.byId[qid];
+    if (got == null) {
+      qMatches = false;
+      return;
+    }
+    (expected as Map).forEach((k, v) {
+      if (got[k] != v) qMatches = false;
+    });
+  });
+  check(qMatches, 'v11: reduceQuestions state matches vector');
+  check(reduced.superseded.isEmpty, 'v11: no superseded entries in vector');
+  // Order-insensitivity: reversed input produces identical state.
+  final reducedRev = reduceQuestions(regEntries.reversed.toList());
+  check(canonicalJson(reducedRev.byId) == canonicalJson(reduced.byId),
+      'v11: reduceQuestions is input-order independent');
+
+  check(entriesRoot(regEntries) == regVec['entriesRoot'],
+      'v11: entriesRoot matches vector');
+  check(entriesRoot(regEntries.reversed.toList()) == regVec['entriesRoot'],
+      'v11: entriesRoot input-order independent');
+
+  // createRegisterEntry roundtrip.
+  final newEntry = await createRegisterEntry(
+    'action',
+    {'description': 'Test action'},
+    sessionId: 'VEC-SESSION',
+    nodeId: 'N1',
+    seq: 2,
+    timestamp: '2040-02-01T11:10:00.000Z',
+    privateKeyB64: seedB64,
+  );
+  check(newEntry['entryId'] == 'ACT-N1-2', 'v11: createRegisterEntry id');
+  final newOk = await verifyRegisterEntry(newEntry, regKeyCache);
+  check(newOk.valid, 'v11: created register entry verifies');
+  final actions = reduceActions([newEntry]);
+  check(actions.byId['ACT-N1-2']?['status'] == 'PROPOSED',
+      'v11: reduceActions PROPOSED');
+
+  // ── 5. CBOR decode + COSE_Sign1 verify ───────────────────────────────────
+
+  final coseVec = v11['coseSign1'] as Map<String, dynamic>;
+  final coseEnvelope = <String, dynamic>{
+    'plan': coseVec['plan'],
+    'coseSign1CborB64': coseVec['coseSign1CborB64'],
+  };
+  final coseKeyCache = <String, Nik>{vecNik.nodeId: vecNik};
+  final coseOk = await verifyPlanCose(coseEnvelope, coseKeyCache);
+  check(coseOk.valid == coseVec['expectedValid'],
+      'v11: COSE_Sign1 vector verifies (${coseOk.reason})');
+
+  // b64 and hex encodings agree.
+  final cborBytes =
+      Uint8List.fromList(b64UrlDecode(coseVec['coseSign1CborB64'] as String));
+  final hexStr = cborBytes
+      .map((b) => b.toRadixString(16).padLeft(2, '0'))
+      .join();
+  check(hexStr == coseVec['coseSign1CborHex'], 'v11: CBOR b64 == hex vector');
+
+  // Tampered plan → payload mismatch.
+  final coseTampered = <String, dynamic>{
+    'plan': {...(coseVec['plan'] as Map).cast<String, dynamic>(), 'title': 'X'},
+    'coseSign1CborB64': coseVec['coseSign1CborB64'],
+  };
+  final coseBad = await verifyPlanCose(coseTampered, coseKeyCache);
+  check(!coseBad.valid && coseBad.reason == 'payload_mismatch',
+      'v11: COSE tampered plan rejected');
+  final coseNoKey = await verifyPlanCose(coseEnvelope, <String, Nik>{});
+  check(!coseNoKey.valid && coseNoKey.reason == 'key_not_in_cache',
+      'v11: COSE unknown key rejected');
+
+  // CBOR codec unit checks.
+  final decodedCose = decodeCbor(cborBytes);
+  check(decodedCose is CborTag && decodedCose.tag == 18,
+      'v11: CBOR decodes to tag 18');
+  final roundtrip = encodeCbor(decodedCose);
+  check(b64UrlEncode(roundtrip) == coseVec['coseSign1CborB64'],
+      'v11: CBOR deterministic re-encode roundtrip');
+  check(b64UrlEncode(encodeCbor({1: -19})) == b64UrlEncode(
+          Uint8List.fromList([0xa1, 0x01, 0x32])),
+      'v11: CBOR {1:-19} == a10132');
+  bool trailingThrew = false;
+  try {
+    decodeCbor(Uint8List.fromList([0x01, 0x02]));
+  } on FormatException {
+    trailingThrew = true;
+  }
+  check(trailingThrew, 'v11: CBOR trailing bytes rejected');
+  bool floatThrew = false;
+  try {
+    decodeCbor(Uint8List.fromList([0xf9, 0x3c, 0x00]));
+  } on FormatException {
+    floatThrew = true;
+  }
+  check(floatThrew, 'v11: CBOR floats rejected');
+  bool indefThrew = false;
+  try {
+    decodeCbor(Uint8List.fromList([0x9f, 0x01, 0xff]));
+  } on FormatException {
+    indefThrew = true;
+  }
+  check(indefThrew, 'v11: CBOR indefinite length rejected');
+
+  // signPlanCose roundtrip with the fixed seed.
+  final coseSigned = await signPlanCose(
+      (coseVec['plan'] as Map).cast<String, dynamic>(), seedB64);
+  check(coseSigned['coseSign1CborB64'] == coseVec['coseSign1CborB64'],
+      'v11: signPlanCose reproduces vector bytes');
+  final coseSignedOk = await verifyPlanCose(coseSigned, coseKeyCache);
+  check(coseSignedOk.valid, 'v11: signPlanCose roundtrip verifies');
+
+  // ── 6. transition() state machine (golden table) ─────────────────────────
+
+  final smVec = v11['stateMachine'] as Map<String, dynamic>;
+  final smPlan = LtxPlan.fromJson(jsonEncode(smVec['plan']))!;
+  check(makePlanId(smPlan) == smVec['planId'],
+      'v11: state machine planId matches vector');
+  var smCtx = createSession(smPlan, smVec['planId'] as String,
+      quorum: smVec['quorum']);
+  check(smCtx.state == 'DRAFT' && smCtx.lock == null,
+      'v11: createSession starts DRAFT');
+  check(smCtx.lockTimeoutMs == 1800000, 'v11: lock timeout 2×maxDelay');
+  var smStepsOk = true;
+  var smStepIdx = 0;
+  for (final rawStep in (smVec['steps'] as List)) {
+    final step = (rawStep as Map).cast<String, dynamic>();
+    final result =
+        transition(smCtx, (step['event'] as Map).cast<String, dynamic>());
+    smCtx = result.ctx;
+    final expectState = step['expectState'];
+    final expectLock = step['expectLock'];
+    if (smCtx.state != expectState || smCtx.lock != expectLock) {
+      smStepsOk = false;
+      print('  v11 state machine step $smStepIdx: '
+          'got (${smCtx.state}, ${smCtx.lock}) '
+          'expected ($expectState, $expectLock)');
+    }
+    smStepIdx += 1;
+  }
+  check(smStepsOk, 'v11: golden transition table replay (${smStepIdx} steps)');
+  check(smCtx.subset == null,
+      'v11: subset cleared after late full-lock recovery');
+  check(smCtx.degradedReasons.first.contains('[N0,N2]'),
+      'v11: quorum subset [N0,N2] recorded at degrade time');
+  check(smCtx.degradedReasons.length == 2, 'v11: two degraded reasons logged');
+
+  // Invalid event in terminal state is a no-op with INVALID_EVENT notify.
+  final afterEnd = transition(smCtx, {'type': 'SESSION_START', 'nowMs': 6000000});
+  check(afterEnd.ctx.state == 'COMPLETE' &&
+          afterEnd.effects.any((e) => e['code'] == 'INVALID_EVENT'),
+      'v11: invalid event ignored in COMPLETE');
+
+  // EOK override + resume path (not covered by the golden table).
+  var eokCtx = createSession(smPlan, smVec['planId'] as String, quorum: 'all');
+  eokCtx = transition(eokCtx, {'type': 'START_LOCK', 'nowMs': 0}).ctx;
+  for (final nid in ['N1', 'N2']) {
+    eokCtx = transition(eokCtx, {
+      'type': 'PLAN_CONFIRM',
+      'nowMs': 1,
+      'nodeId': nid,
+      'planId': smVec['planId'],
+    }).ctx;
+  }
+  check(eokCtx.state == 'LOCKED' && eokCtx.lock == 'FULL',
+      'v11: full lock with quorum=all');
+  eokCtx = transition(eokCtx, {'type': 'SESSION_START', 'nowMs': 2}).ctx;
+  eokCtx = transition(eokCtx,
+      {'type': 'EOK_OVERRIDE', 'nowMs': 3, 'verified': true}).ctx;
+  check(eokCtx.state == 'EMERGENCY_HOLD', 'v11: verified EOK holds session');
+  eokCtx = transition(eokCtx,
+      {'type': 'HOST_DECISION', 'nowMs': 4, 'decision': 'resume'}).ctx;
+  check(eokCtx.state == 'ACTIVE', 'v11: HOST resume returns to prior state');
+  final rejected = transition(eokCtx,
+      {'type': 'EOK_OVERRIDE', 'nowMs': 5, 'verified': false});
+  check(rejected.ctx.state == 'ACTIVE' &&
+          rejected.effects.any((e) => e['code'] == 'OVERRIDE_REJECTED'),
+      'v11: unverified EOK rejected');
+  eokCtx = transition(eokCtx, {
+    'type': 'AMENDMENT_PROPOSED',
+    'nowMs': 6,
+    'planId': 'PLAN-2',
+    'planVersion': 2,
+    'affectedNodeIds': ['N1'],
+  }).ctx;
+  eokCtx = transition(eokCtx, {
+    'type': 'AMENDMENT_CONFIRMED',
+    'nowMs': 7,
+    'nodeId': 'N1',
+    'planId': 'PLAN-2',
+  }).ctx;
+  check(eokCtx.planId == 'PLAN-2' && eokCtx.planVersion == 2,
+      'v11: amendment applied after all confirms');
+  eokCtx = transition(eokCtx,
+      {'type': 'HOST_DECISION', 'nowMs': 8, 'decision': 'abort'}).ctx;
+  check(eokCtx.state == 'ABORTED', 'v11: HOST abort');
 
   // ── Summary ───────────────────────────────────────────────────────────────
 
