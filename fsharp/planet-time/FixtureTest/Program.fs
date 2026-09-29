@@ -41,8 +41,10 @@ let main argv =
     let fixturePath =
         if argv.Length > 0 then argv.[0]
         else
-            let asm = IO.Path.GetDirectoryName(
-                          Reflection.Assembly.GetExecutingAssembly().Location)
+            let asm =
+                match IO.Path.GetDirectoryName(Reflection.Assembly.GetExecutingAssembly().Location) with
+                | null -> "."
+                | d -> d
             Path.GetFullPath(Path.Combine(asm, defaultRelPath))
 
     if not (File.Exists(fixturePath)) then
@@ -54,12 +56,15 @@ let main argv =
     let json = File.ReadAllText(fixturePath)
     let opts = JsonSerializerOptions(PropertyNameCaseInsensitive = true)
     let fixture =
-        try JsonSerializer.Deserialize<FixtureFile>(json, opts)
+        try
+            match JsonSerializer.Deserialize<FixtureFile>(json, opts) with
+            | null -> { entries = [||] }
+            | f -> f
         with ex ->
             eprintfn "Failed to parse fixture: %s" ex.Message
             exit 1
 
-    if isNull (box fixture) || fixture.entries.Length = 0 then
+    if isNull (box fixture.entries) || fixture.entries.Length = 0 then
         eprintfn "Fixture file is empty or malformed."
         1
     else

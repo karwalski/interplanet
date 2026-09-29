@@ -39,10 +39,8 @@ let rec canonicalJson (v: obj) : string =
     | :? int64 as n   -> string n
     | :? float as f   -> if f = Math.Floor(f) then string (int64 f) else string f
     | :? string as s  -> jsonStr s
-    | :? (obj seq) as arr ->
+    | :? (obj seq) as arr ->   // also covers obj[]
         "[" + String.concat "," (Seq.map canonicalJson arr) + "]"
-    | :? (obj[]) as arr ->
-        "[" + String.concat "," (Array.map canonicalJson arr) + "]"
     | :? IDictionary<string,obj> as m ->
         let sorted = m |> Seq.sortBy (fun kv -> kv.Key)
         let parts  = sorted |> Seq.map (fun kv -> jsonStr kv.Key + ":" + canonicalJson kv.Value)
@@ -209,7 +207,7 @@ type SignedPlan =
 // ---- sign_plan ----
 
 let signPlan (plan: IDictionary<string,obj>) (nik: Nik) : SignedPlan =
-    let protectedJson = canonicalJson (dict [("alg", -19 :> obj)] :> IDictionary<string,obj>)
+    let protectedJson = canonicalJson (dict [("alg", -19 :> obj)])
     let protectedB64  = b64uEncode (Encoding.UTF8.GetBytes protectedJson)
     let payloadJson   = canonicalJson plan
     let payloadB64    = b64uEncode (Encoding.UTF8.GetBytes payloadJson)
