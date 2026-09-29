@@ -2,7 +2,7 @@
 # Requires: PHP 8.1+, Composer
 # Install dev deps: make install
 
-.PHONY: install test lint clean
+.PHONY: install test lint validate clean
 
 install:
 	composer install
@@ -22,3 +22,8 @@ lint:
 
 clean:
 	rm -rf vendor/ composer.lock
+
+# composer.json is the version source of truth (versions.json), so the
+# version-field warning is not an error here.
+validate:
+	composer validate --strict --no-check-version

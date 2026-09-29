@@ -122,18 +122,18 @@ final class Time
 
     // ── Mars Time Convention ──────────────────────────────────────────────────
 
+    /**
+     * Mars Coordinated Time: the Mars clock at the prime meridian (AMT+0), in
+     * Mars hours (1/24 sol), matching getMTC in planet-time.js.
+     */
     public static function getMTC(int $utcMs): MTCResult
     {
-        $ms  = $utcMs - Constants::MARS_EPOCH_MS;
-        $sol = (int)floor($ms / Constants::MARS_SOL_MS);
-
-        $fracMs = fmod((float)$ms, (float)Constants::MARS_SOL_MS);
-        if ($fracMs < 0.0) $fracMs += Constants::MARS_SOL_MS;
-
-        $totalSec = $fracMs / 1000.0;
-        $hour     = (int)floor($totalSec / 3600.0);
-        $minute   = (int)floor(fmod($totalSec, 3600.0) / 60.0);
-        $second   = (int)fmod($totalSec, 60.0);
+        $totalSols = ($utcMs - Constants::MARS_EPOCH_MS) / Constants::MARS_SOL_MS;
+        $sol       = (int)floor($totalSols);
+        $frac      = $totalSols - $sol;
+        $hour      = (int)floor($frac * 24);
+        $minute    = (int)floor(($frac * 24 - $hour) * 60);
+        $second    = (int)floor((($frac * 24 - $hour) * 60 - $minute) * 60);
 
         $h2 = str_pad((string)$hour,   2, '0', STR_PAD_LEFT);
         $m2 = str_pad((string)$minute, 2, '0', STR_PAD_LEFT);
