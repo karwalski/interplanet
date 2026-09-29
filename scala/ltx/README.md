@@ -7,13 +7,14 @@ No external dependencies — uses only the Scala standard library,
 
 ## Requirements
 
-- Scala 3 (`scalac` / `scala` in PATH)
-- JVM 11+
+- Scala 3 (`scalac` / `scala` in PATH) for `make test`, or sbt 1.10 for `make sbt-test`
+- JVM 11+ (tested with JDK 17)
 
 ## Compile and test
 
 ```sh
-make test
+make test       # scalac + java
+make sbt-test   # sbt, fetches Scala 3.6.4 from Maven Central
 ```
 
 ## Usage
