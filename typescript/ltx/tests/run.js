@@ -1485,6 +1485,22 @@ for (const gv of golden.vectors) {
 }
 const gvByName = Object.fromEntries(golden.vectors.map(gv => [gv.name, gv]));
 
+// ── Conformance: planId prefix vectors (spec/golden/plan-id-prefixes.json) ─
+// Unicode upper-casing and UTF-16 slicing of HOSTSTR / NODESTR (issue #37).
+// JS strings hold a lone surrogate, so the exact planId is expected.
+
+console.log('\n── planId prefix vectors ────────────────────');
+const prefixGolden = require('../../../spec/golden/plan-id-prefixes.json');
+check('prefix vectors present',        prefixGolden.vectors.length >= 18);
+for (const gv of prefixGolden.vectors) {
+  check(`prefix planId ${gv.name}`,    ltx.makePlanId(gv.plan) === gv.planId);
+  const wire = ltx.decodeHash(ltx.encodeHash(gv.plan));
+  check(`prefix wire planId ${gv.name}`, wire !== null && ltx.makePlanId(wire) === gv.planId);
+  const typed = ltx.createPlan({ title: gv.plan.title, start: gv.plan.start, quantum: gv.plan.quantum,
+    mode: gv.plan.mode, nodes: gv.plan.nodes, segments: gv.plan.segments });
+  check(`prefix createPlan ${gv.name}`, ltx.makePlanId(typed).slice(0, -12) === gv.planId.slice(0, -12));
+}
+
 // ── Plan validation: reserved streams / branching (§3.5, §7) ──────────────
 
 console.log('\n── validatePlan / reserved fields ───────────');
