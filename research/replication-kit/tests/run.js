@@ -7,7 +7,7 @@
 (async () => {
   let passed = 0;
   let failed = 0;
-  for (const t of ['./relay.test', './scoring.test']) {
+  for (const t of ['./relay.test', './scoring.test', './live.test']) {
     const r = await require(t)();
     passed += r.passed;
     failed += r.failed;
