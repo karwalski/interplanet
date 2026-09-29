@@ -394,23 +394,21 @@ let makePlanId (plan: LtxPlan) : string =
     let date = plan.start.Substring(0, 10).Replace("-", "")
 
     let nodes = plan.nodes
+    // name.replace(/\s+/g, '').toUpperCase() as in ltx-sdk.js: only
+    // whitespace is removed; punctuation such as '-' is kept (§4.3).
+    let token (name: string) =
+        System.String(name.ToCharArray() |> Array.filter (Char.IsWhiteSpace >> not)).ToUpper()
     let hostStr =
-        let raw = if nodes.Length > 0 then nodes.[0].name else "HOST"
-        let up  = raw.Replace(" ", "").Replace("-", "").ToUpper()
-        // keep alphanumeric only, max 8 chars
-        let alnumChars = up |> Seq.filter Char.IsLetterOrDigit |> Array.ofSeq
-        let alnum = System.String(alnumChars)
-        if alnum.Length > 8 then alnum.Substring(0, 8) else alnum
+        let raw = if nodes.Length > 0 then token nodes.[0].name else "HOST"
+        if raw.Length > 8 then raw.Substring(0, 8) else raw
 
     let nodeStr =
         if nodes.Length > 1 then
             let parts =
                 nodes |> List.skip 1
                 |> List.map (fun n ->
-                    let up = n.name.Replace(" ", "").Replace("-", "").ToUpper()
-                    let alnumChars = up |> Seq.filter Char.IsLetterOrDigit |> Array.ofSeq
-                    let alnum = System.String(alnumChars)
-                    if alnum.Length > 4 then alnum.Substring(0, 4) else alnum)
+                    let up = token n.name
+                    if up.Length > 4 then up.Substring(0, 4) else up)
             let joined = String.concat "-" parts
             if joined.Length > 16 then joined.Substring(0, 16) else joined
         else "RX"
