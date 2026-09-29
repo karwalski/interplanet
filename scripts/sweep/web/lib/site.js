@@ -49,7 +49,9 @@ async function startSite() {
       } else if (e.isDirectory()) derefLinks(p);
     }
   })(site);
-  fs.copyFileSync(path.join(__dirname, 'db-config.sqlite.php'), path.join(site, 'db-config.php'));
+  fs.copyFileSync(path.join(__dirname, 'getdb.sqlite.php'), path.join(site, 'db-config.php'));
+  // share.php is server-only (.gitignore); a stand-in serves the share flow.
+  fs.copyFileSync(path.join(__dirname, 'share.sweep.php'), path.join(site, 'share.php'));
   const port = await freePort();
   const env = Object.assign({}, process.env, { SWEEP_SQLITE: path.join(root, 'sweep.sqlite') });
   const proc = spawn('php', ['-S', '127.0.0.1:' + port, '-t', site, path.join(__dirname, 'router.php')],
