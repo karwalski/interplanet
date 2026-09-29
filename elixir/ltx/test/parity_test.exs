@@ -54,6 +54,13 @@ check plan_of.("v3-amendment")["prevPlanHash"] == Json.get(by_name["v3-upgrade-d
 check InterplanetLtx.create_plan([]).quantum == 5 and InterplanetLtx.Constants.default_quantum() == 5,
       "create_plan default quantum is 5"
 
+# create_plan structs serialise nodes before segments, so the default plan
+# matches the v2-key-order-sensitive vector (not v2-createPlan-default).
+check InterplanetLtx.make_plan_id(
+        InterplanetLtx.create_plan(title: "Golden Default", start: "2026-03-15T14:00:00.000Z", delay: 840)
+      ) == pid_of.("v2-key-order-sensitive"),
+      "create_plan struct planId = golden v2-key-order-sensitive"
+
 # JSON text entry point and Json round trip
 check Segments.plan_id_from_json(Json.stringify(Json.get(by_name["v2-relay"], "plan"))) == pid_of.("v2-relay"),
       "plan_id_from_json matches golden v2-relay"

@@ -49,6 +49,10 @@ ok(by_name['v2-createPlan-default'].planId ~= by_name['v2-key-order-sensitive'].
 ok(by_name['v3-upgrade-delays'].planId == by_name['v3-key-order-insensitive'].planId, 'golden v3 order-insensitive')
 ok(by_name['v3-amendment'].plan.prevPlanHash == by_name['v3-upgrade-delays'].planHash, 'golden v3 amendment chain hash')
 ok(LTX.create_plan({}).quantum == 5, 'create_plan default quantum is 5')
+-- Plain create_plan tables hash in schema order (nodes before segments), so the
+-- default plan matches the v2-key-order-sensitive vector.
+local sp = LTX.make_plan_id(LTX.create_plan({ title = 'Golden Default', start = '2026-03-15T14:00:00.000Z', delay = 840 }))
+ok(sp == by_name['v2-key-order-sensitive'].planId, 'create_plan planId = golden v2-key-order-sensitive, got ' .. sp)
 ok(LTX.plan_id_from_json(JSON.stringify(by_name['v2-relay'].plan)) == by_name['v2-relay'].planId,
   'plan_id_from_json matches golden v2-relay')
 ok(JSON.stringify(JSON.decode_ordered('{"b":1,"a":[true,null,"x\\"y"],"e":[]}')) == '{"b":1,"a":[true,null,"x\\"y"],"e":[]}',
