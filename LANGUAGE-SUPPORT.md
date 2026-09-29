@@ -21,25 +21,25 @@ and pull request.
 
 | Language | planet-time | LTX | Min version | Fixtures (local, 29 Sep 2026) | Notes |
 |---|:---:|:---:|---|:---:|---|
-| **JavaScript** | ✓ 1.4.0 | ✓ 1.1.0 | Node ≥ 16 | ✅ 54 | `javascript/planet-time/`, `javascript/ltx/` |
+| **JavaScript** | ✓ 1.10.0 | ✓ 1.1.0 | Node ≥ 16 | ✅ 54 | `javascript/planet-time/`, `javascript/ltx/` |
 | **TypeScript** | ✓ 1.1.0 | ✓ 1.1.0 | Node ≥ 16 | ✅ 54 | Native TS types; `typescript/planet-time/`, `typescript/ltx/` |
 | **Python** | ✓ 0.1.0 | ✓ 1.1.0 | Python ≥ 3.10 | ✅ 54 | PyPI names `interplanet-time` / `interplanet-ltx` (not yet published) |
 | **Java** | ✓ 1.1.0 | ✓ 1.0.0 | Java 16+ | ❌ 9 of 150 checks fail | stdlib-only; `java/planet-time/`, `java/ltx/` |
 | **C** | ✓ 1.0.0 | ✓ 1.0.0 | C99 | no runner | `libinterplanet`; no external deps |
 | **PHP** | ✓ 0.1.0 | ✓ 1.0.0 | PHP 8.1+ | ❌ 64 of 150 checks fail | Packagist (not yet published); PSR-4; stdlib-only |
 | **Ruby** | ✓ 0.1.0 | ✓ 1.0.0 | Ruby 2.6+ | ❌ 9 of 150 checks fail | RubyGems (not yet published); stdlib-only |
-| **Go** | ✓ unversioned | ✓ 1.1.0 | Go 1.21+ | ✅ 54 | Go modules (module path not yet fetchable); stdlib-only |
-| **Swift** | ✓ unversioned | ✓ 1.1.0 | Swift 5.9+ | not run | Swift Package Index (not yet listed); Foundation-only |
+| **Go** | ✓ 1.0.0 | ✓ 1.1.0 | Go 1.21+ | ✅ 54 | Go modules (module path not yet fetchable); stdlib-only |
+| **Swift** | ✓ 1.0.0 | ✓ 1.1.0 | Swift 5.9+ | not run | Swift Package Index (not yet listed); Foundation-only |
 | **Rust** | ✓ 0.1.0 | ✓ 1.1.0 | Rust 1.70+ | ✅ 54 | crates.io (not yet published); stdlib-only |
 | **R** | ✓ 0.1.0 | ✓ 1.0.0 | R 4.1+ | ✅ 54 | base R only; `r/planet-time/`, `r/ltx/` |
-| **C#** | ✓ unversioned | ✓ 1.1.0 | .NET 8+ | ✅ 54 | NuGet (not yet published); `csharp/planet-time/`, `csharp/ltx/` |
+| **C#** | ✓ 1.0.0 | ✓ 1.1.0 | .NET 8+ | ✅ 54 | NuGet (not yet published); `csharp/planet-time/`, `csharp/ltx/` |
 | **Dart** | ✓ 0.1.0 | ✓ 1.1.0 | Dart 3+ | ✅ 54 | pub.dev (not yet published); `dart/planet-time/`, `dart/ltx/` |
 | **Elixir** | ✓ 0.1.0 | ✓ 1.1.0 | Elixir 1.14+ | not run | Hex (not yet published); Mix; `elixir/planet-time/`, `elixir/ltx/` |
-| **F#** | ✓ unversioned | ✓ 1.1.0 | .NET 8+ | ✅ 54 | NuGet (not yet published); `fsharp/planet-time/`, `fsharp/ltx/` |
+| **F#** | ✓ 1.0.0 | ✓ 1.1.0 | .NET 8+ | ✅ 54 | NuGet (not yet published); `fsharp/planet-time/`, `fsharp/ltx/` |
 | **Kotlin** | ✓ 1.0.0 | ✓ 1.1.0 | Kotlin 1.9+ JVM | ❌ runner error | Maven Central (not yet published); `kotlin/planet-time/`, `kotlin/ltx/` |
 | **Scala** | ✓ 0.1.0 | ✓ 1.1.0 | Scala 3 JVM | not run | Maven Central (not yet published); `scala/planet-time/`, `scala/ltx/` |
 | **Lua** | ✓ 1.0.0 | ✓ 1.1.0 | Lua 5.3+ | ✅ 54 | stdlib-only; `lua/planet-time/`, `lua/ltx/` |
-| **OCaml** | ✓ unversioned | ✓ 1.1.0 | OCaml 4.13+ | ✅ 54 | ocamlfind; `ocaml/planet-time/`, `ocaml/ltx/` |
+| **OCaml** | ✓ 1.0.0 | ✓ 1.1.0 | OCaml 4.13+ | ✅ 54 | ocamlfind; `ocaml/planet-time/`, `ocaml/ltx/` |
 | **Zig** | ✓ 1.0.0 | ✓ 1.1.0 | Zig 0.12+ | ✅ 54 | stdlib-only; `zig/planet-time/`, `zig/ltx/` |
 | **Julia** | ✓ 0.1.0 | ✓ 1.0.0 | Julia 1.9+ | not run | stdlib-only; `julia/planet-time/`, `julia/ltx/` |
 

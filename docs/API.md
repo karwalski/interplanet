@@ -1,6 +1,6 @@
 # planet-time.js — API Reference
 
-*Version 1.9.0 — March 2026*
+*Version 1.10.0 — March 2026*
 
 ---
 
@@ -766,7 +766,7 @@ Light-travel delay in seconds between two named bodies at a given date. Alias fo
 
 | Export | Value | Description |
 |--------|-------|-------------|
-| `VERSION` | `'1.9.0'` | Library version (semver) |
+| `VERSION` | `'1.10.0'` | Library version (semver) |
 | `C_KMS` | `299792.458` | Speed of light, km/s (exact SI definition) |
 | `AU_KM` | `149597870.7` | 1 AU in kilometres (IAU 2012 Resolution B2, exact) |
 | `AU_SECONDS` | `≈ 499.0048` | Light travel time for 1 AU, seconds (derived: `AU_KM / C_KMS`) |
