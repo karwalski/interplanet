@@ -307,6 +307,7 @@ Check(badQuantumThrew2,                                                 "Compute
 
 SecurityTests.Run(Check);
 V11Tests.Run(Check);
+ParityTests.Run(Check);
 
 // ── Summary ───────────────────────────────────────────────────────────────
 
