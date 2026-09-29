@@ -654,16 +654,16 @@ function M.js_upper(s)
   return table.concat(out)
 end
 
---- s.slice(0, n) in UTF-16 code units (s is UTF-8). When the cut splits a
--- surrogate pair JS keeps the lone high surrogate, which a UTF-8 string
--- cannot hold: it becomes U+FFFD, the UTF-8 form of the JS id (planIdUtf8
--- in spec/golden/plan-id-prefixes.json).
+--- s.slice(0, n) in UTF-16 code units (s is UTF-8, or WTF-8). When the cut
+-- splits a surrogate pair JS keeps the lone high surrogate, and so does
+-- this, as WTF-8 (bytes ED A0..AF xx), the form src/json.lua decodes a lone
+-- surrogate escape to (planIdWtf8Hex in spec/golden/plan-id-prefixes.json).
 local function utf16_slice(s, n)
   local out, units = {}, 0
-  for _, cp in utf8.codes(s) do
+  for _, cp in utf8.codes(s, true) do
     local w = cp >= 0x10000 and 2 or 1
     if units + w > n then
-      if units < n then out[#out + 1] = "\u{FFFD}" end
+      if units < n then out[#out + 1] = utf8.char(0xD800 + ((cp - 0x10000) >> 10)) end
       break
     end
     units = units + w

@@ -52,8 +52,8 @@ ok(LTX.create_plan({}).quantum == 5, 'create_plan default quantum is 5')
 
 -- ── Conformance: planId prefix vectors (spec/golden/plan-id-prefixes.json) ─
 -- Unicode upper-casing and UTF-16 slicing of HOSTSTR / NODESTR (issue #37).
--- Lua strings are UTF-8 here, so the expected id is planIdUtf8 (a surrogate
--- pair split by the cut becomes U+FFFD).
+-- A Lua string holds a lone surrogate as WTF-8 (as src/json.lua decodes
+-- one), so the expected id is the planIdWtf8Hex bytes.
 do
   local pf = assert(io.open('../../spec/golden/plan-id-prefixes.json', 'rb'))
   local prefix = JSON.decode_ordered(pf:read('a'))
@@ -61,7 +61,7 @@ do
   ok(#prefix.vectors >= 18, 'prefix vectors present')
   local function cut(id) return id:sub(1, #id - 12) end
   for _, gv in ipairs(prefix.vectors) do
-    local want = gv.planIdUtf8
+    local want = gv.planIdWtf8Hex:gsub('..', function(h) return string.char(tonumber(h, 16)) end)
     local got = LTX.make_plan_id(gv.plan)
     ok(got == want, 'prefix planId ' .. gv.name .. ' got ' .. got)
     ok(LTX.plan_id_from_json(JSON.stringify(gv.plan)) == want, 'prefix plan_id_from_json ' .. gv.name)
@@ -75,6 +75,9 @@ do
                                     mode = gv.plan.mode, nodes = nodes, segments = segs })
     local tid = LTX.make_plan_id(typed)
     ok(cut(tid) == cut(want), 'prefix create_plan ' .. gv.name .. ' got ' .. tid)
+    ok((JSON.stringify(got):find('\\ud8', 1, true) ~= nil) == gv.loneSurrogate,
+      'prefix lone surrogate stringifies as \\udxxx ' .. gv.name)
+    ok(JSON.decode_ordered(JSON.stringify(got)) == got, 'prefix id round-trips through JSON ' .. gv.name)
   end
   ok(LTX.js_upper('stra\u{DF}e \u{FB01} \u{149} \u{390} \u{1FB3} \u{587} \u{23F}')
      == 'STRASSE FI \u{2BC}N \u{399}\u{308}\u{301} \u{391}\u{399} \u{535}\u{552} \u{2C7E}', 'js_upper full mapping')
