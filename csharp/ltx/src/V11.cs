@@ -251,14 +251,14 @@ public static class LtxV11
     {
         string date = plan.Start.Substring(0, 10).Replace("-", "");
         string hostStr = plan.Nodes.Count > 0
-            ? StripWs(plan.Nodes[0].Name).ToUpper() : "HOST";
+            ? LtxSecurity.StripJsSpaceUpper(plan.Nodes[0].Name) : "HOST";
         if (hostStr.Length > 8) hostStr = hostStr.Substring(0, 8);
         string nodeStr;
         if (plan.Nodes.Count > 1)
         {
             var parts = plan.Nodes.Skip(1).Select(n =>
             {
-                string s = StripWs(n.Name).ToUpper();
+                string s = LtxSecurity.StripJsSpaceUpper(n.Name);
                 return s.Length > 4 ? s.Substring(0, 4) : s;
             });
             nodeStr = string.Join("-", parts);
@@ -278,9 +278,6 @@ public static class LtxV11
         foreach (char c in raw) h = unchecked(h * 31u + c);
         return $"LTX-{date}-{hostStr}-{nodeStr}-v2-{h:x8}";
     }
-
-    private static string StripWs(string s) =>
-        string.Concat(s.Where(c => !char.IsWhiteSpace(c)));
 
     // ── 1. pairDelay + ComputeSegmentsFor ────────────────────────────────────
 

@@ -64,7 +64,7 @@ public static class LtxPlanJson
         Num(v) is double d && !double.IsInfinity(d) && Math.Floor(d) == d;
 
     private static string? Str(JsonElement? v) =>
-        v is { ValueKind: JsonValueKind.String } e ? e.GetString() : null;
+        v is { ValueKind: JsonValueKind.String } e ? LtxSecurity.JsonString(e) : null;
 
     /// <summary>JavaScript Number-to-String for a JSON number element.</summary>
     public static string JsNumber(JsonElement e)
@@ -85,7 +85,7 @@ public static class LtxPlanJson
                     .Select(p => LtxSecurity.JsQuote(p.Name) + ":" + Stringify(p.Value))) + "}";
             case JsonValueKind.Array:
                 return "[" + string.Join(",", e.EnumerateArray().Select(Stringify)) + "]";
-            case JsonValueKind.String: return LtxSecurity.JsQuote(e.GetString()!);
+            case JsonValueKind.String: return LtxSecurity.JsQuote(LtxSecurity.JsonString(e));
             case JsonValueKind.Number: return JsNumber(e);
             case JsonValueKind.True: return "true";
             case JsonValueKind.False: return "false";
@@ -323,8 +323,7 @@ public static class LtxPlanJson
 
     // ── planId over the wire form ────────────────────────────────────────────
 
-    private static string CompactUpper(string s) =>
-        string.Concat(s.Where(c => !char.IsWhiteSpace(c))).ToUpperInvariant();
+    private static string CompactUpper(string s) => LtxSecurity.StripJsSpaceUpper(s);
 
     private static string Slice(string s, int n) => s.Length > n ? s.Substring(0, n) : s;
 

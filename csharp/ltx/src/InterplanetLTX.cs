@@ -247,9 +247,10 @@ public static class InterplanetLTX
         string date = plan.Start.Substring(0, 10).Replace("-", "");
 
         var nodes = plan.Nodes;
-        string hostStr = nodes.Count > 0
-            ? nodes[0].Name.Replace(" ", "").ToUpper()
-            : "HOST";
+        // Whitespace is stripped as JS /\s+/g does (tabs, newlines, NBSP,
+        // U+2028, U+3000, BOM, ...), not only spaces.
+        string hostStr = LtxSecurity.StripJsSpaceUpper(
+            nodes.Count > 0 && !string.IsNullOrEmpty(nodes[0].Name) ? nodes[0].Name : "HOST");
         if (hostStr.Length > 8) hostStr = hostStr.Substring(0, 8);
 
         string nodeStr;
@@ -258,7 +259,7 @@ public static class InterplanetLTX
             var parts = new List<string>();
             for (int i = 1; i < nodes.Count; i++)
             {
-                string n = nodes[i].Name.Replace(" ", "").ToUpper();
+                string n = LtxSecurity.StripJsSpaceUpper(nodes[i].Name);
                 parts.Add(n.Length > 4 ? n.Substring(0, 4) : n);
             }
             nodeStr = string.Join("-", parts);

@@ -20,7 +20,12 @@ public static class SessionStateNames
 }
 
 public record LtxNode(string Id, string Name, string Role, double Delay, string Location);
-public record LtxSegmentTemplate(string Type, int Q);
+/// <summary>
+/// A segment in a plan's segment list. Speaker (a node id) and Label (an
+/// agenda title) are the optional attribution fields of LTX-SPECIFICATION.md
+/// section 3.4.1; null means absent, and absent fields are not serialised.
+/// </summary>
+public record LtxSegmentTemplate(string Type, int Q, string? Speaker = null, string? Label = null);
 public record LtxSegment(string Type, int Q, string Start, string End, int DurMin, long StartMs, long EndMs);
 public record LtxNodeUrl(string NodeId, string Name, string Role, string Url);
 
@@ -66,7 +71,13 @@ public class LtxPlan
         for (int i = 0; i < Segments.Count; i++)
         {
             if (i > 0) sb.Append(',');
-            sb.Append($"{{\"type\":{JsonString(Segments[i].Type)},\"q\":{Segments[i].Q}}}");
+            // Attributed segments (section 3.4.1): speaker and label follow type
+            // and q, only when present, as ltx-sdk.js writes them.
+            var s = Segments[i];
+            sb.Append($"{{\"type\":{JsonString(s.Type)},\"q\":{s.Q}");
+            if (s.Speaker != null) sb.Append($",\"speaker\":{JsonString(s.Speaker)}");
+            if (s.Label != null) sb.Append($",\"label\":{JsonString(s.Label)}");
+            sb.Append('}');
         }
         sb.Append(']');
 
@@ -85,19 +96,41 @@ public class LtxPlan
         return d.ToString(System.Globalization.CultureInfo.InvariantCulture);
     }
 
-    // ── Manual JSON parser ────────────────────────────────────────────────────
+    // ── JSON parser ──────────────────────────────────────────────────────────
+    // Strings go through LtxSecurity.JsonString so every escape (including a
+    // lone surrogate, which JSON.stringify writes as \uXXXX) is decoded.
     public static LtxPlan? FromJson(string json)
     {
         try
         {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            if (root.ValueKind != System.Text.Json.JsonValueKind.Object) return null;
             var plan = new LtxPlan();
-            plan.V = ParseIntField(json, "v") ?? 2;
-            plan.Title = ParseStringField(json, "title") ?? "";
-            plan.Start = ParseStringField(json, "start") ?? "";
-            plan.Quantum = ParseIntField(json, "quantum") ?? 5;
-            plan.Mode = ParseStringField(json, "mode") ?? "LTX";
-            plan.Segments = ParseSegments(json);
-            plan.Nodes = ParseNodes(json);
+            plan.V = Int(root, "v") ?? 2;
+            plan.Title = Str(root, "title") ?? "";
+            plan.Start = Str(root, "start") ?? "";
+            plan.Quantum = Int(root, "quantum") ?? 5;
+            plan.Mode = Str(root, "mode") ?? "LTX";
+            if (root.TryGetProperty("nodes", out var nodes) && nodes.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                foreach (var n in nodes.EnumerateArray())
+                {
+                    string? id = Str(n, "id"), name = Str(n, "name"), role = Str(n, "role"), location = Str(n, "location");
+                    if (id != null && name != null && role != null && location != null)
+                        plan.Nodes.Add(new LtxNode(id, name, role, Num(n, "delay") ?? 0.0, location));
+                }
+            }
+            if (root.TryGetProperty("segments", out var segs) && segs.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                foreach (var sg in segs.EnumerateArray())
+                {
+                    string? type = Str(sg, "type");
+                    int? q = Int(sg, "q");
+                    if (type != null && q.HasValue)
+                        plan.Segments.Add(new LtxSegmentTemplate(type, q.Value, Str(sg, "speaker"), Str(sg, "label")));
+                }
+            }
             return plan;
         }
         catch
@@ -106,144 +139,15 @@ public class LtxPlan
         }
     }
 
-    private static string? ParseStringField(string json, string key)
-    {
-        string pattern = $"\"{key}\":\"";
-        int idx = json.IndexOf(pattern);
-        if (idx < 0) return null;
-        idx += pattern.Length;
-        var sb = new System.Text.StringBuilder();
-        bool escaped = false;
-        for (int i = idx; i < json.Length; i++)
-        {
-            char c = json[i];
-            if (escaped)
-            {
-                switch (c)
-                {
-                    case '"':  sb.Append('"'); break;
-                    case '\\': sb.Append('\\'); break;
-                    case 'n':  sb.Append('\n'); break;
-                    case 'r':  sb.Append('\r'); break;
-                    case 't':  sb.Append('\t'); break;
-                    default:   sb.Append(c); break;
-                }
-                escaped = false;
-            }
-            else if (c == '\\') escaped = true;
-            else if (c == '"') break;
-            else sb.Append(c);
-        }
-        return sb.ToString();
-    }
+    private static System.Text.Json.JsonElement? Prop(System.Text.Json.JsonElement o, string key) =>
+        o.ValueKind == System.Text.Json.JsonValueKind.Object && o.TryGetProperty(key, out var v) ? v : null;
 
-    private static int? ParseIntField(string json, string key)
-    {
-        string pattern = $"\"{key}\":";
-        int idx = json.IndexOf(pattern);
-        if (idx < 0) return null;
-        idx += pattern.Length;
-        // skip whitespace
-        while (idx < json.Length && json[idx] == ' ') idx++;
-        int start = idx;
-        while (idx < json.Length && (char.IsDigit(json[idx]) || json[idx] == '-')) idx++;
-        if (idx == start) return null;
-        return int.TryParse(json.AsSpan(start, idx - start), out int val) ? val : null;
-    }
+    private static string? Str(System.Text.Json.JsonElement o, string key) =>
+        Prop(o, key) is { ValueKind: System.Text.Json.JsonValueKind.String } e ? LtxSecurity.JsonString(e) : null;
 
-    private static List<LtxSegmentTemplate> ParseSegments(string json)
-    {
-        var result = new List<LtxSegmentTemplate>();
-        int idx = json.IndexOf("\"segments\":[");
-        if (idx < 0) return result;
-        idx += "\"segments\":[".Length;
-        int depth = 1;
-        var sb = new System.Text.StringBuilder("[");
-        while (idx < json.Length && depth > 0)
-        {
-            char c = json[idx];
-            sb.Append(c);
-            if (c == '[') depth++;
-            else if (c == ']') depth--;
-            idx++;
-        }
-        string arr = sb.ToString().TrimEnd(']').TrimStart('[');
-        // Split by },{ pattern
-        var items = SplitObjects(arr);
-        foreach (var item in items)
-        {
-            string? type = ParseStringField("{" + item + "}", "type");
-            int? q = ParseIntField("{" + item + "}", "q");
-            if (type != null && q.HasValue)
-                result.Add(new LtxSegmentTemplate(type, q.Value));
-        }
-        return result;
-    }
+    private static double? Num(System.Text.Json.JsonElement o, string key) =>
+        Prop(o, key) is { ValueKind: System.Text.Json.JsonValueKind.Number } e ? e.GetDouble() : null;
 
-    private static List<LtxNode> ParseNodes(string json)
-    {
-        var result = new List<LtxNode>();
-        int idx = json.IndexOf("\"nodes\":[");
-        if (idx < 0) return result;
-        idx += "\"nodes\":[".Length;
-        int depth = 1;
-        var sb = new System.Text.StringBuilder("[");
-        while (idx < json.Length && depth > 0)
-        {
-            char c = json[idx];
-            sb.Append(c);
-            if (c == '[') depth++;
-            else if (c == ']') depth--;
-            idx++;
-        }
-        string arr = sb.ToString().TrimEnd(']').TrimStart('[');
-        var items = SplitObjects(arr);
-        foreach (var item in items)
-        {
-            string wrapped = "{" + item + "}";
-            string? id = ParseStringField(wrapped, "id");
-            string? name = ParseStringField(wrapped, "name");
-            string? role = ParseStringField(wrapped, "role");
-            double delay = ParseDoubleField(wrapped, "delay") ?? 0.0;
-            string? location = ParseStringField(wrapped, "location");
-            if (id != null && name != null && role != null && location != null)
-                result.Add(new LtxNode(id, name, role, delay, location));
-        }
-        return result;
-    }
-
-    private static double? ParseDoubleField(string json, string key)
-    {
-        string pattern = $"\"{key}\":";
-        int idx = json.IndexOf(pattern);
-        if (idx < 0) return null;
-        idx += pattern.Length;
-        while (idx < json.Length && json[idx] == ' ') idx++;
-        int start = idx;
-        while (idx < json.Length && (char.IsDigit(json[idx]) || json[idx] == '-' || json[idx] == '.')) idx++;
-        if (idx == start) return null;
-        return double.TryParse(json.AsSpan(start, idx - start),
-            System.Globalization.NumberStyles.Any,
-            System.Globalization.CultureInfo.InvariantCulture,
-            out double val) ? val : null;
-    }
-
-    private static List<string> SplitObjects(string arr)
-    {
-        var result = new List<string>();
-        int depth = 0, start = 0;
-        bool inStr = false;
-        bool escaped = false;
-        for (int i = 0; i < arr.Length; i++)
-        {
-            char c = arr[i];
-            if (escaped) { escaped = false; continue; }
-            if (c == '\\' && inStr) { escaped = true; continue; }
-            if (c == '"') inStr = !inStr;
-            if (inStr) continue;
-            if (c == '{') { if (depth == 0) start = i + 1; depth++; }
-            else if (c == '}') { depth--; if (depth == 0) result.Add(arr.Substring(start, i - start)); }
-        }
-        return result;
-    }
+    private static int? Int(System.Text.Json.JsonElement o, string key) =>
+        Prop(o, key) is { ValueKind: System.Text.Json.JsonValueKind.Number } e && e.TryGetInt32(out int i) ? i : null;
 }
