@@ -11,11 +11,12 @@ plan$nodes <- list(
   ltx_node("N0", "Earth HQ", "HOST", delay = 0, location = "earth"),
   ltx_node("N1", "Mars Hab-01", "PARTICIPANT", delay = 840, location = "mars"),
   ltx_node("N2", "L-1 Gateway", "PARTICIPANT", delay = 2, location = "moon"))
-# ltx_segment_spec is (type, q) only: no speaker/label.
-plan$segments <- list(ltx_segment_spec("PLAN_CONFIRM", 2), ltx_segment_spec("TX", 3),
-                      ltx_segment_spec("RX", 3), ltx_segment_spec("TX", 2),
-                      ltx_segment_spec("BUFFER", 1))
-cat("NOTE ltx_segment_spec has no speaker/label\n")
+plan$segments <- list(
+  ltx_segment_spec("PLAN_CONFIRM", 2),
+  ltx_segment_spec("TX", 3, speaker = "N0", label = "Ouverture: \u00e9tat de la mission"),
+  ltx_segment_spec("RX", 3),
+  ltx_segment_spec("TX", 2, speaker = "N1", label = "R\u00e9ponse \U0001F534"),
+  ltx_segment_spec("BUFFER", 1))
 
 write_wire <- function(name, hash) {
   con <- file(file.path(out_dir, name), "wb")
