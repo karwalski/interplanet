@@ -18,6 +18,18 @@
 <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
 <meta name="theme-color" content="#060614">
 <meta name="description" content="Plan meetings across Earth, Mars, and other worlds. Works even without a live connection.">
+<link rel="canonical" href="https://interplanet.live/ltx.html">
+<!-- Open Graph -->
+<meta property="og:type"        content="website">
+<meta property="og:url"         content="https://interplanet.live/ltx.html">
+<meta property="og:title"       content="LTX Meeting — InterPlanet">
+<meta property="og:description" content="Plan structured meetings across Earth, Mars, and other worlds with LTX, a proposed protocol for collaboration across long signal delays.">
+<meta property="og:image"       content="https://interplanet.live/assets/screenshot.png">
+<!-- Twitter / X -->
+<meta name="twitter:card"        content="summary_large_image">
+<meta name="twitter:title"       content="LTX Meeting — InterPlanet">
+<meta name="twitter:description" content="Plan structured meetings across Earth, Mars, and other worlds with LTX, a proposed protocol for collaboration across long signal delays.">
+<meta name="twitter:image"       content="https://interplanet.live/assets/screenshot.png">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
       media="print" onload="this.media='all'" crossorigin="anonymous"
       referrerpolicy="no-referrer">
@@ -240,6 +252,16 @@ html.light-mode .tl-arrival{color:#b26a00}
 html.light-mode .tpl-card{background:rgba(0,0,0,.03)}
 html.light-mode .tpl-card:hover{background:rgba(0,0,0,.06)}
 html.light-mode .tpl-card.selected{background:rgba(53,99,200,.06)}
+/* About LTX: static explanatory copy (IP-D1) */
+.ltx-about{border-top:1px solid var(--border);margin-top:1rem;padding-top:2rem}
+.ltx-about h1{font-size:1.3rem;font-weight:700;letter-spacing:-.01em;line-height:1.3;margin-bottom:.75rem}
+.ltx-about h2{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin:1.25rem 0 .45rem}
+.ltx-about p,.ltx-about li{font-size:.84rem;line-height:1.6;color:var(--text)}
+.ltx-about ul{padding-left:1.1rem}
+.ltx-about a{color:rgba(91,141,239,.95)}
+html.light-mode .ltx-about a{color:#2a55b0}
+.ltx-about-links{display:flex;flex-wrap:wrap;gap:.5rem 1.25rem;margin-top:1.25rem;font-size:.82rem}
+.ltx-about-note{font-size:.74rem!important;color:var(--text-muted)!important;margin-top:.9rem}
 </style>
 </head>
 <body>
@@ -486,6 +508,48 @@ html.light-mode .tpl-card.selected{background:rgba(53,99,200,.06)}
     </button>
   </div>
 </div>
+
+<!-- ═══════════════════════════════════════════════
+     ABOUT LTX (static copy, present in the initial HTML)
+═══════════════════════════════════════════════ -->
+<section id="ltx-about" class="wrap ltx-about" aria-labelledby="ltx-about-title">
+  <h1 id="ltx-about-title">LTX: planning meetings across light-time delay</h1>
+  <p>
+    Light-Time eXchange (LTX) is a proposed community protocol for structured meetings between
+    people separated by long signal delays, such as a crew on Mars and a team on Earth. It is an
+    open draft published with InterPlanet. It has not been adopted or endorsed by any space agency
+    or standards body.
+  </p>
+  <h2>Why a protocol?</h2>
+  <p>
+    A radio signal takes roughly 3 to 22 minutes to travel one way between Earth and Mars, so an
+    ordinary conversation breaks down: a question and its answer can be 40 minutes apart. LTX
+    replaces free conversation with an agreed plan. Every site gets the same schedule of transmit,
+    receive, caucus and merge segments, sized to the real delay, and each participant runs this page
+    independently to follow it without a live connection.
+  </p>
+  <h2>What this page does</h2>
+  <ul>
+    <li>Builds a meeting plan with a host, remote sites and one-way signal delays</li>
+    <li>Creates a plan ID and share links, so every site can check it holds the same plan</li>
+    <li>Exports calendar (.ics) files for each participant</li>
+    <li>Runs a segment timer that shows when each transmission reaches each site</li>
+  </ul>
+  <h2>Who it is for</h2>
+  <p>
+    Researchers studying teamwork under communication delay, educators, developers implementing the
+    protocol, and teams running simulated missions or analog exercises.
+  </p>
+  <nav class="ltx-about-links" aria-label="More about LTX">
+    <a href="https://github.com/karwalski/interplanet/blob/main/docs/LTX-SPECIFICATION.md" rel="noopener">LTX specification</a>
+    <a href="https://github.com/karwalski/interplanet" rel="noopener">Source code on GitHub</a>
+    <a href="index.html">InterPlanet clock</a>
+  </nav>
+  <p class="ltx-about-note">
+    InterPlanet and LTX are independent open-source work, not affiliated with or endorsed by NASA,
+    any other space agency or any standards body.
+  </p>
+</section>
 
 
 <script>

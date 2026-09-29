@@ -20,6 +20,7 @@
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#060614">
 <meta name="description" content="See what time it is on every planet in the solar system, right now. Compare cities, planets, and space missions on one live timeline.">
+<link rel="canonical" href="https://interplanet.live/">
 <!-- Open Graph -->
 <meta property="og:type"        content="website">
 <meta property="og:url"         content="https://interplanet.live/">
@@ -31,6 +32,27 @@
 <meta name="twitter:title"       content="InterPlanet — The Solar System Clock">
 <meta name="twitter:description" content="See what time it is on every planet in the solar system, right now. Compare cities, planets, and space missions on one live timeline.">
 <meta name="twitter:image"       content="https://interplanet.live/assets/screenshot.png">
+<!-- Structured data: only facts that are visible on this page or in the repository -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "InterPlanet",
+  "description": "Free, open-source planetary clock showing local time on Earth, Mars and other worlds, live Earth-Mars signal delay, and meeting planning across planets.",
+  "url": "https://interplanet.live/",
+  "applicationCategory": "UtilitiesApplication",
+  "operatingSystem": "Web",
+  "isAccessibleForFree": true,
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  },
+  "license": "https://www.gnu.org/licenses/gpl-3.0.html",
+  "screenshot": "https://interplanet.live/assets/screenshot.png",
+  "sameAs": ["https://github.com/karwalski/interplanet"]
+}
+</script>
 <link rel="stylesheet" href="assets/sky.css?v=1.17.0">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/fontawesome.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/solid.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
@@ -99,6 +121,68 @@
     <button id="add-col" aria-label="Add a location — search for a city or planet (Ctrl+K / ⌘K)" title="Add location (Ctrl+K / ⌘K)" data-i18n-attr="title:ctrl.add_hint"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>
   </div>
 </div>
+
+<!-- About InterPlanet: static explanatory copy, present in the initial HTML so
+     people and search engines can understand the project without running the clock. -->
+<section id="about" class="about" aria-labelledby="about-title">
+  <div class="about-inner">
+    <h1 id="about-title">InterPlanet: planetary time and Earth-Mars meeting planning</h1>
+    <p class="about-lede">
+      InterPlanet is a free, open-source planetary clock. It shows the local time in Earth cities,
+      on Mars and on other worlds side by side, so you can see who is awake, who is working and
+      when schedules overlap across the solar system.
+    </p>
+
+    <div class="about-grid">
+      <div class="about-block">
+        <h2>Planetary time</h2>
+        <p>
+          Each planet gets a 24-hour clock based on its own solar day. A day on Mars (a sol) lasts
+          about 24 hours 39 minutes, so Mars clocks slowly drift against Earth clocks. InterPlanet
+          follows Mars Coordinated Time and applies a familiar work week to each world.
+        </p>
+      </div>
+      <div class="about-block">
+        <h2>Earth-Mars signal delay</h2>
+        <p>
+          Radio signals travel at the speed of light, so a message between Earth and Mars takes
+          roughly 3 to 22 minutes one way, depending on where the two planets are in their orbits.
+          InterPlanet estimates this delay live and uses it when you plan a meeting.
+        </p>
+      </div>
+      <div class="about-block">
+        <h2>LTX, a proposed protocol</h2>
+        <p>
+          <a href="ltx.html">Light-Time eXchange (LTX)</a> is a proposed community protocol for
+          structured meetings when live conversation is impossible. It is an open draft, not an
+          adopted standard. Read the
+          <a href="https://github.com/karwalski/interplanet/blob/main/docs/LTX-SPECIFICATION.md" rel="noopener">LTX specification</a>
+          and try it in the browser.
+        </p>
+      </div>
+      <div class="about-block">
+        <h2>Who it is for</h2>
+        <ul>
+          <li>Researchers studying communication under delay</li>
+          <li>Educators teaching planetary science and light travel time</li>
+          <li>Developers building time-aware software, with libraries in many languages</li>
+          <li>Teams running simulated missions and analog exercises</li>
+        </ul>
+      </div>
+    </div>
+
+    <nav class="about-links" aria-label="More about InterPlanet">
+      <a href="ltx.html">LTX meeting planner</a>
+      <a href="distance.html">Interplanetary distance</a>
+      <a href="events.html">Planetary events</a>
+      <a href="https://github.com/karwalski/interplanet" rel="noopener">Source code on GitHub (GPL-3.0)</a>
+    </nav>
+    <p class="about-note">
+      InterPlanet is an independent open-source project. It is not affiliated with or endorsed by
+      NASA or any other space agency.
+    </p>
+  </div>
+</section>
 
 <!-- Manage action bar -->
 <div id="manage-bar" role="toolbar" aria-label="City management actions">
