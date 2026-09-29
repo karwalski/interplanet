@@ -7,6 +7,6 @@ Description: Port of planet-time.js to R. Provides orbital mechanics,
     Pure base R, no external package dependencies.
 Author: Interplanet Project
 Maintainer: Interplanet Project <noreply@interplanet.live>
-License: MIT
+License: GPL-3
 Depends: R (>= 4.0)
 Encoding: UTF-8

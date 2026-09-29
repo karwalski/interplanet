@@ -180,20 +180,20 @@ reserved_field_errors <- function(plan) {
   if (!.is_json_object(plan)) return(errors)
   if (.has(plan, "streams") && !(.is_array(plan$streams) && length(plan$streams) == 0L)) {
     errors[[length(errors) + 1L]] <- .perr("reserved_streams", "streams",
-      "streams[] is reserved (§3.5) and MUST be absent or empty")
+      "streams[] is reserved (\u00a73.5) and MUST be absent or empty")
   }
   for (f in c("branches", "branching")) {
     if (.has(plan, f)) errors[[length(errors) + 1L]] <- .perr("reserved_branching", f,
-      paste0(f, " is reserved for branching (§7, not yet implemented) and MUST be absent"))
+      paste0(f, " is reserved for branching (\u00a77, not yet implemented) and MUST be absent"))
   }
   segs <- if (.is_array(plan$segments)) plan$segments else list()
   for (i in seq_along(segs)) {
     s <- segs[[i]]
     if (!.is_json_object(s)) next
     if (.has(s, "stream")) errors[[length(errors) + 1L]] <- .perr("reserved_streams",
-      sprintf("segments[%d].stream", i - 1L), "segment stream is reserved (§3.5) and MUST be absent")
+      sprintf("segments[%d].stream", i - 1L), "segment stream is reserved (\u00a73.5) and MUST be absent")
     if (.has(s, "branch")) errors[[length(errors) + 1L]] <- .perr("reserved_branching",
-      sprintf("segments[%d].branch", i - 1L), "segment branch is reserved for branching (§7) and MUST be absent")
+      sprintf("segments[%d].branch", i - 1L), "segment branch is reserved for branching (\u00a77) and MUST be absent")
   }
   errors
 }
@@ -239,7 +239,7 @@ validate_plan <- function(plan) {
     err("invalid_field", "start", "start must be an ISO 8601 UTC timestamp")
   }
   if (.has(plan, "quantum") && !(.is_int(plan$quantum) && plan$quantum >= 1 && plan$quantum <= 60)) {
-    err("invalid_quantum", "quantum", "quantum must be an integer 1..60 minutes (§3.2)")
+    err("invalid_quantum", "quantum", "quantum must be an integer 1..60 minutes (\u00a73.2)")
   }
   if (.has(plan, "mode") && !(.is_str(plan$mode) && plan$mode %in% PLAN_MODES)) {
     err("invalid_mode", "mode", paste0("mode must be one of ", paste(PLAN_MODES, collapse = ", ")))
@@ -269,7 +269,7 @@ validate_plan <- function(plan) {
       h <- nodes[[1L]]
       h_ok <- .is_json_object(h) && identical(h$role, "HOST") && .is_num(h$delay) && h$delay == 0
       if (hosts != 1L || !h_ok) {
-        err("invalid_host", "nodes[0]", "exactly one HOST, first in nodes[], with delay 0 (§3.1)")
+        err("invalid_host", "nodes[0]", "exactly one HOST, first in nodes[], with delay 0 (\u00a73.1)")
       }
     }
   }
@@ -296,7 +296,7 @@ validate_plan <- function(plan) {
 
   if (is_v(2)) {
     for (f in V3_ONLY_FIELDS) {
-      if (.has(plan, f)) err("v3_field_in_v2", f, paste0(f, " is a v3 field and MUST NOT appear in a v2 plan (§4.3)"))
+      if (.has(plan, f)) err("v3_field_in_v2", f, paste0(f, " is a v3 field and MUST NOT appear in a v2 plan (\u00a74.3)"))
     }
   } else if (is_v(3)) {
     if (.has(plan, "delays")) {
@@ -311,7 +311,7 @@ validate_plan <- function(plan) {
             (length(ids) == 0L || (parts[1L] %in% ids && parts[2L] %in% ids)) &&
             .is_num(d[[k]]) && d[[k]] >= 0
           if (!ok) err("invalid_delays", paste0("delays.", k),
-            'key must be two known node ids joined by "|" in sorted order; value >= 0 (§3.7.2)')
+            'key must be two known node ids joined by "|" in sorted order; value >= 0 (\u00a73.7.2)')
         }
       }
     }
