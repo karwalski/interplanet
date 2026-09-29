@@ -92,6 +92,9 @@ namespace InterplanetTime
     {
         // ── Constants ────────────────────────────────────────────────────────────
 
+        /// <summary>Library version; keep in step with &lt;Version&gt; in InterplanetTime.csproj.</summary>
+        public const string VERSION = "1.0.0";
+
         /// <summary>J2000.0 epoch as Unix timestamp (ms)</summary>
         public const long   J2000_MS       = 946_728_000_000L;  // Date.UTC(2000,0,1,12,0,0)
 

@@ -41,13 +41,9 @@ static class Program
             ? args[0]
             : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../../c/planet-time/fixtures/reference.json"));
 
-        // Resolve relative paths against the assembly directory
-        if (!Path.IsPathRooted(fixturePath))
-        {
-            string? src = Path.GetDirectoryName(
-                System.Reflection.Assembly.GetExecutingAssembly().Location);
-            fixturePath = Path.GetFullPath(Path.Combine(src ?? ".", fixturePath));
-        }
+        // Resolve a relative path argument against the working directory,
+        // as the F# runner does (`make fixtures` passes ../../c/...).
+        fixturePath = Path.GetFullPath(fixturePath);
 
         if (!File.Exists(fixturePath))
         {
