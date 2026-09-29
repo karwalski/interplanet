@@ -44,14 +44,14 @@ by_name = Dict(gv["name"] => gv for gv in vectors)
 end
 
 # spec/golden/plan-id-prefixes.json (issue #37): Unicode upper-casing and
-# UTF-16 slicing of HOSTSTR / NODESTR. Julia Strings are UTF-8 here, so the
-# expected id is planIdUtf8 (a surrogate pair split by the cut is U+FFFD).
+# UTF-16 slicing of HOSTSTR / NODESTR. A Julia String holds a lone surrogate
+# as WTF-8, so the expected id is the planIdWtf8Hex bytes.
 @testset "golden planId prefix vectors" begin
     pv = parse_json_ordered(read(joinpath(@__DIR__, "..", "..", "..", "spec", "golden",
                                           "plan-id-prefixes.json"), String))["vectors"]
     @test length(pv) >= 18
     for gv in pv
-        want = gv["planIdUtf8"]
+        want = String(hex2bytes(gv["planIdWtf8Hex"]))
         plan = gv["plan"]
         @test make_plan_id(plan) == want
         @test plan_id_from_json(json_stringify(plan)) == want
@@ -61,6 +61,7 @@ end
                         [LtxSegmentSpec(sg["type"], sg["q"]) for sg in plan["segments"]])
         tid = make_plan_id(typed)
         @test codeunits(tid)[1:end-12] == codeunits(want)[1:end-12]
+        @test occursin("\\ud8", json_stringify(make_plan_id(plan))) == gv["loneSurrogate"]
     end
     @test InterplanetLtx.js_uppercase("stra\u00dfe \ufb01 \u0149 \u0390 \u1fb3 \u0587") ==
           "STRASSE FI \u02bcN \u0399\u0308\u0301 \u0391\u0399 \u0535\u0552"

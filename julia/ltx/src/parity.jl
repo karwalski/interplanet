@@ -287,8 +287,8 @@ end
 
 """
 s.slice(0, n) in UTF-16 code units. When the cut splits a surrogate pair, JS
-keeps the lone high surrogate; a UTF-8 String cannot hold it, so it becomes
-U+FFFD, the UTF-8 form of the JS id (planIdUtf8 in
+keeps the lone high surrogate, and so does this: a Julia String holds it as
+WTF-8, as the JSON layer does (planIdWtf8Hex in
 spec/golden/plan-id-prefixes.json).
 """
 function _utf16_first(s::AbstractString, n::Integer)
@@ -297,7 +297,7 @@ function _utf16_first(s::AbstractString, n::Integer)
     for c in s
         w = isvalid(c) && UInt32(c) >= 0x10000 ? 2 : 1
         if units + w > n
-            units < n && print(io, '\ufffd')
+            units < n && print(io, Char(0xD800 + ((UInt32(c) - 0x10000) >> 10)))
             break
         end
         units += w
