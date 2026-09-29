@@ -42,12 +42,12 @@ lib/
   constants.ml        — VERSION, DEFAULT_QUANTUM, DEFAULT_API_BASE, DEFAULT_SEGMENTS
   models.ml           — ltx_node, ltx_plan, ltx_timed_segment, ltx_node_url, delay_matrix_entry
   interplanet_ltx.ml  — full SDK implementation
-  validate.ml         — validate_plan, reserved streams/branching checks
-  v11.ml              — v1.1 subset over JSON plans (JObj keeps key order)
+  validate.ml         -- validate_plan, reserved streams/branching checks
+  v11.ml              -- v1.1 subset over JSON plans (JObj keeps key order)
 test/
   unit_test.ml        — 88+ assertions across 12 sections
-  v11_test.ml         — v1.1 vectors (test/v11.json, a copy of go/ltx/testdata/v11.json)
-  parity_test.ml      — parity with javascript/ltx/ltx-sdk.js (issue #27)
+  v11_test.ml         -- v1.1 vectors (test/v11.json, a copy of go/ltx/testdata/v11.json)
+  parity_test.ml      -- parity with javascript/ltx/ltx-sdk.js (issue #27)
 ```
 
 ## Public API

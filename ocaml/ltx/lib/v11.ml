@@ -267,7 +267,7 @@ let make_plan_id (plan : json_val) : string =
     let digest = hex_of_string (sha256 (canonical_json plan)) in
     Printf.sprintf "LTX-%s-%s-%s-v3-%s" date host_str node_str (String.sub digest 0 8)
   else
-    (* FROZEN v2 path — 32-bit polynomial hash over the UTF-16 code units of
+    (* FROZEN v2 path: 32-bit polynomial hash over the UTF-16 code units of
        the insertion-order JSON (JSON.stringify). *)
     Printf.sprintf "LTX-%s-%s-%s-v2-%08lx" date host_str node_str
       (imul31_utf16 (json_stringify plan))

@@ -1,4 +1,4 @@
-# test/test_parity.R — LTX parity with the JS reference SDK (issue #27)
+# test/test_parity.R -- LTX parity with the JS reference SDK (issue #27)
 # Mirrors javascript/ltx/tests/run.js: golden planId vectors, validatePlan +
 # reserved fields, buildDelayMatrix via pairDelay.
 # Run from r/ltx: Rscript test/test_parity.R   (needs jsonlite for the vectors)

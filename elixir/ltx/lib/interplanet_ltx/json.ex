@@ -1,4 +1,4 @@
-# json.ex — dependency-free JSON for the LTX port.
+# json.ex -- dependency-free JSON for the LTX port.
 #
 # Elixir maps do not keep insertion order, but the FROZEN v2 planId hash is
 # computed over JSON.stringify of the plan in insertion order

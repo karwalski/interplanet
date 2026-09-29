@@ -1,4 +1,4 @@
-# parity.R — LTX parity with the JS reference SDK (issue #27)
+# parity.R -- LTX parity with the JS reference SDK (issue #27)
 #
 # Mirrors javascript/ltx/ltx-sdk.js:
 #   * JSON.stringify-compatible serialisation of a plan in its own key order,

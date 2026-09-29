@@ -1,4 +1,4 @@
-# test/parity_test.exs — LTX parity with the JS reference SDK (issue #27).
+# test/parity_test.exs -- LTX parity with the JS reference SDK (issue #27).
 # Mirrors the javascript/ltx/tests/run.js sections: golden planId vectors,
 # validatePlan + reserved fields, sequence reorder window, reduceDecisions.
 # Run with: elixir -r test/test_helper.exs test/parity_test.exs

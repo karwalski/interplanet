@@ -1,4 +1,4 @@
-# parity.jl — LTX parity with the JS reference SDK (issue #27)
+# parity.jl -- LTX parity with the JS reference SDK (issue #27)
 #
 # Mirrors javascript/ltx/ltx-sdk.js:
 #   * insertion-ordered JSON (JsonObject) and JSON.stringify-compatible output

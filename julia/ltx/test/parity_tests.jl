@@ -1,4 +1,4 @@
-# parity_tests.jl — LTX parity with the JS reference SDK (issue #27).
+# parity_tests.jl -- LTX parity with the JS reference SDK (issue #27).
 # Mirrors javascript/ltx/tests/run.js: golden planId vectors and validatePlan
 # with the reserved streams / branching fields. Included from runtests.jl.
 

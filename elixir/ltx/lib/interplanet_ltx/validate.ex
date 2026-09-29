@@ -1,4 +1,4 @@
-# validate.ex — plan validation (LTX-SPECIFICATION.md §3.5, §4, §7).
+# validate.ex -- plan validation (LTX-SPECIFICATION.md §3.5, §4, §7).
 # Mirrors validatePlan / _reservedFieldErrors / _assertNoReservedFields in
 # javascript/ltx/ltx-sdk.js and typescript/ltx/src/validate.ts.
 
