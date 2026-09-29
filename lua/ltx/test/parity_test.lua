@@ -49,6 +49,36 @@ ok(by_name['v2-createPlan-default'].planId ~= by_name['v2-key-order-sensitive'].
 ok(by_name['v3-upgrade-delays'].planId == by_name['v3-key-order-insensitive'].planId, 'golden v3 order-insensitive')
 ok(by_name['v3-amendment'].plan.prevPlanHash == by_name['v3-upgrade-delays'].planHash, 'golden v3 amendment chain hash')
 ok(LTX.create_plan({}).quantum == 5, 'create_plan default quantum is 5')
+
+-- ── Conformance: planId prefix vectors (spec/golden/plan-id-prefixes.json) ─
+-- Unicode upper-casing and UTF-16 slicing of HOSTSTR / NODESTR (issue #37).
+-- Lua strings are UTF-8 here, so the expected id is planIdUtf8 (a surrogate
+-- pair split by the cut becomes U+FFFD).
+do
+  local pf = assert(io.open('../../spec/golden/plan-id-prefixes.json', 'rb'))
+  local prefix = JSON.decode_ordered(pf:read('a'))
+  pf:close()
+  ok(#prefix.vectors >= 18, 'prefix vectors present')
+  local function cut(id) return id:sub(1, #id - 12) end
+  for _, gv in ipairs(prefix.vectors) do
+    local want = gv.planIdUtf8
+    local got = LTX.make_plan_id(gv.plan)
+    ok(got == want, 'prefix planId ' .. gv.name .. ' got ' .. got)
+    ok(LTX.plan_id_from_json(JSON.stringify(gv.plan)) == want, 'prefix plan_id_from_json ' .. gv.name)
+    -- Plain (typed) create_plan table: schema key order, same prefix.
+    local nodes, segs = {}, {}
+    for i, n in ipairs(gv.plan.nodes) do
+      nodes[i] = { id = n.id, name = n.name, role = n.role, delay = n.delay, location = n.location }
+    end
+    for i, sg in ipairs(gv.plan.segments) do segs[i] = { type = sg.type, q = sg.q } end
+    local typed = LTX.create_plan({ title = gv.plan.title, start = gv.plan.start, quantum = gv.plan.quantum,
+                                    mode = gv.plan.mode, nodes = nodes, segments = segs })
+    local tid = LTX.make_plan_id(typed)
+    ok(cut(tid) == cut(want), 'prefix create_plan ' .. gv.name .. ' got ' .. tid)
+  end
+  ok(LTX.js_upper('stra\u{DF}e \u{FB01} \u{149} \u{390} \u{1FB3} \u{587} \u{23F}')
+     == 'STRASSE FI \u{2BC}N \u{399}\u{308}\u{301} \u{391}\u{399} \u{535}\u{552} \u{2C7E}', 'js_upper full mapping')
+end
 -- Plain create_plan tables hash in schema order (nodes before segments), so the
 -- default plan matches the v2-key-order-sensitive vector.
 local sp = LTX.make_plan_id(LTX.create_plan({ title = 'Golden Default', start = '2026-03-15T14:00:00.000Z', delay = 840 }))
