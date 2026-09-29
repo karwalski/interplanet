@@ -14,6 +14,7 @@ local security = require("src.security")
 local ed25519 = require("src.ed25519")
 local ltx = require("src.interplanet_ltx")
 local constants = require("src.constants")
+local validate = require("src.validate")
 
 local M = {}
 
@@ -200,10 +201,29 @@ local function quorum_count(plan, quorum)
   return total  -- "all" (default)
 end
 
+--- Explicitly upgrade a plan to v3 (LTX-SPECIFICATION.md §4.4). Never
+-- automatic: the result is a NEW plan with a new (v3) planId. `extras` (e.g.
+-- { delays = {...}, planVersion = n }) are merged in; v becomes 3 and
+-- planVersion defaults to 1. The input is not mutated.
+-- Raises { code = "reserved_streams" | "reserved_branching", errors, message }
+-- if the result would carry reserved fields (§3.5, §7).
+function M.upgrade_plan_to_v3(cfg, extras)
+  extras = extras or {}
+  local plan = shallow_copy(ltx.upgrade_config(cfg))
+  for k, v in pairs(extras) do plan[k] = v end
+  plan.v = 3
+  plan.planVersion = extras.planVersion ~= nil and extras.planVersion or 1
+  validate.assert_no_reserved_fields(plan, "upgradePlanToV3")
+  return plan
+end
+
 --- Create a session context in DRAFT state. `plan_id` is supplied by the
 -- caller (make_plan_id) so this module stays pure.
 -- opts.quorum: "all" (default) | "majority" | number.
+-- Raises { code = "reserved_streams" | "reserved_branching", errors, message }
+-- if the plan uses reserved fields (§3.5, §7).
 function M.create_session(plan, plan_id, opts)
+  validate.assert_no_reserved_fields(plan, "createSession")
   opts = opts or {}
   return {
     state = "DRAFT",
@@ -773,6 +793,65 @@ function M.reduce_actions(entries)
           if content.owner ~= nil then a.owner = tostring(content.owner) end
           if content.dueTimeUTC ~= nil then a.dueTimeUTC = tostring(content.dueTimeUTC) end
           a.version = version
+        end
+      end
+    end
+  end
+  return { by_id = by_id, superseded = superseded }
+end
+
+local DECISION_STATUSES = { RECORDED = true, RESCINDED = true }
+
+--- Reduce decision register state from log entries (§10.3). `decision`
+-- entries record a decision (did = entryId, version 1); `decision_update`
+-- entries reference content.did and revise text/rationale or rescind it
+-- (status RECORDED -> RESCINDED). Conflicts follow §8.2 as for questions and
+-- actions: higher version wins, then the lowest editor nodeId; losers and
+-- orphan updates are returned in `superseded`.
+-- @return table  { by_id = { [did] = state }, superseded = { entryId, ... } }
+function M.reduce_decisions(entries)
+  local by_id = {}
+  local winners = {}
+  local superseded = {}
+
+  for _, e in ipairs(M.order_entries(entries)) do
+    local content = e.content or {}
+    if e.type == "decision" then
+      local did = e.entryId
+      if by_id[did] then
+        superseded[#superseded + 1] = e.entryId
+      else
+        winners[did] = { version = 1, editor = e.nodeId, entry_id = e.entryId }
+        by_id[did] = {
+          did = did,
+          text = tostring(content.text or ""),
+          recordedBy = e.nodeId,
+          rationale = content.rationale ~= nil and tostring(content.rationale) or nil,
+          originWindow = content.originWindow ~= nil and tostring(content.originWindow) or nil,
+          status = "RECORDED",
+          version = 1,
+        }
+      end
+    elseif e.type == "decision_update" then
+      local did = tostring(content.did or "")
+      local d = by_id[did]
+      if not d then
+        superseded[#superseded + 1] = e.entryId
+      else
+        local version = content.version or (d.version + 1)
+        local current = winners[did]
+        if current and not conflict_wins(version, e.nodeId, current.version, current.editor) then
+          superseded[#superseded + 1] = e.entryId
+        else
+          if current and current.entry_id ~= d.did then
+            superseded[#superseded + 1] = current.entry_id
+          end
+          winners[did] = { version = version, editor = e.nodeId, entry_id = e.entryId }
+          if DECISION_STATUSES[content.status] then d.status = content.status end
+          if content.text ~= nil then d.text = tostring(content.text) end
+          if content.rationale ~= nil then d.rationale = tostring(content.rationale) end
+          d.editor = e.nodeId
+          d.version = version
         end
       end
     end

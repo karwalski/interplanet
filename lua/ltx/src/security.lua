@@ -207,6 +207,15 @@ end
 
 canonical_json = function(v)
   if type(v) ~= 'table' then return json_val(v) end
+  -- Tables decoded by src/json.lua carry markers: JSON null, and arrays
+  -- (so an empty [] stays an array rather than becoming {}).
+  local mt = getmetatable(v)
+  if mt and mt.__jsonnull then return 'null' end
+  if mt and mt.__jsonarray then
+    local parts = {}
+    for i=1,#v do table.insert(parts, json_val(v[i])) end
+    return '[' .. table.concat(parts,',') .. ']'
+  end
   -- detect array: consecutive integer keys from 1
   local is_arr = true
   local max_n = 0
