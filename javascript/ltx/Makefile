@@ -1,7 +1,7 @@
 # Makefile — interplanet-ltx JavaScript SDK
 # Usage: make test | make lint | make clean
 
-.PHONY: test lint clean
+.PHONY: test test-topics lint clean
 
 # Run SDK smoke tests via Node.js
 test:
@@ -23,11 +23,18 @@ test:
 	  console.assert(segs.length > 0, 'segments'); \
 	  console.log('All LTX SDK smoke tests passed'); \
 	"
+	@$(MAKE) --no-print-directory test-topics
 	@echo "All tests passed ✓"
+
+# EXPERIMENTAL topics extension (docs/LTX-TOPICS-RFC.md, not for production)
+test-topics:
+	@echo "Running EXPERIMENTAL LTX topics tests..."
+	node tests/topics.js
 
 # Static lint via Node.js parse check
 lint:
 	node --check ltx-sdk.js
+	node --check ltx-topics.js
 	@echo "Lint passed ✓"
 
 # Remove generated files
