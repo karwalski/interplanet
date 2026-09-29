@@ -6,6 +6,7 @@
 // the same backend Security.fs uses for the Epic-29 primitives. Load with:
 //   #r "nuget: NSec.Cryptography, 24.4.0"
 //   #load "Security.fs"
+//   #load "Validate.fs"
 //   #load "V11.fs"
 
 module InterplanetLtx.V11
@@ -15,6 +16,7 @@ open System.Text
 open System.Security.Cryptography
 open System.Collections.Generic
 open InterplanetLtx.Security
+open InterplanetLtx.Validate
 
 // ---- constants ----
 
@@ -95,6 +97,10 @@ let planToDict (p: PlanV11) : IDictionary<string, obj> =
 let planHash (p: PlanV11) : string =
     let bytes = sha256 (Encoding.UTF8.GetBytes(canonicalJson (planToDict p)))
     (bytes |> Array.map (sprintf "%02x") |> String.concat "")
+
+/// Validate a typed v1.1 plan through its wire projection (validatePlan).
+let validatePlanV11 (p: PlanV11) : PlanValidation =
+    validatePlanJson (canonicalJson (box (planToDict p)))
 
 // ---- FROZEN v2 JSON serialisation (insertion-order JSON.stringify) ----
 
@@ -411,6 +417,7 @@ let private tryInt (d: IDictionary<string, obj>) (key: string) (fallback: int) :
     match d.TryGetValue key with
     | true, (:? int as i) -> i
     | true, (:? int64 as l) -> int l
+    | true, (:? float as f) -> int f
     | true, (:? string as s) -> (match Int32.TryParse s with | true, i -> i | _ -> fallback)
     | _ -> fallback
 
@@ -535,6 +542,159 @@ let entriesRoot (entries: RegisterEntryV11 list) : string =
         |> List.map (fun e -> leafHash (Encoding.UTF8.GetBytes(canonicalJson (entryDict e true))))
         |> Array.ofList
     rootOf leaves |> Array.map (sprintf "%02x") |> String.concat ""
+
+type DecisionStateV11 = {
+    did:          string
+    text:         string
+    recordedBy:   string
+    rationale:    string option
+    originWindow: string option
+    status:       string   // RECORDED | RESCINDED
+    editor:       string option
+    version:      int
+}
+
+let private DECISION_STATUSES = set [ "RECORDED"; "RESCINDED" ]
+
+/// Reduce decision register state from log entries (§10.3). Pure.
+/// `decision` entries record a decision (did = entryId, version 1);
+/// `decision_update` entries reference content.did and revise text/rationale
+/// or rescind it. Conflicts follow §8.2 exactly as for questions and
+/// actions: higher object version wins, then the lowest editor nodeId;
+/// losers are returned in the superseded list.
+let reduceDecisions (entries: RegisterEntryV11 list) : Map<string, DecisionStateV11> * string list =
+    let byId = Dictionary<string, DecisionStateV11>()
+    let winners = Dictionary<string, int * string * string>()
+    let superseded = List<string>()
+    for e in orderEntries entries do
+        if e.entryType = "decision" then
+            let did = e.entryId
+            if byId.ContainsKey did then superseded.Add e.entryId
+            else
+                winners.[did] <- (1, e.nodeId, e.entryId)
+                byId.[did] <-
+                    { did = did
+                      text = defaultArg (tryStr e.content "text") ""
+                      recordedBy = e.nodeId
+                      rationale = tryStr e.content "rationale"
+                      originWindow = tryStr e.content "originWindow"
+                      status = "RECORDED"; editor = None; version = 1 }
+        elif e.entryType = "decision_update" then
+            let did = defaultArg (tryStr e.content "did") ""
+            match byId.TryGetValue did with
+            | false, _ -> superseded.Add e.entryId
+            | true, d ->
+                let version = tryInt e.content "version" (d.version + 1)
+                let proceed =
+                    match winners.TryGetValue did with
+                    | true, (curV, curEd, curId) ->
+                        if not (wins version e.nodeId curV curEd) then
+                            superseded.Add e.entryId; false
+                        else
+                            (if curId <> d.did then superseded.Add curId); true
+                    | _ -> true
+                if proceed then
+                    winners.[did] <- (version, e.nodeId, e.entryId)
+                    let status =
+                        match tryStr e.content "status" with
+                        | Some s when DECISION_STATUSES.Contains s -> s
+                        | _ -> d.status
+                    byId.[did] <-
+                        { d with
+                            status = status
+                            text = defaultArg (tryStr e.content "text") d.text
+                            rationale = (match tryStr e.content "rationale" with Some r -> Some r | None -> d.rationale)
+                            editor = Some e.nodeId
+                            version = version }
+    (byId |> Seq.map (fun kv -> kv.Key, kv.Value) |> Map.ofSeq), List.ofSeq superseded
+
+// ---- register entry creation + merge (registers.ts / merge.ts, §8.4) ----
+
+let private ENTRY_PREFIX =
+    dict [ "question", "QST"; "question_response", "QST"
+           "action", "ACT"; "action_update", "ACT"
+           "amendment", "AMD"; "state_transition", "STA"
+           "merge_snapshot", "MRG"; "decision", "DEC"; "decision_update", "DEC" ]
+
+/// Create a signed register entry (LTX-SECURITY.md §9.5): Ed25519 over the
+/// canonical JSON of the entry without sig. entryId defaults to
+/// PREFIX-nodeId-seq (decision and decision_update use DEC).
+let createRegisterEntry (entryType: string) (content: IDictionary<string, obj>) (sessionId: string)
+                        (nodeId: string) (seq: int) (timestamp: string) (privateKeyB64: string)
+                        (entryId: string option) : RegisterEntryV11 =
+    let prefix = match ENTRY_PREFIX.TryGetValue entryType with | true, p -> p | _ -> "ENT"
+    let unsigned =
+        { entryId = defaultArg entryId (sprintf "%s-%s-%d" prefix nodeId seq)
+          sessionId = sessionId; nodeId = nodeId; seq = seq; entryType = entryType
+          content = content; timestamp = timestamp; entrySig = "" }
+    let data = Encoding.UTF8.GetBytes(canonicalJson (entryDict unsigned false))
+    { unsigned with entrySig = b64uEncode (signBytes data (b64uDecode privateKeyB64)) }
+
+/// Deterministic merge of two entry logs (§8.2): verify, union
+/// de-duplicated by (nodeId, seq), order totally. Symmetric. Returns the
+/// verified entries in order and the rejected (entry, reason) pairs.
+let mergeLogs (entriesA: RegisterEntryV11 list) (entriesB: RegisterEntryV11 list)
+              (keyCache: IDictionary<string, NikV11>)
+              : RegisterEntryV11 list * (RegisterEntryV11 * string) list =
+    let verified = List<RegisterEntryV11>()
+    let rejected = List<RegisterEntryV11 * string>()
+    for e in entriesA @ entriesB do
+        match verifyRegisterEntry e keyCache with
+        | true, _ -> verified.Add e
+        | false, reason -> rejected.Add((e, reason))
+    orderEntries (List.ofSeq verified), List.ofSeq rejected
+
+let private stateDict (fields: (string * obj option) list) : obj =
+    let d = Dictionary<string, obj>()
+    for (k, v) in fields do
+        match v with Some x -> d.[k] <- x | None -> ()
+    box (d :> IDictionary<string, obj>)
+
+let private optBox (o: string option) = o |> Option.map box
+
+let private questionDict (q: QuestionStateV11) =
+    stateDict [ "qid", Some (box q.qid); "text", Some (box q.text); "submitter", Some (box q.submitter)
+                "urgency", optBox q.urgency; "intendedWindow", optBox q.intendedWindow
+                "status", Some (box q.status); "response", optBox q.response
+                "responder", optBox q.responder; "version", Some (box q.version) ]
+
+let private actionDict (a: ActionStateV11) =
+    stateDict [ "aid", Some (box a.aid); "description", Some (box a.description); "owner", optBox a.owner
+                "dueTimeUTC", optBox a.dueTimeUTC; "originWindow", optBox a.originWindow
+                "status", Some (box a.status); "version", Some (box a.version) ]
+
+let private decisionDict (d: DecisionStateV11) =
+    stateDict [ "did", Some (box d.did); "text", Some (box d.text); "recordedBy", Some (box d.recordedBy)
+                "rationale", optBox d.rationale; "originWindow", optBox d.originWindow
+                "status", Some (box d.status); "editor", optBox d.editor; "version", Some (box d.version) ]
+
+let private registerDict (m: Map<string, 'T>) (f: 'T -> obj) : obj =
+    let d = Dictionary<string, obj>()
+    for KeyValue(k, v) in m do d.[k] <- f v
+    box (d :> IDictionary<string, obj>)
+
+/// MERGE segment (§8.4): merge plus a HOST-signed merge_snapshot entry
+/// carrying the question, action and decision registers and every
+/// superseded entryId. Returns (merged entries, rejected, snapshot).
+let runMergeSegment (localEntries: RegisterEntryV11 list) (remoteEntries: RegisterEntryV11 list)
+                    (keyCache: IDictionary<string, NikV11>) (sessionId: string) (nodeId: string)
+                    (seq: int) (timestamp: string) (privateKeyB64: string)
+                    : RegisterEntryV11 list * (RegisterEntryV11 * string) list * RegisterEntryV11 =
+    let merged, rejected = mergeLogs localEntries remoteEntries keyCache
+    let questions, qSup = reduceQuestions merged
+    let actions, aSup = reduceActions merged
+    let decisions, dSup = reduceDecisions merged
+    let content = Dictionary<string, obj>()
+    content.["mergedRoot"] <- box (entriesRoot merged)
+    content.["entryCount"] <- box merged.Length
+    content.["rejectedCount"] <- box rejected.Length
+    content.["questionRegister"] <- registerDict questions questionDict
+    content.["actionRegister"] <- registerDict actions actionDict
+    content.["decisionRegister"] <- registerDict decisions decisionDict
+    content.["superseded"] <- box (List<obj>(qSup @ aSup @ dSup |> List.map box))
+    let snapshot =
+        createRegisterEntry "merge_snapshot" (content :> IDictionary<string, obj>) sessionId nodeId seq timestamp privateKeyB64 None
+    merged, rejected, snapshot
 
 // ---- 5. CBOR decode (RFC 8949 deterministic subset, cbor.ts) ----
 
@@ -756,8 +916,12 @@ let private quorumCount (p: PlanV11) (quorum: QuorumSpec) : int =
     | Count n -> min (max n 1) total
     | All -> total
 
-/// Create a session context in DRAFT state (§5).
+/// Create a session context in DRAFT state (§5). Raises ReservedFieldError
+/// if the plan carries reserved streams or branching fields (§3.5, §7);
+/// PlanV11 has no such fields today, so this guards its dictionary
+/// projection against model growth.
 let createSession (plan: PlanV11) (planId: string) (quorum: QuorumSpec) : SessionCtxV11 =
+    assertNoReservedFieldsDict (planToDict plan) "createSession"
     { state = "DRAFT"; plan = plan; planId = planId; sessionRootPlanId = planId
       planVersion = defaultArg plan.planVersion 1
       lock = None; lockStartedAtMs = None; lockTimeoutMs = lockTimeoutMs plan

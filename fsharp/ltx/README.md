@@ -39,7 +39,7 @@ let plan =
             {| id = "N0"; name = "Earth HQ";    role = "HOST";        delay = 0; location = "earth" |}
             {| id = "N1"; name = "Mars Hab-01"; role = "PARTICIPANT"; delay = 0; location = "mars"  |}
         ]
-        quantum        = 3
+        quantum        = 5
         mode           = "LTX"
         hostName       = ""
         hostLocation   = ""
@@ -56,7 +56,7 @@ printfn "Total: %d min" (totalMin plan)
 // Get plan ID
 let planId = makePlanId plan
 printfn "Plan ID: %s" planId
-// => LTX-20240115-EARTHHQ-MARS-v2-cc8a7fc0
+// => LTX-20240115-EARTHHQ-MARS-v2-9d02c042
 
 // Encode/decode URL hash
 let hash    = encodeHash plan
@@ -91,9 +91,25 @@ printfn "%s" (formatUTC 1705327200000L)  // => 2024-01-15T14:00:00Z
 | `formatHMS` | `int -> string` | Seconds to HH:MM:SS or MM:SS |
 | `formatUTC` | `int64 -> string` | Epoch ms to ISO 8601 UTC |
 
+### LTX v1.1 modules (`src/Security.fs`, `src/Validate.fs`, `src/V11.fs`)
+
+Loaded from scripts in that order after `#r "nuget: NSec.Cryptography, 24.4.0"`
+(see `tests/ParityTest.fsx`); `make test` runs all four test scripts.
+
+- `makePlanIdFromJson` / `planHashFromJson`: planId and planHash over plan JSON
+  with key order preserved, matching `spec/golden/plan-ids.json`. The typed
+  `makePlanId` serialises v2 plans in the fixed order
+  `v, title, start, quantum, mode, nodes, segments`.
+- `validatePlan` (JsonElement), `validatePlanJson`, `validatePlanV11`: errors
+  with `code`, `path`, `message`, including `reserved_streams` and
+  `reserved_branching`. `createSession` raises `ReservedFieldError` for them.
+- `reduceDecisions` (`decision`, `decision_update`), `createRegisterEntry`,
+  `mergeLogs`, `runMergeSegment` (the merge_snapshot carries
+  `questionRegister`, `actionRegister` and `decisionRegister`).
+
 ## Key constants
 
-- `VERSION = "1.0.0"`
+- `VERSION = "1.1.0"`
 - `DEFAULT_QUANTUM = 5` (minutes per quantum)
 - `DEFAULT_API_BASE = "https://api.interplanet.app/ltx"`
 - `SEG_TYPES = [| "PLAN_CONFIRM"; "TX"; "RX"; "CAUCUS"; "OPEN"; "BUFFER" |]`
