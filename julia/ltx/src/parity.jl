@@ -102,9 +102,12 @@ function _oj_string(b, pos)
                 pos += 6
                 if 0xD800 <= cp <= 0xDBFF && pos + 5 <= length(b) && b[pos] == UInt8('\\') && b[pos+1] == UInt8('u')
                     lo = parse(Int, String(b[pos+2:pos+5]); base = 16)
-                    cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00)
-                    pos += 6
+                    if 0xDC00 <= lo <= 0xDFFF
+                        cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00)
+                        pos += 6
+                    end
                 end
+                # a lone surrogate is kept (as WTF-8), as JSON.parse keeps it
                 append!(out, codeunits(string(Char(cp))))
             else
                 m = Dict('n' => '\n', 't' => '\t', 'r' => '\r', 'b' => '\b', 'f' => '\f',
@@ -162,20 +165,39 @@ end
 
 # ── JSON.stringify / canonical JSON ────────────────────────────────────────────
 
+"""
+JSON.stringify string quoting: \\b \\t \\n \\f \\r, other C0 controls as \\u00xx,
+everything else (DEL, U+2028, U+2029) raw. A Julia String can hold a lone
+UTF-16 surrogate (as WTF-8); JSON.stringify writes one as a lowercase \\udxxx
+escape, and a high+low pair (CESU-8) as its code point.
+"""
 function _js_quote(s::AbstractString)
     io = IOBuffer()
     print(io, '"')
-    for c in s
-        if c == '"'; print(io, "\\\"")
+    cs = collect(s)
+    i = 1
+    while i <= length(cs)
+        c = cs[i]
+        u = UInt32(c)
+        if 0xD800 <= u <= 0xDFFF
+            lo = i < length(cs) ? UInt32(cs[i + 1]) : UInt32(0)
+            if u <= 0xDBFF && 0xDC00 <= lo <= 0xDFFF
+                print(io, Char(0x10000 + ((u - 0xD800) << 10) + (lo - 0xDC00)))
+                i += 2
+                continue
+            end
+            print(io, "\\u", string(u; base = 16, pad = 4))
+        elseif c == '"'; print(io, "\\\"")
         elseif c == '\\'; print(io, "\\\\")
         elseif c == '\b'; print(io, "\\b")
         elseif c == '\f'; print(io, "\\f")
         elseif c == '\n'; print(io, "\\n")
         elseif c == '\r'; print(io, "\\r")
         elseif c == '\t'; print(io, "\\t")
-        elseif UInt32(c) < 0x20; print(io, "\\u", lpad(string(UInt32(c); base = 16), 4, '0'))
+        elseif u < 0x20; print(io, "\\u", lpad(string(u; base = 16), 4, '0'))
         else print(io, c)
         end
+        i += 1
     end
     print(io, '"')
     return String(take!(io))
@@ -241,7 +263,43 @@ _jget(o, k) = o isa JsonObject ? get(o, k, nothing) : o isa AbstractDict ? get(o
 _jhas(o, k) = (o isa JsonObject || o isa AbstractDict) && haskey(o, k)
 _is_obj(x) = x isa JsonObject || x isa AbstractDict
 
-_short(name, n) = first(uppercase(replace(String(name), r"\s+" => "")), n)
+"""ECMAScript \\s (WhiteSpace and LineTerminator). Julia's r"\\s" also matches
+U+0085 and misses U+FEFF."""
+_is_js_space(c::Char) = (u = UInt32(c);
+    u == 0x20 || 0x09 <= u <= 0x0D || u == 0xA0 || u == 0x1680 || 0x2000 <= u <= 0x200A ||
+    u == 0x2028 || u == 0x2029 || u == 0x202F || u == 0x205F || u == 0x3000 || u == 0xFEFF)
+
+"""s.replace(/\\s+/g, rep) with JavaScript's \\s."""
+function _js_space_replace(s::AbstractString, rep::AbstractString = "")
+    io = IOBuffer()
+    in_space = false
+    for c in s
+        if _is_js_space(c)
+            in_space || print(io, rep)
+            in_space = true
+        else
+            print(io, c)
+            in_space = false
+        end
+    end
+    return String(take!(io))
+end
+
+"""s.slice(0, n) in UTF-16 code units (a pair that does not fit is dropped)."""
+function _utf16_first(s::AbstractString, n::Integer)
+    io = IOBuffer()
+    units = 0
+    for c in s
+        units += UInt32(c) >= 0x10000 ? 2 : 1
+        units > n && break
+        print(io, c)
+    end
+    return String(take!(io))
+end
+
+"""name.replace(/\\s+/g, '').toUpperCase().slice(0, n) (Julia's uppercase is
+Unicode simple case mapping)."""
+_short(name, n) = _utf16_first(uppercase(_js_space_replace(String(name))), n)
 
 """
     make_plan_id(plan::JsonObject) -> String
@@ -256,7 +314,7 @@ function make_plan_id(plan::Union{JsonObject,AbstractDict})
     nodes = something(_jget(plan, "nodes"), Any[])
     host_str = isempty(nodes) ? "HOST" : _short(something(_jget(nodes[1], "name"), "HOST"), 8)
     node_str = length(nodes) > 1 ?
-        first(join([_short(_jget(n, "name"), 4) for n in nodes[2:end]], "-"), 16) : "RX"
+        _utf16_first(join([_short(_jget(n, "name"), 4) for n in nodes[2:end]], "-"), 16) : "RX"
     v = _jget(plan, "v")
     if v isa Number && v >= 3
         return "LTX-$(date)-$(host_str)-$(node_str)-v3-$(first(plan_hash(plan), 8))"

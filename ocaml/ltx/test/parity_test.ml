@@ -229,5 +229,78 @@ let () =
        (fun (e : Models.delay_matrix_entry) -> e.delay_seconds = dget dm e.from_id e.to_id)
        sdm && List.length sdm = 12);
 
+  (* ---- Attributed segments (speaker/label, 3.4.1) and JS string rules (#36) ---- *)
+  let module L = Interplanet_ltx in
+  let seg = Models.segment in
+  let wire_of plan = let h = L.encode_hash plan in b64u_decode (String.sub h 3 (String.length h - 3)) in
+  let ends_with s suf =
+    let n = String.length s and k = String.length suf in n >= k && String.sub s (n - k) k = suf in
+  let starts_with s pre = String.length s >= String.length pre && String.sub s 0 (String.length pre) = pre in
+  let contains s sub =
+    let n = String.length s and k = String.length sub in
+    let rec go i = i + k <= n && (String.sub s i k = sub || go (i + 1)) in go 0 in
+  let node id name role delay location : Models.ltx_node = { id; name; role; delay; location } in
+  let rep_nodes = [ node "N0" "Earth HQ" "HOST" 0 "earth"; node "N1" "Mars Hab-01" "PARTICIPANT" 840 "mars";
+                    node "N2" "L-1 Gateway" "PARTICIPANT" 2 "moon" ] in
+  let att = L.create_plan ~title:"Réunion Mars 🚀" ~start:"2026-03-15T14:00:00.000Z" ~quantum:3
+      ~mode:"LTX-ASYNC" ~nodes:rep_nodes
+      ~segments:[ seg "PLAN_CONFIRM" 2; seg ~speaker:"N0" ~label:"Ouverture: état de la mission" "TX" 3;
+                  seg "RX" 3; seg ~speaker:"N1" ~label:"Réponse 🔴" "TX" 2; seg "BUFFER" 1 ] () in
+  let aw = wire_of att in
+  check "attributed wire segments (JS key order, absent fields omitted)"
+    (ends_with aw ("\"segments\":[{\"type\":\"PLAN_CONFIRM\",\"q\":2},{\"type\":\"TX\",\"q\":3,\"speaker\":\"N0\","
+                   ^ "\"label\":\"Ouverture: état de la mission\"},{\"type\":\"RX\",\"q\":3},"
+                   ^ "{\"type\":\"TX\",\"q\":2,\"speaker\":\"N1\",\"label\":\"Réponse 🔴\"},{\"type\":\"BUFFER\",\"q\":1}]}"));
+  (* JS makePlanId of the same object (nodes before segments) *)
+  check "attributed typed planId == JS" (L.make_plan_id att = "LTX-20260315-EARTHHQ-MARS-L-1G-v2-1e382346");
+  check "attributed typed planId == JSON planId of wire" (L.make_plan_id att = make_plan_id (parse_json aw));
+  (match L.decode_hash (L.encode_hash att) with
+   | Some back ->
+     let s1 = List.nth back.Models.segments 1 and s3 = List.nth back.Models.segments 3 in
+     let s0 = List.hd back.Models.segments in
+     check "decode_hash keeps speaker/label"
+       (s1.Models.speaker = Some "N0" && s3.Models.label = Some "Réponse 🔴"
+        && s0.Models.speaker = None && s0.Models.label = None);
+     check "decode_hash round trip planId" (L.make_plan_id back = L.make_plan_id att)
+   | None -> check "decode_hash attributed plan" false);
+  let lp = { att with Models.segments = [ seg ~label:"Q&A {\"x\"}\n" "RX" 2 ] } in
+  check "label without speaker"
+    (ends_with (wire_of lp) "\"segments\":[{\"type\":\"RX\",\"q\":2,\"label\":\"Q&A {\\\"x\\\"}\\n\"}]}");
+  (match L.decode_hash (L.encode_hash lp) with
+   | Some b -> check "decode_hash label with quote, brace, escape"
+                 ((List.hd b.Models.segments).Models.label = Some "Q&A {\"x\"}\n")
+   | None -> check "decode_hash label with quote, brace, escape" false);
+
+  (* Control characters, JS whitespace (/\s/ is Unicode-aware in JS) and
+     non-whitespace look-alikes (U+0085, U+200B) in node names. *)
+  let wp = L.create_plan ~title:"C\001\b\t\n\011\012\r\031\"\\/\127\u{2028}\u{2029}é🚀"
+      ~start:"2026-03-15T14:00:00.000Z" ~quantum:3 ~mode:"LTX"
+      ~nodes:[ node "N0" "Earth\u{a0}\tHQ" "HOST" 0 "earth";
+               node "N1" "\u{3000}M\u{2003}a\u{2028}rs" "PARTICIPANT" 840 "mars";
+               node "N2" "\u{feff}L\u{85}u\u{200b}na" "PARTICIPANT" 2 "moon" ]
+      ~segments:[ seg ~speaker:"N1" "TX" 2; seg ~label:"Q\000&A" "RX" 2 ] () in
+  check "JS whitespace + escaping planId == JS"
+    (L.make_plan_id wp = "LTX-20260315-EARTHHQ-MARS-L\u{85}U\u{200b}-v2-4bd132bb");
+  check "JSON planId of the same wire == JS"
+    (make_plan_id (parse_json (wire_of wp)) = "LTX-20260315-EARTHHQ-MARS-L\u{85}U\u{200b}-v2-4bd132bb");
+  check "escaping matches JSON.stringify"
+    (starts_with (wire_of wp)
+       ("{\"v\":2,\"title\":\"C\\u0001\\b\\t\\n\\u000b\\f\\r\\u001f\\\"\\\\/\127\u{2028}\u{2029}é🚀\","));
+  check "ICS node id uses JS whitespace" (contains (L.generate_ics wp) "LTX-NODE:ID=EARTH-HQ;ROLE=HOST");
+
+  (* Lone UTF-16 surrogates (WTF-8 bytes): JSON.stringify writes \udxxx. *)
+  let sp2 = { att with Models.title = "x\xed\xa0\x80y\xed\xb0\x80z";
+                       segments = List.mapi (fun i (s : Models.ltx_segment_template) ->
+                           if i = 1 then { s with Models.label = Some "\xed\xaf\xbf" } else s) att.Models.segments } in
+  let sw = wire_of sp2 in
+  check "lone surrogates escaped as JSON.stringify"
+    (contains sw "\"title\":\"x\\ud800y\\udc00z\"" && contains sw "\"label\":\"\\udbff\"");
+  check "lone surrogates typed planId == JS" (L.make_plan_id sp2 = "LTX-20260315-EARTHHQ-MARS-L-1G-v2-35164df8");
+  check "lone surrogates JSON planId == JS"
+    (make_plan_id (parse_json sw) = "LTX-20260315-EARTHHQ-MARS-L-1G-v2-35164df8");
+  check "CESU-8 pair joined" (json_str "\xed\xa0\xbd\xed\xba\x80" = "\"🚀\"");
+  check "high surrogate then non-low kept apart"
+    (json_stringify (parse_json "\"\\ud800\\u0041\"") = "\"\\ud800A\"");
+
   Printf.printf "\n%d passed, %d failed\n" !passed !failed;
   if !failed > 0 then exit 1

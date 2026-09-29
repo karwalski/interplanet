@@ -17,6 +17,57 @@ static int passed = 0, failed = 0;
 
 #define SECTION(s) printf("\n-- %s --\n", s)
 
+/* Wire JSON of a "#l=" hash (base64url, no padding). malloc'd. */
+static char *wire_of(const char *hash) {
+    static const char *tbl = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    const char *t = hash + 3;
+    size_t n = strlen(t), o = 0;
+    char *out = (char *)malloc(n + 1);
+    unsigned acc = 0; int bits = 0;
+    for (size_t i = 0; i < n; i++) {
+        const char *c = strchr(tbl, t[i]);
+        if (!c) break;
+        acc = (acc << 6) | (unsigned)(c - tbl); bits += 6;
+        if (bits >= 8) { bits -= 8; out[o++] = (char)((acc >> bits) & 0xFF); }
+    }
+    out[o] = '\0';
+    return out;
+}
+
+static void set_node(itx_node_t *n, const char *id, const char *name, const char *role,
+                     int delay, const char *loc) {
+    snprintf(n->id, sizeof(n->id), "%s", id);
+    snprintf(n->name, sizeof(n->name), "%s", name);
+    snprintf(n->role, sizeof(n->role), "%s", role);
+    n->delay = delay;
+    snprintf(n->location, sizeof(n->location), "%s", loc);
+}
+
+static void set_seg(itx_seg_tmpl_t *s, const char *type, int q, const char *speaker, const char *label) {
+    memset(s, 0, sizeof(*s));
+    snprintf(s->type, sizeof(s->type), "%s", type);
+    s->q = q;
+    if (speaker) snprintf(s->speaker, sizeof(s->speaker), "%s", speaker);
+    if (label) snprintf(s->label, sizeof(s->label), "%s", label);
+}
+
+/* The interop representative plan (scripts/interop/plan.js), typed. */
+static void rep_plan(itx_plan_t *p) {
+    itx_create_plan(p, "R\xc3\xa9union Mars \xf0\x9f\x9a\x80", "2026-03-15T14:00:00.000Z", 840);
+    p->quantum = 3;
+    snprintf(p->mode, sizeof(p->mode), "LTX-ASYNC");
+    p->node_count = 3;
+    set_node(&p->nodes[0], "N0", "Earth HQ", "HOST", 0, "earth");
+    set_node(&p->nodes[1], "N1", "Mars Hab-01", "PARTICIPANT", 840, "mars");
+    set_node(&p->nodes[2], "N2", "L-1 Gateway", "PARTICIPANT", 2, "moon");
+    p->seg_count = 5;
+    set_seg(&p->segments[0], "PLAN_CONFIRM", 2, NULL, NULL);
+    set_seg(&p->segments[1], "TX", 3, "N0", "Ouverture: \xc3\xa9tat de la mission");
+    set_seg(&p->segments[2], "RX", 3, NULL, NULL);
+    set_seg(&p->segments[3], "TX", 2, "N1", "R\xc3\xa9ponse \xf0\x9f\x94\xb4");
+    set_seg(&p->segments[4], "BUFFER", 1, NULL, NULL);
+}
+
 int main(void) {
     /* ── Constants ───────────────────────────────────────────────────── */
     SECTION("Constants");
@@ -188,6 +239,102 @@ int main(void) {
     CHECK("formatUTC ends UTC",          strstr(utc, "UTC") != NULL);
     itx_format_utc(0LL, utc);
     CHECK("formatUTC(0) == 00:00:00 UTC", strcmp(utc, "00:00:00 UTC") == 0);
+
+    /* ── Attributed segments (speaker/label, 3.4.1) and JS string rules (#36) ── */
+    SECTION("attributed segments");
+    {
+        itx_plan_t ap;
+        rep_plan(&ap);
+        char ahash[ITX_HASH_BUF], aid[ITX_PLAN_ID_LEN], jid[ITX_PLAN_ID_LEN];
+        itx_encode_hash(&ap, ahash);
+        char *aw = wire_of(ahash);
+        const char *want_segs = "\"segments\":[{\"type\":\"PLAN_CONFIRM\",\"q\":2},{\"type\":\"TX\",\"q\":3,"
+            "\"speaker\":\"N0\",\"label\":\"Ouverture: \xc3\xa9tat de la mission\"},{\"type\":\"RX\",\"q\":3},"
+            "{\"type\":\"TX\",\"q\":2,\"speaker\":\"N1\",\"label\":\"R\xc3\xa9ponse \xf0\x9f\x94\xb4\"},"
+            "{\"type\":\"BUFFER\",\"q\":1}]}";
+        size_t wl = strlen(aw), sl = strlen(want_segs);
+        CHECK("attributed wire segments (JS key order, absent omitted)",
+              wl > sl && strcmp(aw + wl - sl, want_segs) == 0);
+        itx_make_plan_id(&ap, aid);
+        /* JS makePlanId of the same object (nodes before segments) */
+        CHECK("attributed typed planId == JS", strcmp(aid, "LTX-20260315-EARTHHQ-MARS-L-1G-v2-1e382346") == 0);
+        CHECK("attributed typed planId == JSON planId of wire",
+              itx_make_plan_id_json(aw, jid) == 0 && strcmp(aid, jid) == 0);
+        itx_plan_t back;
+        CHECK("decode attributed hash", itx_decode_hash(ahash, &back) == 0);
+        CHECK("decode keeps speaker/label", strcmp(back.segments[1].speaker, "N0") == 0 &&
+              strcmp(back.segments[3].label, "R\xc3\xa9ponse \xf0\x9f\x94\xb4") == 0 &&
+              back.segments[0].speaker[0] == '\0' && back.segments[0].label[0] == '\0');
+        CHECK("decode keeps non-ASCII title", strcmp(back.title, ap.title) == 0);
+        char bid[ITX_PLAN_ID_LEN];
+        itx_make_plan_id(&back, bid);
+        CHECK("decode round trip planId", strcmp(bid, aid) == 0);
+        free(aw);
+
+        itx_plan_t lp;
+        rep_plan(&lp);
+        lp.seg_count = 1;
+        set_seg(&lp.segments[0], "RX", 2, NULL, "Q&A {\"x\"}");
+        itx_encode_hash(&lp, ahash);
+        aw = wire_of(ahash);
+        CHECK("label without speaker", strstr(aw, "\"segments\":[{\"type\":\"RX\",\"q\":2,\"label\":\"Q&A {\\\"x\\\"}\"}]}") != NULL);
+        CHECK("decode label with quote and brace",
+              itx_decode_hash(ahash, &back) == 0 && strcmp(back.segments[0].label, "Q&A {\"x\"}") == 0);
+        free(aw);
+
+        /* Control characters, JS whitespace (/\s/ is Unicode-aware in JS) and
+         * non-whitespace look-alikes (U+0085, U+200B) in node names. */
+        itx_plan_t wp;
+        rep_plan(&wp);
+        snprintf(wp.title, sizeof(wp.title), "%s",
+                 "C\x01\b\t\n\v\f\r\x1f\"\\/\x7f\xe2\x80\xa8\xe2\x80\xa9\xc3\xa9\xf0\x9f\x9a\x80");
+        snprintf(wp.mode, sizeof(wp.mode), "LTX");
+        set_node(&wp.nodes[0], "N0", "Earth\xc2\xa0\tHQ", "HOST", 0, "earth");
+        set_node(&wp.nodes[1], "N1", "\xe3\x80\x80M\xe2\x80\x83" "a\xe2\x80\xa8rs", "PARTICIPANT", 840, "mars");
+        set_node(&wp.nodes[2], "N2", "\xef\xbb\xbfL\xc2\x85u\xe2\x80\x8bna", "PARTICIPANT", 2, "moon");
+        wp.seg_count = 2;
+        set_seg(&wp.segments[0], "TX", 2, "N1", NULL);
+        set_seg(&wp.segments[1], "RX", 2, NULL, "Q\\u0000&A");
+        /* C strings cannot hold U+0000, so the JS vector's label is "Q\u0000&A"
+         * spelt as the six characters \u0000: escape the backslash instead. */
+        itx_make_plan_id(&wp, aid);
+        itx_encode_hash(&wp, ahash);
+        aw = wire_of(ahash);
+        CHECK("JS whitespace + escaping planId == JS",
+              strcmp(aid, "LTX-20260315-EARTHHQ-MARS-L\xc2\x85U\xe2\x80\x8b-v2-741793bf") == 0);
+        const char *want_head = "{\"v\":2,\"title\":\"C\\u0001\\b\\t\\n\\u000b\\f\\r\\u001f\\\"\\\\/"
+            "\x7f\xe2\x80\xa8\xe2\x80\xa9\xc3\xa9\xf0\x9f\x9a\x80\",";
+        CHECK("escaping matches JSON.stringify", strncmp(aw, want_head, strlen(want_head)) == 0);        CHECK("typed planId == JSON planId of wire (escapes)",
+              itx_make_plan_id_json(aw, jid) == 0 && strcmp(aid, jid) == 0);
+        free(aw);
+        char *ics = (char *)malloc(ITX_ICS_BUF);
+        itx_generate_ics(&wp, ics);
+        CHECK("ICS node id uses JS whitespace", strstr(ics, "LTX-NODE:ID=EARTH-HQ;ROLE=HOST") != NULL);
+        free(ics);
+
+        /* Lone UTF-16 surrogates (WTF-8 bytes): JSON.stringify writes \udxxx. */
+        itx_plan_t sp;
+        rep_plan(&sp);
+        snprintf(sp.title, sizeof(sp.title), "%s", "x\xed\xa0\x80y\xed\xb0\x80z");
+        snprintf(sp.segments[1].label, sizeof(sp.segments[1].label), "%s", "\xed\xaf\xbf");
+        itx_make_plan_id(&sp, aid);
+        itx_encode_hash(&sp, ahash);
+        aw = wire_of(ahash);
+        CHECK("lone surrogates escaped as JSON.stringify",
+              strstr(aw, "\"title\":\"x\\ud800y\\udc00z\"") && strstr(aw, "\"label\":\"\\udbff\""));
+        CHECK("lone surrogates typed planId == JS", strcmp(aid, "LTX-20260315-EARTHHQ-MARS-L-1G-v2-35164df8") == 0);
+        CHECK("lone surrogates JSON planId == JS",
+              itx_make_plan_id_json(aw, jid) == 0 && strcmp(jid, "LTX-20260315-EARTHHQ-MARS-L-1G-v2-35164df8") == 0);
+        free(aw);
+        char *q = itx_json_quote("\xed\xa0\xbd\xed\xba\x80");
+        CHECK("CESU-8 pair joined", q && strcmp(q, "\"\xf0\x9f\x9a\x80\"") == 0);
+        free(q);
+        itx_json_t *hv = itx_json_parse("\"\\ud800\\u0041\"");
+        char *hs = hv ? itx_json_stringify(hv) : NULL;
+        CHECK("high surrogate then non-low kept apart", hs && strcmp(hs, "\"\\ud800A\"") == 0);
+        free(hs);
+        itx_json_free(hv);
+    }
 
     /* ── Summary ─────────────────────────────────────────────────────── */
     printf("\n==========================================\n");

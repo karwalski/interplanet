@@ -7,8 +7,10 @@ module InterplanetLtx
   # A participant node in an LTX session.
   LtxNode = Struct.new(:id, :name, :role, :delay, :location, keyword_init: true)
 
-  # A segment type + quantum count template entry.
-  LtxSegmentTemplate = Struct.new(:type, :q, keyword_init: true)
+  # A segment type + quantum count template entry. speaker (a node id) and
+  # label (an agenda title) are optional attribution (LTX-SPECIFICATION.md
+  # §3.4.1); nil means absent, and absent fields are not serialised.
+  LtxSegmentTemplate = Struct.new(:type, :q, :speaker, :label, keyword_init: true)
 
   # A computed, timed segment with UTC epoch milliseconds.
   LtxSegment = Struct.new(:type, :q, :start_ms, :end_ms, :dur_min, keyword_init: true)

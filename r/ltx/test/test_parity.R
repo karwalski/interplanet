@@ -137,5 +137,56 @@ check(grepl('"delays":{"N0|N1":842}', wire_of(wv3), fixed = TRUE), "v3 wire JSON
 check(make_plan_id(wv3) == "LTX-20260315-EARTHHQ-MARS-v3-cd55a366", "v3 planId matches JS")
 check(make_plan_id(parse_json(wire_of(wv3))) == make_plan_id(wv3), "v3 planId of wire JSON equals make_plan_id")
 
+# ── Attributed segments (speaker/label, 3.4.1) and JS string rules (#36) ────
+rep_nodes <- list(
+  ltx_node("N0", "Earth HQ", "HOST", delay = 0, location = "earth"),
+  ltx_node("N1", "Mars Hab-01", "PARTICIPANT", delay = 840, location = "mars"),
+  ltx_node("N2", "L-1 Gateway", "PARTICIPANT", delay = 2, location = "moon"))
+att <- create_plan(title = "Réunion Mars \U0001F680", start_iso = "2026-03-15T14:00:00.000Z",
+                   quantum = 3, mode = "LTX-ASYNC",
+                   segments = list(
+                     list(type = "PLAN_CONFIRM", q = 2),
+                     list(type = "TX", q = 3, speaker = "N0", label = "Ouverture: état de la mission"),
+                     list(type = "RX", q = 3),
+                     list(type = "TX", q = 2, speaker = "N1", label = "Réponse \U0001F534"),
+                     list(type = "BUFFER", q = 1)))
+att$nodes <- rep_nodes
+aw <- enc2utf8(wire_of(att))
+Encoding(aw) <- "UTF-8"
+want_segs <- paste0('"segments":[{"type":"PLAN_CONFIRM","q":2},{"type":"TX","q":3,"speaker":"N0",',
+                    '"label":"Ouverture: état de la mission"},{"type":"RX","q":3},',
+                    '{"type":"TX","q":2,"speaker":"N1","label":"Réponse \U0001F534"},{"type":"BUFFER","q":1}]}')
+check(endsWith(aw, want_segs), "attributed wire segments (JS key order, absent fields omitted)")
+# JS makePlanId of the same object (nodes before segments)
+check(make_plan_id(att) == "LTX-20260315-EARTHHQ-MARS-L-1G-v2-1e382346", "attributed typed planId == JS")
+check(make_plan_id(parse_json(aw)) == make_plan_id(att), "attributed typed planId == JSON planId of wire")
+back <- decode_hash(encode_hash(att))
+check(identical(back$segments[[2]]$speaker, "N0") && identical(back$segments[[4]]$label, "Réponse \U0001F534") &&
+        is.null(back$segments[[1]]$speaker) && is.null(back$segments[[1]]$label),
+      "decode_hash keeps speaker/label")
+check(make_plan_id(back) == make_plan_id(att), "decode_hash round trip planId")
+check(identical(names(ltx_segment_spec("RX", 2, label = "Q&A")), c("type", "q", "label")),
+      "label without speaker")
+
+# Control characters, JS whitespace (/\s/ is Unicode-aware in JS) and
+# non-whitespace look-alikes (U+0085, U+200B) in node names. R strings
+# cannot hold U+0000, so the JS vector's label is the six characters \u0000.
+wsp <- create_plan(title = "C\u0001\b\t\n\v\f\r\u001f\"\\/\u007f  é\U0001F680",
+                   start_iso = "2026-03-15T14:00:00.000Z", quantum = 3, mode = "LTX",
+                   segments = list(list(type = "TX", q = 2, speaker = "N1"),
+                                   list(type = "RX", q = 2, label = "Q\\u0000&A")))
+wsp$nodes <- list(
+  ltx_node("N0", "Earth \tHQ", "HOST", delay = 0, location = "earth"),
+  ltx_node("N1", "　M a rs", "PARTICIPANT", delay = 840, location = "mars"),
+  ltx_node("N2", "﻿L\u0085u​na", "PARTICIPANT", delay = 2, location = "moon"))
+check(make_plan_id(wsp) == "LTX-20260315-EARTHHQ-MARS-L\u0085U​-v2-741793bf", "JS whitespace + escaping planId == JS")
+ww <- enc2utf8(wire_of(wsp))
+Encoding(ww) <- "UTF-8"
+check(startsWith(ww, paste0('{"v":2,"title":"C\\u0001\\b\\t\\n\\u000b\\f\\r\\u001f\\"\\\\/',
+                            "\u007f  é\U0001F680", '",')),
+      "escaping matches JSON.stringify")
+check(make_plan_id(parse_json(ww)) == make_plan_id(wsp), "JSON planId of the escaped wire == typed")
+check(grepl("LTX-NODE:ID=EARTH-HQ;ROLE=HOST", generate_ics(wsp), fixed = TRUE), "ICS node id uses JS whitespace")
+
 cat(sprintf("\n%d passed, %d failed\n", pass, fail))
 if (fail > 0L) quit(status = 1L)

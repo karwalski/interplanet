@@ -78,7 +78,7 @@ module InterplanetLtx
     if raw_segs.is_a?(Array)
       plan.segments = raw_segs.map do |s|
         s = s.transform_keys(&:to_sym) if s.keys.first.is_a?(String) rescue s
-        LtxSegmentTemplate.new(type: (s[:type] || 'TX').to_s, q: (s[:q] || 2).to_i)
+        _segment_template(s)
       end
     end
 
@@ -204,9 +204,7 @@ module InterplanetLtx
       )
     end
 
-    segments = (data[:segments] || []).map do |s|
-      LtxSegmentTemplate.new(type: (s[:type] || 'TX').to_s, q: (s[:q] || 2).to_i)
-    end
+    segments = (data[:segments] || []).map { |s| _segment_template(s) }
 
     return nil if segments.empty?
 
@@ -270,7 +268,7 @@ module InterplanetLtx
       "#{n.name}: #{n.delay / 60} min one-way"
     }&.join(' . ') || 'no participant delay configured'
 
-    to_nid = ->(n) { n.name.upcase.gsub(/[\s\t]+/, '-') }
+    to_nid = ->(n) { n.name.upcase.gsub(JsJson::WHITESPACE, '-') }
 
     lines = [
       'BEGIN:VCALENDAR',
@@ -397,17 +395,41 @@ module InterplanetLtx
 
   # Serialise a plan to compact JSON (matches JS JSON.stringify key order).
   def self._plan_to_json(plan)
-    {
+    h = {
       v:        plan.v,
       title:    plan.title,
       start:    plan.start,
       quantum:  plan.quantum,
       mode:     plan.mode,
       nodes:    plan.nodes.map { |n| { id: n.id, name: n.name, role: n.role, delay: n.delay, location: n.location } },
-      segments: plan.segments.map { |s| { type: s.type, q: s.q } },
-    }.to_json
+      segments: plan.segments.map { |s| _segment_to_h(s) },
+    }
+    JsJson.stringify(h)
   end
   private_class_method :_plan_to_json
+
+  # Segment as serialised: {type, q, speaker?, label?} (ltx-sdk.js order),
+  # speaker and label only when present.
+  def self._segment_to_h(seg)
+    h = { type: seg.type, q: seg.q }
+    speaker = seg.respond_to?(:speaker) ? seg.speaker : nil
+    label   = seg.respond_to?(:label) ? seg.label : nil
+    h[:speaker] = speaker unless speaker.nil?
+    h[:label]   = label unless label.nil?
+    h
+  end
+  private_class_method :_segment_to_h
+
+  # Segment template from a symbol-keyed Hash, keeping speaker/label.
+  def self._segment_template(s)
+    LtxSegmentTemplate.new(
+      type:    (s[:type] || 'TX').to_s,
+      q:       (s[:q] || 2).to_i,
+      speaker: s[:speaker].nil? ? nil : s[:speaker].to_s,
+      label:   s[:label].nil? ? nil : s[:label].to_s,
+    )
+  end
+  private_class_method :_segment_template
 
   # imul31 over the UTF-16 code units of a JSON string (ltx-sdk.js makePlanId).
   def self._imul31_hex(json)
@@ -417,10 +439,11 @@ module InterplanetLtx
   end
   private_class_method :_imul31_hex
 
-  # (name || default).replace(/\s+/g, '').toUpperCase().slice(0, n)
+  # (name || default).replace(/\s+/g, '').toUpperCase().slice(0, n), with
+  # JavaScript's \s (Ruby's \s is ASCII only).
   def self._id_part(name, n, default)
     s = name.is_a?(String) && !name.empty? ? name : default
-    JsJson.utf16_slice(s.gsub(/\s+/, '').upcase, n)
+    JsJson.utf16_slice(s.gsub(JsJson::WHITESPACE, '').upcase, n)
   end
   private_class_method :_id_part
 

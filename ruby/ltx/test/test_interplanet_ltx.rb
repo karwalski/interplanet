@@ -246,6 +246,75 @@ check 'validate_plan unsorted delays key',  codes_of.call(ILX.validate_plan(vp_b
 check 'validate_plan unknown speaker',      codes_of.call(ILX.validate_plan(vp_v2.merge('segments' => [{ 'type' => 'TX', 'q' => 1, 'speaker' => 'N9' }]))).include?('unknown_speaker')
 check 'validate_plan quantum out of range', codes_of.call(ILX.validate_plan(vp_v2.merge('quantum' => 0))).include?('invalid_quantum')
 
+# ── Attributed segments (speaker/label, §3.4.1) and JS string rules (#36) ──
+section('attributed segments')
+att_nodes = [
+  LtxNode.new(id: 'N0', name: 'Earth HQ', role: 'HOST', delay: 0, location: 'earth'),
+  LtxNode.new(id: 'N1', name: 'Mars Hab-01', role: 'PARTICIPANT', delay: 840, location: 'mars'),
+  LtxNode.new(id: 'N2', name: 'L-1 Gateway', role: 'PARTICIPANT', delay: 2, location: 'moon'),
+]
+att_plan = LtxPlan.new(
+  v: 2, title: 'Réunion Mars 🚀', start: '2026-03-15T14:00:00.000Z', quantum: 3, mode: 'LTX-ASYNC',
+  nodes: att_nodes,
+  segments: [
+    LtxSegmentTemplate.new(type: 'PLAN_CONFIRM', q: 2),
+    LtxSegmentTemplate.new(type: 'TX', q: 3, speaker: 'N0', label: 'Ouverture: état de la mission'),
+    LtxSegmentTemplate.new(type: 'RX', q: 3),
+    LtxSegmentTemplate.new(type: 'TX', q: 2, speaker: 'N1', label: 'Réponse 🔴'),
+    LtxSegmentTemplate.new(type: 'BUFFER', q: 1),
+  ],
+)
+att_wire = ILX.send(:_b64url_decode, encode_hash(att_plan).sub('#l=', '')).force_encoding('UTF-8')
+check 'attributed wire segments (JS key order, absent fields omitted)',
+      att_wire.end_with?('"segments":[{"type":"PLAN_CONFIRM","q":2},{"type":"TX","q":3,"speaker":"N0",' \
+                         '"label":"Ouverture: état de la mission"},{"type":"RX","q":3},' \
+                         '{"type":"TX","q":2,"speaker":"N1","label":"Réponse 🔴"},{"type":"BUFFER","q":1}]}')
+# JS makePlanId of the same object (nodes before segments)
+check 'attributed typed planId == JS', make_plan_id(att_plan) == 'LTX-20260315-EARTHHQ-MARS-L-1G-v2-1e382346'
+check 'attributed typed planId == JSON planId of wire',
+      make_plan_id(att_plan) == make_plan_id(JSON.parse(att_wire))
+att_back = decode_hash(encode_hash(att_plan))
+check 'decode_hash keeps speaker/label', att_back.segments[1].speaker == 'N0' &&
+                                         att_back.segments[3].label == 'Réponse 🔴' &&
+                                         att_back.segments[0].speaker.nil? && att_back.segments[0].label.nil?
+check 'decode_hash round trip planId', make_plan_id(att_back) == make_plan_id(att_plan)
+att_up = upgrade_config('segments' => [{ 'type' => 'TX', 'q' => 1, 'speaker' => 'N1', 'label' => 'L' }])
+check 'upgrade_config keeps speaker/label', att_up.segments[0].speaker == 'N1' && att_up.segments[0].label == 'L'
+only_label = att_plan.dup
+only_label.segments = [LtxSegmentTemplate.new(type: 'RX', q: 2, label: 'Q&A')]
+check 'label without speaker', ILX.send(:_plan_to_json, only_label).end_with?('"segments":[{"type":"RX","q":2,"label":"Q&A"}]}')
+
+# Control characters, JS whitespace (/\s/ is Unicode-aware in JS) and
+# non-whitespace look-alikes (U+0085, U+200B) in node names.
+ws_plan = LtxPlan.new(
+  v: 2, title: "C\u0001\b\t\n\v\f\r\u001f\"\\/\u007f  é🚀", start: '2026-03-15T14:00:00.000Z',
+  quantum: 3, mode: 'LTX',
+  nodes: [
+    LtxNode.new(id: 'N0', name: "Earth \tHQ", role: 'HOST', delay: 0, location: 'earth'),
+    LtxNode.new(id: 'N1', name: "　M a rs", role: 'PARTICIPANT', delay: 840, location: 'mars'),
+    LtxNode.new(id: 'N2', name: "﻿L\u0085u​na", role: 'PARTICIPANT', delay: 2, location: 'moon'),
+  ],
+  segments: [LtxSegmentTemplate.new(type: 'TX', q: 2, speaker: 'N1'),
+             LtxSegmentTemplate.new(type: 'RX', q: 2, label: "Q\u0000&A")],
+)
+check 'JS whitespace + escaping planId == JS',
+      make_plan_id(ws_plan) == "LTX-20260315-EARTHHQ-MARS-L\u0085U​-v2-4bd132bb"
+check 'escaping matches JSON.stringify',
+      ILX.send(:_plan_to_json, ws_plan).start_with?(
+        '{"v":2,"title":"C\\u0001\\b\\t\\n\\u000b\\f\\r\\u001f\\"\\\\/' + "\u007f  é🚀" + '",')
+check 'ICS node id uses JS whitespace', generate_ics(ws_plan).include?('LTX-NODE:ID=EARTH-HQ;ROLE=HOST')
+
+# Lone UTF-16 surrogates (a WTF-8 String): JSON.stringify writes \udxxx.
+sur_plan = att_plan.dup
+sur_plan.title = "x\xED\xA0\x80y\xED\xB0\x80z".dup.force_encoding('UTF-8')
+sur_plan.segments = att_plan.segments.map(&:dup)
+sur_plan.segments[1].label = "\xED\xAF\xBF".dup.force_encoding('UTF-8')
+check 'lone surrogates escaped as JSON.stringify',
+      ILX.send(:_plan_to_json, sur_plan).include?('"title":"x\\ud800y\\udc00z"') &&
+      ILX.send(:_plan_to_json, sur_plan).include?('"label":"\\udbff"')
+check 'lone surrogates planId == JS', make_plan_id(sur_plan) == 'LTX-20260315-EARTHHQ-MARS-L-1G-v2-35164df8'
+check 'CESU-8 pair joined', ILX::JsJson.string("\xED\xA0\xBD\xED\xBA\x80".dup.force_encoding('UTF-8')) == '"🚀"'
+
 # ── Summary ──────────────────────────────────────────────────────────────
 puts "\n=========================================="
 puts "#{@passed} passed  #{@failed} failed"

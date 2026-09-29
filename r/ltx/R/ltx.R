@@ -330,11 +330,46 @@ ltx_node <- function(id, name, role, delay = 0, location = "earth") {
 }
 
 #' Create an LtxSegmentSpec list.
-#' @param type character segment type (one of SEG_TYPES)
-#' @param q    integer number of quanta
+#' speaker and label are the optional attribution of LTX-SPECIFICATION.md
+#' 3.4.1; NULL is absent and is left out of the list, so the segment
+#' serialises as {type, q, speaker?, label?} in ltx-sdk.js key order.
+#' @param type    character segment type (one of SEG_TYPES)
+#' @param q       integer number of quanta
+#' @param speaker character presenting node id (e.g. "N1"), or NULL
+#' @param label   character agenda title, or NULL
 #' @return named list
-ltx_segment_spec <- function(type, q) {
-  list(type = type, q = as.integer(q))
+ltx_segment_spec <- function(type, q, speaker = NULL, label = NULL) {
+  s <- list(type = type, q = as.integer(q))
+  if (!is.null(speaker)) s$speaker <- speaker
+  if (!is.null(label))   s$label   <- label
+  s
+}
+
+# ECMAScript \s (WhiteSpace and LineTerminator) as code points. The POSIX
+# [[:space:]] class depends on the locale: in C.UTF-8 it keeps U+00A0 and
+# U+FEFF, which JavaScript strips, and in the C locale it misreads UTF-8.
+.JS_SPACE <- c(9:13, 32L, 160L, 5760L, 8192:8202, 8232L, 8233L, 8239L, 8287L, 12288L, 65279L)
+
+# name.replace(/\s+/g, rep) with JavaScript's \s
+.js_replace_space <- function(name, rep = "") {
+  cps <- utf8ToInt(enc2utf8(name))
+  if (length(cps) == 0L) return("")
+  sp  <- cps %in% .JS_SPACE
+  if (!any(sp)) return(intToUtf8(cps))
+  run_start <- sp & !c(FALSE, head(sp, -1L))
+  out <- vapply(seq_along(cps), function(i) {
+    if (!sp[i]) intToUtf8(cps[i]) else if (run_start[i]) rep else ""
+  }, character(1L))
+  paste(out, collapse = "")
+}
+
+# s.slice(0, n) in UTF-16 code units (a pair that does not fit is dropped)
+.utf16_slice <- function(s, n) {
+  cps <- utf8ToInt(enc2utf8(s))
+  if (length(cps) == 0L) return("")
+  units <- cumsum(ifelse(cps >= 65536L, 2L, 1L))
+  keep <- cps[units <= n]
+  if (length(keep) == 0L) "" else intToUtf8(keep)
 }
 
 # Internal: return current UTC time rounded down to the minute, plus 5 min, as ISO
@@ -379,7 +414,7 @@ create_plan <- function(
     ltx_node("N0", host_name,   "HOST",        delay = 0,     location = host_location),
     ltx_node("N1", remote_name, "PARTICIPANT", delay = delay, location = remote_location)
   )
-  seg_specs <- lapply(segments, function(s) ltx_segment_spec(s$type, s$q))
+  seg_specs <- lapply(segments, function(s) ltx_segment_spec(s$type, s$q, s$speaker, s$label))
 
   list(
     v        = 2L,
@@ -451,11 +486,14 @@ total_min <- function(plan) {
 make_plan_id <- function(plan) {
   date_str <- gsub("-", "", substr(plan$start, 1L, 10L))
   nodes    <- plan$nodes
-  short    <- function(name, n) substr(toupper(gsub("[[:space:]]+", "", name)), 1L, n)
-  host_str <- if (length(nodes) >= 1L) short(nodes[[1L]]$name, 8L) else "HOST"
+  # name.replace(/\s+/g, '').toUpperCase().slice(0, n): JavaScript's \s,
+  # slices in UTF-16 code units (toupper is locale dependent)
+  short    <- function(name, n) .utf16_slice(toupper(.js_replace_space(name)), n)
+  host_str <- if (length(nodes) >= 1L && !is.null(nodes[[1L]]$name) && nzchar(nodes[[1L]]$name))
+    short(nodes[[1L]]$name, 8L) else "HOST"
   node_str <- if (length(nodes) > 1L) {
     parts <- vapply(nodes[-1L], function(n) short(n$name, 4L), character(1L))
-    substr(paste(parts, collapse = "-"), 1L, 16L)
+    .utf16_slice(paste(parts, collapse = "-"), 16L)
   } else "RX"
 
   if (!is.null(plan$v) && plan$v >= 3) {
@@ -502,7 +540,7 @@ decode_hash <- function(hash_str) {
       )
     })
     segs <- lapply(d$segments, function(s) {
-      ltx_segment_spec(s$type, s$q)
+      ltx_segment_spec(s$type, s$q, s$speaker, s$label)
     })
     list(
       v        = if (is.null(d$v))       2L else as.integer(d$v),
@@ -553,7 +591,7 @@ generate_ics <- function(plan) {
 
   now_stamp <- format(Sys.time(), "%Y%m%dT%H%M%SZ", tz = "UTC")
 
-  .to_id <- function(name) gsub(" ", "-", toupper(name))
+  .to_id <- function(name) toupper(.js_replace_space(name, "-"))  # ltx-sdk.js toId
 
   node_lines <- vapply(nodes, function(n) {
     sprintf("LTX-NODE:ID=%s;ROLE=%s", .to_id(n$name), n$role)

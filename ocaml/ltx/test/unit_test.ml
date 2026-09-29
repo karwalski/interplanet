@@ -52,7 +52,7 @@ let make_node id name role delay loc : Models.ltx_node =
   { Models.id; name; role; delay; location = loc }
 
 let make_seg t q : Models.ltx_segment_template =
-  { Models.seg_type = t; q }
+  Models.segment t q
 
 (* Reference plan matching conformance vector v001 *)
 let v001_plan =

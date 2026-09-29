@@ -8,14 +8,16 @@ in_dir, out_dir = ARGS[1], ARGS[2]
 
 base = create_plan(title = "Réunion Mars 🚀", start_iso = "2026-03-15T14:00:00.000Z",
                    quantum = 3, mode = "LTX-ASYNC", delay = 840)
-# LtxSegmentSpec is (type, q) only: no speaker/label.
 plan = LtxPlan(base.v, base.title, base.start, base.quantum, base.mode,
     [LtxNode("N0", "Earth HQ", "HOST", 0, "earth"),
      LtxNode("N1", "Mars Hab-01", "PARTICIPANT", 840, "mars"),
      LtxNode("N2", "L-1 Gateway", "PARTICIPANT", 2, "moon")],
-    [LtxSegmentSpec("PLAN_CONFIRM", 2), LtxSegmentSpec("TX", 3), LtxSegmentSpec("RX", 3),
-     LtxSegmentSpec("TX", 2), LtxSegmentSpec("BUFFER", 1)])
-println("NOTE LtxSegmentSpec has no speaker/label; v3 via upgrade_plan_to_v3 (JsonObject)")
+    [LtxSegmentSpec("PLAN_CONFIRM", 2),
+     LtxSegmentSpec("TX", 3; speaker = "N0", label = "Ouverture: état de la mission"),
+     LtxSegmentSpec("RX", 3),
+     LtxSegmentSpec("TX", 2; speaker = "N1", label = "Réponse 🔴"),
+     LtxSegmentSpec("BUFFER", 1)])
+println("NOTE v3 via upgrade_plan_to_v3 (JsonObject)")
 
 function unhash(h)
     t = replace(h[4:end], '-' => '+', '_' => '/')

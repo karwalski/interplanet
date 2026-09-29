@@ -14,6 +14,10 @@ module InterplanetLtx
   module JsJson
     module_function
 
+    # One or more characters of ECMAScript \s (WhiteSpace and LineTerminator,
+    # ES2024 §12.2 and §12.3). Ruby's \s matches ASCII whitespace only.
+    WHITESPACE = /[\t\n\v\f\r \u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]+/.freeze
+
     # Format a number exactly as JavaScript's JSON.stringify does.
     def number(x)
       return x.to_s if x.is_a?(Integer)
@@ -44,8 +48,52 @@ module InterplanetLtx
     end
 
     # Quote a string exactly as JavaScript's JSON.stringify does.
+    #
+    # Ruby's generator already escapes exactly as JSON.stringify does
+    # (\b \t \n \f \r, other C0 controls as lowercase \u00xx, no escaping
+    # of "/", DEL or U+2028/U+2029). A UTF-8 String cannot hold a lone UTF-16
+    # surrogate, but a WTF-8 String can (bytes ED A0..BF xx); JSON.stringify
+    # writes a lone surrogate as a lowercase \udxxx escape, and so does this.
     def string(s)
-      JSON.generate(s.to_s)
+      s = s.to_s
+      return JSON.generate(s) if s.valid_encoding?
+
+      _wtf8_string(s)
+    end
+
+    # JSON.stringify of a String that is not valid UTF-8: decode it as WTF-8
+    # (lone surrogates escaped, a CESU-8 surrogate pair joined into one code
+    # point); any other invalid byte raises.
+    def _wtf8_string(s)
+      bytes = s.b
+      out = +'"'
+      text = +''
+      i = 0
+      while i < bytes.bytesize
+        b = bytes.getbyte(i)
+        len = b < 0x80 ? 1 : b >= 0xF0 ? 4 : b >= 0xE0 ? 3 : 2
+        chunk = bytes.byteslice(i, len).force_encoding('UTF-8')
+        if chunk.valid_encoding?
+          text << chunk
+        elsif len == 3 && b == 0xED && (0xA0..0xBF).cover?(bytes.getbyte(i + 1).to_i) &&
+              (0x80..0xBF).cover?(bytes.getbyte(i + 2).to_i)
+          unit = 0xD000 | ((bytes.getbyte(i + 1) & 0x3F) << 6) | (bytes.getbyte(i + 2) & 0x3F)
+          nxt = bytes.byteslice(i + 3, 3).bytes
+          if unit < 0xDC00 && nxt.size == 3 && nxt[0] == 0xED && (0xB0..0xBF).cover?(nxt[1]) &&
+             (0x80..0xBF).cover?(nxt[2])
+            low = 0xD000 | ((nxt[1] & 0x3F) << 6) | (nxt[2] & 0x3F)
+            text << (0x10000 + ((unit - 0xD800) << 10) + (low - 0xDC00)).chr(Encoding::UTF_8)
+            len = 6
+          else
+            out << JSON.generate(text)[1...-1] << format('\u%04x', unit)
+            text = +''
+          end
+        else
+          raise JSON::GeneratorError, 'source sequence is illegal/malformed utf-8'
+        end
+        i += len
+      end
+      out << JSON.generate(text)[1...-1] << '"'
     end
 
     # JSON.stringify(obj) with no whitespace, preserving Hash insertion order.

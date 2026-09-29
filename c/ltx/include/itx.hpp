@@ -41,6 +41,8 @@ struct Node {
 struct SegmentTemplate {
     std::string type;
     int         q;
+    std::string speaker;  /**< "" when absent (LTX-SPECIFICATION.md 3.4.1) */
+    std::string label;    /**< "" when absent */
 };
 
 struct Segment {
@@ -137,7 +139,8 @@ public:
 
     SegmentTemplate segTemplate(int i) const {
         if (i < 0 || i >= _p.seg_count) throw std::out_of_range("segment index");
-        return { _p.segments[i].type, _p.segments[i].q };
+        const auto &s = _p.segments[i];
+        return { s.type, s.q, s.speaker, s.label };
     }
 
 private:

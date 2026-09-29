@@ -267,6 +267,75 @@ check('validatePlan unknown speaker',     in_array('unknown_speaker', $codesOf(L
                                               ['segments' => [(object)['type' => 'TX', 'q' => 1, 'speaker' => 'N9']]]))), true));
 check('validatePlan quantum out of range', in_array('invalid_quantum', $codesOf(LTX::validatePlan($with($vpV2, ['quantum' => 0]))), true));
 
+/* ── Attributed segments (speaker/label, §3.4.1) and JS string rules (#36) ── */
+echo "\n-- attributed segments --\n";
+$attPlan = new LtxPlan();
+$attPlan->title = 'Réunion Mars 🚀';
+$attPlan->start = '2026-03-15T14:00:00.000Z';
+$attPlan->quantum = 3;
+$attPlan->mode = 'LTX-ASYNC';
+$attPlan->nodes = [
+    new \InterplanetLTX\LtxNode(id: 'N0', name: 'Earth HQ', role: 'HOST', delay: 0, location: 'earth'),
+    new \InterplanetLTX\LtxNode(id: 'N1', name: 'Mars Hab-01', role: 'PARTICIPANT', delay: 840, location: 'mars'),
+    new \InterplanetLTX\LtxNode(id: 'N2', name: 'L-1 Gateway', role: 'PARTICIPANT', delay: 2, location: 'moon'),
+];
+$attPlan->segments = [
+    new \InterplanetLTX\LtxSegmentTemplate('PLAN_CONFIRM', 2),
+    new \InterplanetLTX\LtxSegmentTemplate('TX', 3, speaker: 'N0', label: 'Ouverture: état de la mission'),
+    new \InterplanetLTX\LtxSegmentTemplate('RX', 3),
+    new \InterplanetLTX\LtxSegmentTemplate('TX', 2, speaker: 'N1', label: 'Réponse 🔴'),
+    new \InterplanetLTX\LtxSegmentTemplate('BUFFER', 1),
+];
+$attWire = base64_decode(strtr(substr(LTX::encodeHash($attPlan), 3), '-_', '+/'));
+check('attributed wire segments (JS key order, absent fields omitted)', str_ends_with($attWire,
+    '"segments":[{"type":"PLAN_CONFIRM","q":2},{"type":"TX","q":3,"speaker":"N0",'
+    . '"label":"Ouverture: état de la mission"},{"type":"RX","q":3},'
+    . '{"type":"TX","q":2,"speaker":"N1","label":"Réponse 🔴"},{"type":"BUFFER","q":1}]}'));
+// JS makePlanId of the same object (nodes before segments)
+check('attributed typed planId == JS', LTX::makePlanId($attPlan) === 'LTX-20260315-EARTHHQ-MARS-L-1G-v2-1e382346');
+check('attributed typed planId == JSON planId of wire', LTX::makePlanId($attPlan) === LTX::makePlanId(json_decode($attWire)));
+$attBack = LTX::decodeHash(LTX::encodeHash($attPlan));
+check('decodeHash keeps speaker/label', $attBack->segments[1]->speaker === 'N0'
+    && $attBack->segments[3]->label === 'Réponse 🔴'
+    && $attBack->segments[0]->speaker === null && $attBack->segments[0]->label === null);
+check('decodeHash round trip planId', LTX::makePlanId($attBack) === LTX::makePlanId($attPlan));
+$attUp = LTX::upgradeConfig(['segments' => [['type' => 'TX', 'q' => 1, 'speaker' => 'N1', 'label' => 'L']]]);
+check('upgradeConfig keeps speaker/label', $attUp->segments[0]->speaker === 'N1' && $attUp->segments[0]->label === 'L');
+$onlyLabel = clone $attPlan;
+$onlyLabel->segments = [new \InterplanetLTX\LtxSegmentTemplate('RX', 2, label: 'Q&A')];
+check('label without speaker', str_ends_with($onlyLabel->toJson(), '"segments":[{"type":"RX","q":2,"label":"Q&A"}]}'));
+
+// Control characters, JS whitespace (/\s/ is Unicode-aware in JS) and
+// non-whitespace look-alikes (U+0085, U+200B) in node names.
+$wsPlan = clone $attPlan;
+$wsPlan->title = "C\u{1}\u{8}\t\n\u{b}\f\r\u{1f}\"\\/\u{7f}\u{2028}\u{2029}é🚀";
+$wsPlan->mode = 'LTX';
+$wsPlan->nodes = [
+    new \InterplanetLTX\LtxNode(id: 'N0', name: "Earth\u{a0}\tHQ", role: 'HOST', delay: 0, location: 'earth'),
+    new \InterplanetLTX\LtxNode(id: 'N1', name: "\u{3000}M\u{2003}a\u{2028}rs", role: 'PARTICIPANT', delay: 840, location: 'mars'),
+    new \InterplanetLTX\LtxNode(id: 'N2', name: "\u{feff}L\u{85}u\u{200b}na", role: 'PARTICIPANT', delay: 2, location: 'moon'),
+];
+$wsPlan->segments = [
+    new \InterplanetLTX\LtxSegmentTemplate('TX', 2, speaker: 'N1'),
+    new \InterplanetLTX\LtxSegmentTemplate('RX', 2, label: "Q\u{0}&A"),
+];
+check('JS whitespace + escaping planId == JS',
+    LTX::makePlanId($wsPlan) === "LTX-20260315-EARTHHQ-MARS-L\u{85}U\u{200b}-v2-4bd132bb");
+check('escaping matches JSON.stringify', str_starts_with($wsPlan->toJson(),
+    '{"v":2,"title":"C\\u0001\\b\\t\\n\\u000b\\f\\r\\u001f\\"\\\\/' . "\u{7f}\u{2028}\u{2029}é🚀" . '",'));
+check('ICS node id uses JS whitespace', str_contains(LTX::generateICS($wsPlan), 'LTX-NODE:ID=EARTH-HQ;ROLE=HOST'));
+
+// Lone UTF-16 surrogates (a WTF-8 string): JSON.stringify writes \udxxx.
+$surPlan = clone $attPlan;
+$surPlan->title = "x\xED\xA0\x80y\xED\xB0\x80z";
+$surSegs = $attPlan->segments;
+$surSegs[1] = new \InterplanetLTX\LtxSegmentTemplate('TX', 3, speaker: 'N0', label: "\xED\xAF\xBF");
+$surPlan->segments = $surSegs;
+check('lone surrogates escaped as JSON.stringify', str_contains($surPlan->toJson(), '"title":"x\\ud800y\\udc00z"')
+    && str_contains($surPlan->toJson(), '"label":"\\udbff"'));
+check('lone surrogates planId == JS', LTX::makePlanId($surPlan) === 'LTX-20260315-EARTHHQ-MARS-L-1G-v2-35164df8');
+check('CESU-8 pair joined', \InterplanetLTX\JsJson::string("\xED\xA0\xBD\xED\xBA\x80") === '"🚀"');
+
 /* ── Summary ─────────────────────────────────────────────────────── */
 echo "\n==========================================\n";
 echo "$passed passed  $failed failed\n";

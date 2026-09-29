@@ -113,9 +113,13 @@ static char *jstring(jparser_t *s) {
             case 'u': {
                 unsigned cp = jhex4(s);
                 if (cp >= 0xD800 && cp < 0xDC00 && s->end - s->p >= 6 && s->p[0] == '\\' && s->p[1] == 'u') {
+                    const char *save = s->p;
                     s->p += 2;
                     unsigned lo = jhex4(s);
-                    cp = 0x10000 + ((cp - 0xD800) << 10) + ((lo - 0xDC00) & 0x3FF);
+                    /* only a following low surrogate completes the pair; a
+                     * lone high surrogate is kept as WTF-8, as JS keeps it */
+                    if (lo >= 0xDC00 && lo < 0xE000) cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00);
+                    else s->p = save;
                 }
                 put_utf8(o, &n, cp);
                 break;
@@ -320,10 +324,30 @@ static void js_number(sb_t *s, double f) {
     }
 }
 
-/** JSON.stringify string quoting. */
+/** JSON.stringify string quoting. A lone UTF-16 surrogate, which a UTF-8
+ *  string can only hold as WTF-8 (ED A0..BF 80..BF), is written as a
+ *  lowercase \udxxx escape as JSON.stringify writes it; a CESU-8 surrogate
+ *  pair is written as the UTF-8 of its code point. */
 static void js_quote(sb_t *s, const char *str) {
     sb_putc(s, '"');
     for (const unsigned char *p = (const unsigned char *)str; *p; p++) {
+        if (p[0] == 0xED && (p[1] & 0xE0) == 0xA0 && (p[2] & 0xC0) == 0x80) {
+            unsigned hi = 0xD000u | ((p[1] & 0x3Fu) << 6) | (p[2] & 0x3Fu);
+            if (hi < 0xDC00 && p[3] == 0xED && (p[4] & 0xF0) == 0xB0 && (p[5] & 0xC0) == 0x80) {
+                unsigned lo = 0xD000u | ((p[4] & 0x3Fu) << 6) | (p[5] & 0x3Fu);
+                char o[4];
+                size_t n = 0;
+                put_utf8(o, &n, 0x10000 + ((hi - 0xD800) << 10) + (lo - 0xDC00));
+                sb_putn(s, o, n);
+                p += 5;
+            } else {
+                char u[8];
+                snprintf(u, sizeof(u), "\\u%04x", hi);
+                sb_puts(s, u);
+                p += 2;
+            }
+            continue;
+        }
         switch (*p) {
             case '"':  sb_puts(s, "\\\""); break;
             case '\\': sb_puts(s, "\\\\"); break;
@@ -343,6 +367,13 @@ static void js_quote(sb_t *s, const char *str) {
         }
     }
     sb_putc(s, '"');
+}
+
+char *itx_json_quote(const char *utf8) {
+    sb_t s = { NULL, 0, 0, 0 };
+    js_quote(&s, utf8 ? utf8 : "");
+    if (s.err) { free(s.b); return NULL; }
+    return s.b;
 }
 
 /** Decode one UTF-8 code point; advances *p. Invalid bytes decode as themselves. */
@@ -636,6 +667,25 @@ static void truncate_units(sb_t *s, int max) {
     }
 }
 
+void itx_plan_id_name_strs(const char *const *names, size_t count, char *host, char *nodes) {
+    sb_t h = { NULL, 0, 0, 0 }, r = { NULL, 0, 0, 0 };
+    const char *n0 = count > 0 ? names[0] : NULL;
+    if (n0 && *n0) name_token(&h, n0, 8); else sb_puts(&h, "HOST");
+    if (count > 1) {
+        for (size_t i = 1; i < count; i++) {
+            if (i > 1) sb_putc(&r, '-');
+            name_token(&r, names[i] ? names[i] : "", 4);
+        }
+        truncate_units(&r, 16);
+    } else {
+        sb_puts(&r, "RX");
+    }
+    snprintf(host, 32, "%s", h.b ? h.b : "");
+    snprintf(nodes, 64, "%s", r.b ? r.b : "");
+    free(h.b);
+    free(r.b);
+}
+
 int itx_make_plan_id_value(const itx_json_t *c, char *buf) {
     if (!c || c->kind != ITX_JSON_OBJECT || !buf) return -1;
     const itx_json_t *nodes = itx_json_get(c, "nodes");
@@ -649,21 +699,13 @@ int itx_make_plan_id_value(const itx_json_t *c, char *buf) {
     char date[40];
     yyyymmdd(ms, date);
 
-    sb_t host = { NULL, 0, 0, 0 }, rem = { NULL, 0, 0, 0 };
-    const char *n0 = itx_json_str(itx_json_get(itx_json_at(nodes, 0), "name"));
-    if (n0 && *n0) name_token(&host, n0, 8); else sb_puts(&host, "HOST");
-    if (!host.b) sb_puts(&host, "");
-    if (nodes->count > 1) {
-        for (size_t i = 1; i < nodes->count; i++) {
-            if (i > 1) sb_putc(&rem, '-');
-            const char *nm = itx_json_str(itx_json_get(itx_json_at(nodes, i), "name"));
-            name_token(&rem, nm ? nm : "", 4);
-        }
-        if (!rem.b) sb_puts(&rem, "");
-        truncate_units(&rem, 16);
-    } else {
-        sb_puts(&rem, "RX");
-    }
+    const char **names = (const char **)malloc(nodes->count * sizeof(*names));
+    if (!names) return -1;
+    for (size_t i = 0; i < nodes->count; i++)
+        names[i] = itx_json_str(itx_json_get(itx_json_at(nodes, i), "name"));
+    char host[32], rem[64];
+    itx_plan_id_name_strs(names, nodes->count, host, rem);
+    free(names);
 
     int rc = 0;
     if (v >= 3) {
@@ -674,20 +716,18 @@ int itx_make_plan_id_value(const itx_json_t *c, char *buf) {
             char hex[65];
             itx_sha256(canon, strlen(canon), dg);
             hex_of(dg, 4, hex);
-            snprintf(buf, ITX_PLAN_ID_LEN, "LTX-%s-%s-%s-v3-%s", date, host.b, rem.b, hex);
+            snprintf(buf, ITX_PLAN_ID_LEN, "LTX-%s-%s-%s-v3-%s", date, host, rem, hex);
             free(canon);
         }
     } else {
         char *raw = itx_json_stringify(c);
         if (!raw) rc = -1;
         else {
-            snprintf(buf, ITX_PLAN_ID_LEN, "LTX-%s-%s-%s-v2-%08x", date, host.b, rem.b, itx_imul31_utf16(raw));
+            snprintf(buf, ITX_PLAN_ID_LEN, "LTX-%s-%s-%s-v2-%08x", date, host, rem, itx_imul31_utf16(raw));
             free(raw);
         }
     }
-    free(host.b);
-    free(rem.b);
-    return (host.err || rem.err) ? -1 : rc;
+    return rc;
 }
 
 int itx_make_plan_id_json(const char *plan_json, char *buf) {

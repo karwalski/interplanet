@@ -23,13 +23,15 @@ let () =
         { id = "N0"; name = "Earth HQ"; role = "HOST"; delay = 0; location = "earth" };
         { id = "N1"; name = "Mars Hab-01"; role = "PARTICIPANT"; delay = 840; location = "mars" };
         { id = "N2"; name = "L-1 Gateway"; role = "PARTICIPANT"; delay = 2; location = "moon" } ]
-      (* ltx_segment_template is (seg_type, q) only: no speaker/label. *)
       ~segments:[
-        { seg_type = "PLAN_CONFIRM"; q = 2 }; { seg_type = "TX"; q = 3 }; { seg_type = "RX"; q = 3 };
-        { seg_type = "TX"; q = 2 }; { seg_type = "BUFFER"; q = 1 } ]
+        segment "PLAN_CONFIRM" 2;
+        segment ~speaker:"N0" ~label:"Ouverture: état de la mission" "TX" 3;
+        segment "RX" 3;
+        segment ~speaker:"N1" ~label:"Réponse 🔴" "TX" 2;
+        segment "BUFFER" 1 ]
       ()
   in
-  print_endline "NOTE typed ltx_plan: no speaker/label, v2 only; v3 via V11 on the parsed wire JSON";
+  print_endline "NOTE typed ltx_plan: v2 only; v3 via V11 on the parsed wire JSON";
   let hash = Interplanet_ltx.encode_hash plan in
   let wire = Security.b64u_decode (String.sub hash 3 (String.length hash - 3)) in
   write_file (Filename.concat out_dir "wire-v2.json") wire;

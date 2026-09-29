@@ -59,11 +59,19 @@ let parse_json (src : string) : json_val =
             if code >= 0xD800 && code <= 0xDBFF && !pos + 6 <= n
                && src.[!pos] = '\\' && src.[!pos + 1] = 'u' then begin
               let lo = int_of_string ("0x" ^ String.sub src (!pos + 2) 4) in
-              pos := !pos + 6;
-              0x10000 + ((code - 0xD800) lsl 10) + (lo - 0xDC00)
+              if lo >= 0xDC00 && lo <= 0xDFFF then begin
+                pos := !pos + 6;
+                0x10000 + ((code - 0xD800) lsl 10) + (lo - 0xDC00)
+              end else code
             end else code
           in
-          Buffer.add_utf_8_uchar buf (Uchar.of_int code)
+          if code >= 0xD800 && code <= 0xDFFF then begin
+            (* A lone surrogate (JSON.parse keeps it) is held as WTF-8;
+               Security.json_str writes it back as \udxxx. *)
+            Buffer.add_char buf (Char.chr (0xE0 lor (code lsr 12)));
+            Buffer.add_char buf (Char.chr (0x80 lor ((code lsr 6) land 0x3F)));
+            Buffer.add_char buf (Char.chr (0x80 lor (code land 0x3F)))
+          end else Buffer.add_utf_8_uchar buf (Uchar.of_int code)
         | c -> raise (Json_error (Printf.sprintf "bad escape '\\%c'" c))
       end
       else Buffer.add_char buf c
@@ -210,14 +218,43 @@ let imul31_utf16 (s : string) : int32 =
   done;
   Int32.of_int !h
 
+(* ECMAScript \s: WhiteSpace and LineTerminator code points *)
+let is_js_space cp =
+  cp = 0x20 || (cp >= 0x09 && cp <= 0x0D) || cp = 0xA0 || cp = 0x1680
+  || (cp >= 0x2000 && cp <= 0x200A) || cp = 0x2028 || cp = 0x2029
+  || cp = 0x202F || cp = 0x205F || cp = 0x3000 || cp = 0xFEFF
+
+(* The UTF-8 code points of s as (code point, byte offset, byte length) *)
+let utf8_points (s : string) : (int * int * int) list =
+  let n = String.length s in
+  let rec go i acc =
+    if i >= n then List.rev acc
+    else
+      let d = String.get_utf_8_uchar s i in
+      let len = Uchar.utf_decode_length d in
+      go (i + len) ((Uchar.to_int (Uchar.utf_decode_uchar d), i, len) :: acc)
+  in
+  go 0 []
+
+(* s.replace(/\s+/g, '') with JavaScript's \s *)
 let remove_ws (s : string) : string =
   String.concat ""
-    (List.filter (fun c -> c <> " " && c <> "\t" && c <> "\n" && c <> "\r")
-       (List.init (String.length s) (fun i -> String.make 1 s.[i])))
+    (List.filter_map (fun (cp, i, len) -> if is_js_space cp then None else Some (String.sub s i len))
+       (utf8_points s))
 
+(* s.slice(0, len) in UTF-16 code units (a pair that does not fit is dropped) *)
+let utf16_prefix (s : string) (len : int) : string =
+  let rec go units = function
+    | [] -> s
+    | (cp, i, _) :: rest ->
+      let units = units + (if cp >= 0x10000 then 2 else 1) in
+      if units > len then String.sub s 0 i else go units rest
+  in
+  go 0 (utf8_points s)
+
+(* name.replace(/\s+/g, '').toUpperCase().slice(0, len), ASCII case mapping *)
 let short_name (name : string) (len : int) : string =
-  let s = String.uppercase_ascii (remove_ws name) in
-  String.sub s 0 (min len (String.length s))
+  utf16_prefix (String.uppercase_ascii (remove_ws name)) len
 
 (* "YYYY-MM-DDTHH:MM:SS(.mmm)?Z" -> Unix epoch milliseconds (UTC) *)
 let parse_iso_ms (s : string) : int =
@@ -260,7 +297,7 @@ let make_plan_id (plan : json_val) : string =
       let joined =
         String.concat "-" (List.map (fun nd -> short_name (get_str nd "name") 4) rest)
       in
-      String.sub joined 0 (min 16 (String.length joined))
+      utf16_prefix joined 16
     | _ -> "RX"
   in
   if get_int ~default:1 plan "v" >= 3 then

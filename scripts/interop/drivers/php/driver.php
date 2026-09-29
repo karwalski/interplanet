@@ -16,12 +16,14 @@ $plan->nodes = [
     new LtxNode(id: 'N1', name: 'Mars Hab-01', role: 'PARTICIPANT', delay: 840, location: 'mars'),
     new LtxNode(id: 'N2', name: 'L-1 Gateway', role: 'PARTICIPANT', delay: 2, location: 'moon'),
 ];
-// LtxSegmentTemplate has no speaker/label, so attributed segments cannot be built.
-$plan->segments = array_map(
-    fn($s) => new LtxSegmentTemplate(type: $s[0], q: $s[1]),
-    [['PLAN_CONFIRM', 2], ['TX', 3], ['RX', 3], ['TX', 2], ['BUFFER', 1]]
-);
-echo "NOTE typed LtxSegmentTemplate has no speaker/label; no typed v3 upgrade\n";
+$plan->segments = [
+    new LtxSegmentTemplate(type: 'PLAN_CONFIRM', q: 2),
+    new LtxSegmentTemplate(type: 'TX', q: 3, speaker: 'N0', label: 'Ouverture: état de la mission'),
+    new LtxSegmentTemplate(type: 'RX', q: 3),
+    new LtxSegmentTemplate(type: 'TX', q: 2, speaker: 'N1', label: 'Réponse 🔴'),
+    new LtxSegmentTemplate(type: 'BUFFER', q: 1),
+];
+echo "NOTE no typed v3 upgrade\n";
 
 $token = substr(L::encodeHash($plan), 3);
 file_put_contents("$outDir/wire-v2.json", base64_decode(strtr($token, '-_', '+/')));
