@@ -18,6 +18,13 @@ final class JsJson
 {
     private function __construct() {}
 
+    /**
+     * One or more characters of ECMAScript \s (WhiteSpace and LineTerminator,
+     * ES2024 §12.2 and §12.3), as a PCRE pattern for UTF-8 strings.
+     */
+    public const WHITESPACE = '/[\x{0009}-\x{000D}\x{0020}\x{00A0}\x{1680}\x{2000}-\x{200A}'
+        . '\x{2028}\x{2029}\x{202F}\x{205F}\x{3000}\x{FEFF}]+/u';
+
     /** Format a number exactly as JavaScript's JSON.stringify does. */
     public static function number(int|float $x): string
     {
@@ -49,11 +56,58 @@ final class JsJson
         return $sign . $digits[0] . '.' . substr($digits, 1) . 'e' . $es;
     }
 
-    /** Quote a string exactly as JavaScript's JSON.stringify does. */
+    /**
+     * Quote a string exactly as JavaScript's JSON.stringify does.
+     *
+     * With these flags json_encode escapes as JSON.stringify does (\b \t \n
+     * \f \r, other C0 controls as lowercase \u00xx, no escaping of "/", DEL
+     * or U+2028/U+2029). A UTF-8 string cannot hold a lone UTF-16 surrogate,
+     * but a WTF-8 string can (bytes ED A0..BF xx); JSON.stringify writes a lone
+     * surrogate as a lowercase \udxxx escape, and so does this.
+     */
     public static function string(string $s): string
     {
-        return json_encode($s, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
-            | JSON_UNESCAPED_LINE_TERMINATORS | JSON_THROW_ON_ERROR);
+        if (mb_check_encoding($s, 'UTF-8')) {
+            return json_encode($s, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+                | JSON_UNESCAPED_LINE_TERMINATORS | JSON_THROW_ON_ERROR);
+        }
+        return self::wtf8String($s);
+    }
+
+    /**
+     * JSON.stringify of a string that is not valid UTF-8: decode it as WTF-8
+     * (lone surrogates escaped, a CESU-8 surrogate pair joined into one code
+     * point); any other invalid byte throws.
+     */
+    private static function wtf8String(string $s): string
+    {
+        $out = '"';
+        $text = '';
+        $len = strlen($s);
+        for ($i = 0; $i < $len; $i += $n) {
+            $b = ord($s[$i]);
+            $n = $b < 0x80 ? 1 : ($b >= 0xF0 ? 4 : ($b >= 0xE0 ? 3 : 2));
+            $chunk = substr($s, $i, $n);
+            if (strlen($chunk) === $n && mb_check_encoding($chunk, 'UTF-8')) {
+                $text .= $chunk;
+            } elseif ($n === 3 && strlen($chunk) === 3 && $b === 0xED
+                && (ord($chunk[1]) & 0xE0) === 0xA0 && (ord($chunk[2]) & 0xC0) === 0x80) {
+                $unit = 0xD000 | ((ord($chunk[1]) & 0x3F) << 6) | (ord($chunk[2]) & 0x3F);
+                $next = substr($s, $i + 3, 3);
+                if ($unit < 0xDC00 && strlen($next) === 3 && ord($next[0]) === 0xED
+                    && (ord($next[1]) & 0xF0) === 0xB0 && (ord($next[2]) & 0xC0) === 0x80) {
+                    $low = 0xD000 | ((ord($next[1]) & 0x3F) << 6) | (ord($next[2]) & 0x3F);
+                    $text .= mb_chr(0x10000 + (($unit - 0xD800) << 10) + ($low - 0xDC00), 'UTF-8');
+                    $n = 6;
+                } else {
+                    $out .= substr(self::string($text), 1, -1) . sprintf('\\u%04x', $unit);
+                    $text = '';
+                }
+            } else {
+                throw new \JsonException('Malformed UTF-8 characters, possibly incorrectly encoded');
+            }
+        }
+        return $out . substr(self::string($text), 1, -1) . '"';
     }
 
     /** True for a JSON object value (stdClass or non-list array). */

@@ -40,15 +40,12 @@ class LtxPlan
                 'delay'    => $n->delay,
                 'location' => $n->location,
             ], $this->nodes),
-            'segments' => array_map(fn(LtxSegmentTemplate $s) => [
-                'type' => $s->type,
-                'q'    => $s->q,
-            ], $this->segments),
+            'segments' => array_map(fn(LtxSegmentTemplate $s) => $s->toArray(), $this->segments),
         ];
 
-        /* JSON_UNESCAPED_SLASHES matches JS JSON.stringify (no \/ escaping).
-           JSON_UNESCAPED_UNICODE matches JS behaviour for non-ASCII chars.  */
-        return json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        /* JsJson::stringify is JSON.stringify: unlike json_encode it leaves
+           U+2028/U+2029 unescaped and escapes lone surrogates as \udxxx. */
+        return JsJson::stringify($data);
     }
 
     /**
@@ -80,10 +77,10 @@ class LtxPlan
         }
 
         if (isset($data['segments']) && is_array($data['segments'])) {
-            $plan->segments = array_map(fn(array $s) => new LtxSegmentTemplate(
-                type: (string)($s['type'] ?? 'TX'),
-                q:    (int)($s['q']    ?? 2),
-            ), $data['segments']);
+            $plan->segments = array_map(
+                fn(array $s) => LtxSegmentTemplate::fromArray($s),
+                $data['segments']
+            );
         }
 
         return $plan;

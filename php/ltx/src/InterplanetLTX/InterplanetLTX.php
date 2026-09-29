@@ -81,10 +81,10 @@ class InterplanetLTX
         }
 
         if (isset($config['segments']) && is_array($config['segments'])) {
-            $plan->segments = array_map(fn(array $s) => new LtxSegmentTemplate(
-                type: (string)($s['type'] ?? 'TX'),
-                q:    (int)($s['q']    ?? 2),
-            ), $config['segments']);
+            $plan->segments = array_map(
+                fn(array $s) => LtxSegmentTemplate::fromArray($s),
+                $config['segments']
+            );
         }
 
         return $plan;
@@ -199,11 +199,20 @@ class InterplanetLTX
         return PlanValidator::validate($plan);
     }
 
-    /** (name || default).replace(/\s+/g, '').toUpperCase().slice(0, n) */
+    /**
+     * (name || default).replace(/\s+/g, '').toUpperCase().slice(0, n), with
+     * JavaScript's \s (PCRE's /\s/u also strips U+0085 and keeps U+FEFF).
+     */
+    /** ICS node id: name.replace(/\s+/g, '-').toUpperCase() (ltx-sdk.js toId). */
+    private static function icsNodeId(string $name): string
+    {
+        return mb_strtoupper(preg_replace(JsJson::WHITESPACE, '-', $name), 'UTF-8');
+    }
+
     private static function idPart(mixed $name, int $n, string $default): string
     {
         $s = (is_string($name) && $name !== '') ? $name : $default;
-        return JsJson::utf16Slice(mb_strtoupper(preg_replace('/\s+/u', '', $s), 'UTF-8'), $n);
+        return JsJson::utf16Slice(mb_strtoupper(preg_replace(JsJson::WHITESPACE, '', $s), 'UTF-8'), $n);
     }
 
     /**
@@ -338,12 +347,12 @@ class InterplanetLTX
         $lines[] = "LTX-MODE:{$plan->mode}";
 
         foreach ($plan->nodes as $node) {
-            $nid     = strtoupper(str_replace([' ', "\t"], '-', $node->name));
+            $nid     = self::icsNodeId($node->name);
             $lines[] = "LTX-NODE:ID={$nid};ROLE={$node->role}";
         }
 
         foreach (array_slice($plan->nodes, 1) as $node) {
-            $nid     = strtoupper(str_replace([' ', "\t"], '-', $node->name));
+            $nid     = self::icsNodeId($node->name);
             $d       = $node->delay;
             $lines[] = "LTX-DELAY;NODEID={$nid}:ONEWAY-MIN={$d};ONEWAY-MAX=" . ($d + 120) . ";ONEWAY-ASSUMED={$d}";
         }
@@ -352,7 +361,7 @@ class InterplanetLTX
 
         foreach ($plan->nodes as $node) {
             if ($node->location === 'mars') {
-                $nid     = strtoupper(str_replace([' ', "\t"], '-', $node->name));
+                $nid     = self::icsNodeId($node->name);
                 $lines[] = "LTX-LOCALTIME:NODE={$nid};SCHEME=LMST;PARAMS=LONGITUDE:0E";
             }
         }
