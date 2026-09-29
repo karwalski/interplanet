@@ -158,7 +158,7 @@ const FORMATS = {
 
 // Files that carry a generated block (between the BEGIN/END marker lines).
 const TARGETS = {
-  c: 'c/ltx/src/itx_upper.c',
+  c: 'c/ltx/src/itx_plan_json.c',
   ocaml: 'ocaml/ltx/lib/interplanet_ltx.ml',
   r: 'r/ltx/R/upper_table.R',
   lua: 'lua/ltx/src/interplanet_ltx.lua',

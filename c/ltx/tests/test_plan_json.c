@@ -216,6 +216,63 @@ int main(int argc, char **argv) {
     free(v2);
     itx_json_free(golden);
 
+    /* ── planId prefix vectors (spec/golden/plan-id-prefixes.json) ─────
+     * Unicode upper-casing and UTF-16 slicing of HOSTSTR / NODESTR (issue
+     * #37). C strings hold a lone surrogate as WTF-8 (as the JSON parser
+     * gives one), so the expected id is the planIdWtf8Hex bytes. */
+    SECTION("planId prefix vectors");
+    {
+        char *ptext = read_file("../../spec/golden/plan-id-prefixes.json");
+        itx_json_t *pg = ptext ? itx_json_parse(ptext) : NULL;
+        free(ptext);
+        CHECK("prefix vectors parsed", pg != NULL);
+        const itx_json_t *pv = pg ? itx_json_get(pg, "vectors") : NULL;
+        CHECK("prefix vectors present", pv && itx_json_len(pv) >= 18);
+        for (size_t i = 0; pv && i < itx_json_len(pv); i++) {
+            const itx_json_t *gv = itx_json_at(pv, i);
+            const itx_json_t *plan = itx_json_get(gv, "plan");
+            const char *name = itx_json_str(itx_json_get(gv, "name"));
+            const char *hex = itx_json_str(itx_json_get(gv, "planIdWtf8Hex"));
+            char want[ITX_PLAN_ID_LEN], id[ITX_PLAN_ID_LEN], id2[ITX_PLAN_ID_LEN], tid[ITX_PLAN_ID_LEN], label[200];
+            size_t hl = strlen(hex);
+            for (size_t k = 0; k + 1 < hl && k / 2 < sizeof(want) - 1; k += 2) {
+                unsigned b;
+                sscanf(hex + k, "%2x", &b);
+                want[k / 2] = (char)b;
+            }
+            want[hl / 2] = '\0';
+            int rc = itx_make_plan_id_value(plan, id);
+            snprintf(label, sizeof(label), "prefix planId %s", name);
+            if (rc != 0 || strcmp(id, want) != 0) printf("  got %s\n", rc == 0 ? id : "(error)");
+            CHECK(label, rc == 0 && strcmp(id, want) == 0);
+            char *plan_text = itx_json_stringify(plan);
+            snprintf(label, sizeof(label), "prefix planId from text %s", name);
+            CHECK(label, itx_make_plan_id_json(plan_text, id2) == 0 && strcmp(id2, want) == 0);
+            free(plan_text);
+            /* Typed itx_plan_t (nodes first, fixed fields): same prefix. */
+            itx_plan_t p;
+            itx_create_plan(&p, itx_json_str(itx_json_get(plan, "title")), itx_json_str(itx_json_get(plan, "start")), 0);
+            const itx_json_t *nodes = itx_json_get(plan, "nodes");
+            p.node_count = (int)itx_json_len(nodes);
+            for (int k = 0; k < p.node_count && k < ITX_MAX_NODES; k++) {
+                const itx_json_t *n = itx_json_at(nodes, (size_t)k);
+                double d = 0;
+                itx_json_num(itx_json_get(n, "delay"), &d);
+                snprintf(p.nodes[k].id, sizeof(p.nodes[k].id), "%s", itx_json_str(itx_json_get(n, "id")));
+                snprintf(p.nodes[k].name, sizeof(p.nodes[k].name), "%s", itx_json_str(itx_json_get(n, "name")));
+                snprintf(p.nodes[k].role, sizeof(p.nodes[k].role), "%s", itx_json_str(itx_json_get(n, "role")));
+                snprintf(p.nodes[k].location, sizeof(p.nodes[k].location), "%s", itx_json_str(itx_json_get(n, "location")));
+                p.nodes[k].delay = (int)d;
+            }
+            itx_make_plan_id(&p, tid);
+            size_t tl = strlen(tid), wl = strlen(want);
+            snprintf(label, sizeof(label), "prefix typed make_plan_id %s", name);
+            if (!(tl == wl && strncmp(tid, want, wl - 12) == 0)) printf("  got %s\n", tid);
+            CHECK(label, tl == wl && strncmp(tid, want, wl - 12) == 0);
+        }
+        itx_json_free(pg);
+    }
+
     printf("\n==========================================\n");
     printf("%d passed  %d failed\n", passed, failed);
     return failed > 0 ? 1 : 0;
