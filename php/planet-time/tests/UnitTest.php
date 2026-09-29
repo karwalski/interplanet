@@ -83,7 +83,8 @@ class ConstantsTest extends TestCase
 
     public function testLeapSecondsLast(): void
     {
-        $last = end(Constants::LEAP_SECONDS);
+        $ls   = Constants::LEAP_SECONDS;
+        $last = end($ls);
         $this->assertSame(37, $last[1]);
     }
 }
