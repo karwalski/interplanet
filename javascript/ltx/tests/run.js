@@ -642,6 +642,26 @@ const bcbEnc1 = ltx.encryptWindow({ x: 1 }, bcbKey);
 const bcbEnc2 = ltx.encryptWindow({ x: 1 }, bcbKey);
 check('nonce_uniqueness',                  bcbEnc1.nonce !== bcbEnc2.nonce);
 
+// ── Conformance: golden planId vectors (spec/golden/plan-ids.json) ─────────
+
+console.log('\n── Conformance: golden planId vectors ───────');
+const golden = require('../../../spec/golden/plan-ids.json');
+check('golden vectors present',            golden.vectors.length >= 9);
+for (const gv of golden.vectors) {
+  check(`golden planId ${gv.name}`,        ltx.makePlanId(gv.plan) === gv.planId);
+  if (gv.planHash !== undefined) {
+    check(`golden planHash ${gv.name}`,    ltx.planHash(gv.plan) === gv.planHash);
+  }
+}
+// Hard-coded anchors: regenerating the vector file must never move these.
+const gvByName = Object.fromEntries(golden.vectors.map(gv => [gv.name, gv]));
+check('golden v2 freeze anchor',           gvByName['v2-freeze-check'].planId === 'LTX-20260801-EARTHHQ-MARS-v2-d132e85d');
+check('golden v2 unicode anchor',          gvByName['v2-unicode-title'].planId === 'LTX-20261231-EARTHHQ-MARS-v2-7bc93af8');
+check('golden v2 order-sensitive',         gvByName['v2-createPlan-default'].planId !== gvByName['v2-key-order-sensitive'].planId);
+check('golden v3 order-insensitive',       gvByName['v3-upgrade-delays'].planId === gvByName['v3-key-order-insensitive'].planId);
+check('golden v3 amendment chain hash',    gvByName['v3-amendment'].plan.prevPlanHash === gvByName['v3-upgrade-delays'].planHash);
+check('createPlan default quantum is 5',   ltx.createPlan({}).quantum === 5 && ltx.DEFAULT_QUANTUM === 5);
+
 // ── Security Suite (§22.1 — Story 28.10) ──────────────────────────────────
 
 const secSuite = require('./security_suite');

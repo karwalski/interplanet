@@ -1372,6 +1372,18 @@ check('viewer ICS has DTSTARTs',       icsShift.length === confPlan.segments.len
 const icsV3 = ltx.generateICS(confV3, { viewerNodeId: 'N1' });
 check('viewer ICS pair lines',         icsV3.includes('LTX-DELAY;PAIR=N1|N3:ONEWAY-ASSUMED=700'));
 
+// ── Conformance: golden planId vectors (spec/golden/plan-ids.json) ─────────
+
+console.log('\n── golden planId vectors ────────────────────');
+const golden = require('../../../spec/golden/plan-ids.json');
+check('golden vectors present',        golden.vectors.length >= 9);
+for (const gv of golden.vectors) {
+  check(`golden planId ${gv.name}`,    ltx.makePlanId(gv.plan) === gv.planId);
+  if (gv.planHash !== undefined) {
+    check(`golden planHash ${gv.name}`, ltx.planHash(gv.plan) === gv.planHash);
+  }
+}
+
 // ── Summary ────────────────────────────────────────────────────────────────
 
 console.log('\n══════════════════════════════════════════');

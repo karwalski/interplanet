@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://interplanet.live/spec/ltx-schema.json",
+  "title": "LtxPlan",
+  "description": "LTX v1.1 SessionPlan wire format (docs/LTX-SPECIFICATION.md section 4). A plan is either v2 (section 4.1, frozen imul31 planId) or v3 (section 4.4, strictly additive, SHA-256 planId). Derived from createPlan / upgradeConfig / upgradePlanToV3 in javascript/ltx/ltx-sdk.js and LtxPlan / LtxPlanV3 in typescript/ltx/src/types.ts. Unknown top-level fields are tolerated (legacy v1 fields such as txName survive upgradeConfig) but, like every field, they are covered by the planId hash. Golden planId vectors: spec/golden/plan-ids.json.",
+  "oneOf": [
+    { "$ref": "#/$defs/planV2" },
+    { "$ref": "#/$defs/planV3" }
+  ],
+  "$defs": {
+    "nodeId": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^|]+$",
+      "description": "Node identifier (e.g. \"N0\"). MUST NOT contain '|', the pair-delay key separator (section 3.7.2)."
+    },
+    "node": {
+      "type": "object",
+      "description": "A participating site (section 3.1).",
+      "required": ["id", "name", "role", "delay", "location"],
+      "properties": {
+        "id":       { "$ref": "#/$defs/nodeId" },
+        "name":     { "type": "string", "minLength": 1 },
+        "role":     { "enum": ["HOST", "PARTICIPANT", "OBSERVER"] },
+        "delay":    { "type": "number", "minimum": 0, "description": "One-way delay in seconds from HOST to this node (section 3.7.1)." },
+        "location": { "type": "string", "description": "Location key, e.g. \"earth\", \"mars\", \"moon\"." }
+      }
+    },
+    "hostNode": {
+      "allOf": [{ "$ref": "#/$defs/node" }],
+      "properties": {
+        "role":  { "const": "HOST" },
+        "delay": { "const": 0 }
+      }
+    },
+    "segment": {
+      "type": "object",
+      "description": "Segment template (section 3.4). Core types MUST be supported; SPEAK, REST, PAD, OPEN and RELAY are auxiliary types handled by the reference SDKs.",
+      "required": ["type", "q"],
+      "properties": {
+        "type":    { "enum": ["PLAN_CONFIRM", "TX", "RX", "CAUCUS", "BUFFER", "MERGE", "SPEAK", "REST", "PAD", "OPEN", "RELAY"] },
+        "q":       { "type": "integer", "minimum": 1, "description": "Duration in quanta." },
+        "speaker": { "$ref": "#/$defs/nodeId", "description": "Presenting node id for an attributed TX/SPEAK segment (section 3.4.1)." },
+        "label":   { "type": "string", "description": "Agenda title (section 3.4.1)." }
+      }
+    },
+    "relay": {
+      "type": "object",
+      "description": "Optional LTX-RELAY transport configuration (section 4.1.1). The relay is never a node.",
+      "properties": {
+        "endpoint":        { "type": "string", "description": "Relay server base URL." },
+        "tls_fingerprint": { "type": "string", "description": "Pre-agreed shared secret used to authenticate relay frames." },
+        "delay_mode":      { "enum": ["oneway", "roundtrip"], "default": "oneway" }
+      }
+    },
+    "planCommon": {
+      "type": "object",
+      "required": ["v", "title", "start", "quantum", "mode", "nodes", "segments"],
+      "properties": {
+        "title":   { "type": "string" },
+        "start":   { "type": "string", "format": "date-time", "description": "ISO 8601 UTC session start." },
+        "quantum": { "type": "integer", "minimum": 1, "maximum": 60, "default": 5, "description": "Minutes per quantum (section 3.2). Normative default 5." },
+        "mode":    { "enum": ["LTX", "LTX-LIVE", "LTX-RELAY", "LTX-ASYNC"], "description": "'LTX' is a permanent alias of 'LTX-LIVE' (section 3.6)." },
+        "nodes": {
+          "type": "array",
+          "minItems": 1,
+          "prefixItems": [{ "$ref": "#/$defs/hostNode" }],
+          "items": { "$ref": "#/$defs/node" },
+          "contains": { "type": "object", "properties": { "role": { "const": "HOST" } }, "required": ["role"] },
+          "minContains": 1,
+          "maxContains": 1,
+          "description": "Exactly one HOST, first, with delay 0 (section 3.1)."
+        },
+        "segments": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/segment" }
+        },
+        "relay":     { "$ref": "#/$defs/relay" }
+      }
+    },
+    "planV2": {
+      "title": "LtxPlan v2",
+      "description": "Section 4.1. v3 fields MUST NOT appear in a v2 plan (section 4.3): the frozen planId hash is insertion-order-sensitive.",
+      "allOf": [{ "$ref": "#/$defs/planCommon" }],
+      "properties": {
+        "v":            { "const": 2 },
+        "delays":       false,
+        "planVersion":  false,
+        "prevPlanHash": false,
+        "questions":    false,
+        "actions":      false,
+        "streams":      false
+      }
+    },
+    "planV3": {
+      "title": "LtxPlan v3",
+      "description": "Section 4.4. A v2 plan with v: 3 and optional additive fields.",
+      "allOf": [{ "$ref": "#/$defs/planCommon" }],
+      "properties": {
+        "v": { "const": 3 },
+        "delays": {
+          "type": "object",
+          "description": "Pair-wise one-way delays in seconds (section 3.7.2). Keys are two node ids joined by '|' in lexicographically sorted order; sort order is not expressible in JSON Schema and is checked by validatePlan().",
+          "propertyNames": { "pattern": "^[^|]+\\|[^|]+$" },
+          "additionalProperties": { "type": "number", "minimum": 0 }
+        },
+        "planVersion":  { "type": "integer", "minimum": 1, "default": 1 },
+        "prevPlanHash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "questions":    { "type": "array", "description": "Question seeds (section 9.2)." },
+        "actions":      { "type": "array", "description": "Action register seeds (section 10)." },
+        "streams":      { "type": "array", "maxItems": 0, "description": "RESERVED (section 3.5). MUST be absent or empty." }
+      }
+    }
+  }
+}

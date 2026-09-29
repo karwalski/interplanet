@@ -4,7 +4,9 @@
 
 **Document status:** v1.1 — 2026-07-07
 **Companion documents:**
-- `spec/ltx-spec.md` — normative wire format (LtxPlan schema, hash algorithm, ICS properties, relay config, REST/MCP APIs)
+- `spec/ltx-schema.json`: normative wire format, JSON Schema (draft 2020-12) for v2 and v3 LtxPlans (§4)
+- `spec/golden/plan-ids.json`: conformance golden vectors, plan JSON → v2 and v3 planIds (§4.3, §4.5)
+- `docs/RFC5545-EXTENSION.md`: iCalendar properties used by LTX calendar export (`LTX-DELAY`, `LTX-PLANID`, …)
 - `docs/LTX-SECURITY.md` v1.1 — security architecture (normative where it overlaps §13 / Appendix A)
 
 **Changelog v1.0 → v1.1**
@@ -83,16 +85,15 @@ Examples include planetary bases, orbital stations, spacecraft, and Earth-based 
 - **PARTICIPANT** — A node that transmits and receives within the session plan.
 - **OBSERVER** — A passive node. Receives all transmissions but does not transmit.
 
-> **Change from v1.0:** the v1.0 roles `RELAY` and `RECEIVE-ONLY` are withdrawn as *plan* roles. `OBSERVER` replaces `RECEIVE-ONLY`. Store-and-forward relaying is a **transport function** performed by DTN relay infrastructure (see `spec/ltx-spec.md` §9, DTN Relay Config), not a session participant; relays are untrusted by design (LTX-SECURITY §3.4) and never appear in `nodes[]`.
+> **Change from v1.0:** the v1.0 roles `RELAY` and `RECEIVE-ONLY` are withdrawn as *plan* roles. `OBSERVER` replaces `RECEIVE-ONLY`. Store-and-forward relaying is a **transport function** performed by DTN relay infrastructure (see §4.1.1, Relay Configuration), not a session participant; relays are untrusted by design (LTX-SECURITY §3.4) and never appear in `nodes[]`.
 
 ## 3.2 Quantum (Q)
 Smallest scheduling unit.
 Default: **5 minutes** (reference SDKs' `DEFAULT_QUANTUM`; all demo templates).
 Configurable per session (1–60 minutes).
 
-> Known divergence at v1.1 publication: the Python port defaults to 3 and
-> `spec/ltx-spec.md` §2.1 states 3. Both are wrong relative to the reference
-> implementations and are tracked as a bug; 5 is normative.
+> Known divergence at v1.1 publication: the Python port defaulted to 3 (bug
+> B12, since fixed). 5 is normative for every port.
 
 ## 3.3 Window (W)
 Contiguous set of quanta.
@@ -109,7 +110,7 @@ Core types (every implementation MUST support):
 - **BUFFER** – Timing slack window to absorb propagation variance and scheduling drift. BUFFER segments are declared in the plan at authoring time; they are never inserted into a locked plan in place (§6.4).
 - **MERGE** – Reintegration phase; consolidates artefacts and registers into the plenary record (§8).
 
-Auxiliary types (implemented; see `spec/ltx-spec.md` §4.2): **SPEAK** (general speaking window, multi-party round-robin), **REST**, **PAD**, **OPEN**.
+Auxiliary types (implemented by the reference SDKs; enumerated in `spec/ltx-schema.json`): **SPEAK** (general speaking window, multi-party round-robin), **RELAY** (multi-party hand-off window assigned to the next speaker; a segment type, unrelated to the withdrawn `RELAY` node role of §3.1), **REST**, **PAD**, **OPEN**.
 
 ### 3.4.1 Attributed Segments
 
@@ -155,7 +156,7 @@ Structure: `PLAN_CONFIRM → TX → RX → [CAUCUS] → TX → RX → MERGE`
 - Enables controlled testing and rehearsal without actual planetary distances.
 - The relay introduces exactly the declared `ONEWAY-ASSUMED` delay before delivery.
 - From the nodes' perspective, behaviour is indistinguishable from LTX-LIVE at the same delay.
-- Relay configuration is carried in the plan's optional `relay` object (`spec/ltx-spec.md` §9) — the relay is not a node (§3.1).
+- Relay configuration is carried in the plan's optional `relay` object (§4.1.1); the relay is not a node (§3.1).
 
 ### LTX-ASYNC
 
@@ -213,13 +214,13 @@ The sum fallback is a deliberate **conservative upper bound** (triangle inequali
 
 ### 3.7.4 Delay bounds
 
-Where delay variance matters (long sessions, moving spacecraft), the SessionPlan SHOULD size segments against the worst-case delay over the session duration (see §6.3). The declared value used for scheduling is referred to as `ONEWAY-ASSUMED` in ICS exports (`spec/ltx-spec.md` §8); v3 pair entries export as `LTX-DELAY;PAIR=` properties.
+Where delay variance matters (long sessions, moving spacecraft), the SessionPlan SHOULD size segments against the worst-case delay over the session duration (see §6.3). The declared value used for scheduling is referred to as `ONEWAY-ASSUMED` in ICS exports (`LTX-DELAY` property, `docs/RFC5545-EXTENSION.md` §5.4); v3 pair entries export as `LTX-DELAY;PAIR=` properties, one per matrix entry, whose `PAIR` parameter value is the sorted matrix key (e.g. `LTX-DELAY;PAIR=N1|N2:ONEWAY-ASSUMED=890`).
 
 ---
 
 # 4. SessionPlan Specification
 
-Each LTX session is governed by a canonical SessionPlan document (the **LtxPlan**). The normative wire format is `spec/ltx-spec.md`; this section defines the protocol-level rules.
+Each LTX session is governed by a canonical SessionPlan document (the **LtxPlan**). The normative wire format is the JSON Schema `spec/ltx-schema.json`; this section defines the protocol-level rules.
 
 ## 4.1 v2 Schema (current, normative)
 
@@ -228,7 +229,7 @@ Each LTX session is governed by a canonical SessionPlan document (the **LtxPlan*
   "v": 2,
   "title": "Earth-Mars Plenary Q1 Review",
   "start": "2026-03-15T14:00:00.000Z",
-  "quantum": 3,
+  "quantum": 5,
   "mode": "LTX-ASYNC",
   "nodes": [
     { "id": "N0", "name": "Earth HQ",    "role": "HOST",        "delay": 0,   "location": "earth" },
@@ -243,7 +244,19 @@ Each LTX session is governed by a canonical SessionPlan document (the **LtxPlan*
 }
 ```
 
-Required fields: `v`, `title`, `start` (ISO 8601 UTC), `quantum` (minutes), `mode`, `nodes[]` (HOST first), `segments[]`. Optional: `relay` (relay-mode config), and per-segment `speaker`/`label` (§3.4.1).
+Required fields: `v`, `title`, `start` (ISO 8601 UTC), `quantum` (minutes), `mode`, `nodes[]` (HOST first), `segments[]`. Optional: `relay` (relay-mode config, §4.1.1), and per-segment `speaker`/`label` (§3.4.1).
+
+### 4.1.1 Relay Configuration
+
+LTX-RELAY plans (§3.6) MAY carry an optional `relay` object. All fields are optional strings:
+
+| Field | Purpose |
+|---|---|
+| `endpoint` | Base URL of the DTN relay server. |
+| `tls_fingerprint` | Pre-agreed shared secret with which nodes authenticate frames to the relay. |
+| `delay_mode` | `"oneway"` (default) or `"roundtrip"`. |
+
+`relay` is part of the plan, so it is covered by the planId hash and the plan signature. The relay itself is never a node (§3.1).
 
 > **Withdrawn (v1.0 §4.1):** `planId`, `startEpochUTC`, `delayMatrix`, `streams[]`, `questions[]`, `actions[]` were listed as required fields in v1.0 but never shipped. The planId is *derived from* the plan (§4.3), not stored in it. `streams` remains reserved (§3.5). Pair delays, questions and actions return as **optional v3 fields** (§4.4).
 
@@ -262,7 +275,15 @@ planId = "LTX-" + YYYYMMDD(start)
        + "-v2-" + hex8( imul31(JSON.stringify(upgradedConfig)) )
 ```
 
-where `imul31` is the 32-bit polynomial hash defined in `spec/ltx-spec.md` §7. This algorithm is **frozen byte-for-byte**: every shipped SDK, the demo, the relay server, and the conformance golden vectors depend on it.
+where `upgradedConfig` is the plan after v1 → v2 upgrade (unchanged for v2 plans), `hex8` is lowercase hex zero-padded to 8 digits, and `imul31` is the 32-bit polynomial hash over the **UTF-16 code units** of the string:
+
+```
+h = 0
+for each UTF-16 code unit c of s:
+    h = (imul(31, h) + c) mod 2^32      // imul = 32-bit wrapping multiply
+```
+
+`HOSTSTR` is the HOST name with whitespace removed, upper-cased, truncated to 8 characters (`"HOST"` if absent). `NODESTR` is each non-HOST node name with whitespace removed, upper-cased and truncated to 4 characters, joined by `-` and truncated to 16 characters (`"RX"` for a single-node plan). This algorithm is **frozen byte-for-byte**: every shipped SDK, the demo, the relay server, and the conformance golden vectors (`spec/golden/plan-ids.json`) depend on it.
 
 Because `JSON.stringify` is insertion-order-sensitive, **adding any field to a v2 plan changes its planId**. Therefore:
 
@@ -297,7 +318,7 @@ planId = "LTX-" + YYYYMMDD(start)
 ## 4.6 Schema ↔ code checklist
 
 Normative sources of truth, in precedence order:
-1. `spec/ltx-spec.md` + `spec/ltx-schema.json` (wire format)
+1. `spec/ltx-schema.json` (wire format) and the golden vectors `spec/golden/plan-ids.json` (planId algorithms)
 2. Reference types: `typescript/ltx/src/types.ts` (`LtxPlan`, `LtxNode`, `SegmentTemplate`)
 3. This document (protocol semantics)
 
@@ -610,7 +631,7 @@ Opening slots are the most valuable (freshest audience, best local time for the 
 
 ## 14.5 Per-Attendee Calendar Export
 
-Conference ICS export MUST support a per-attendee form: for viewer V, each attributed segment exports as an event at `arrival(V)` (§14.3) in V's frame, with the speaker and label in the summary. Pair delays used for the derivation are exported as `LTX-DELAY;PAIR=` properties (`spec/ltx-spec.md` §8). The default (no-viewer) export remains the HOST-frame single-event form.
+Conference ICS export MUST support a per-attendee form: for viewer V, each attributed segment exports as an event at `arrival(V)` (§14.3) in V's frame, with the speaker and label in the summary. Pair delays used for the derivation are exported as `LTX-DELAY;PAIR=` properties (§3.7.4; `docs/RFC5545-EXTENSION.md` §5.4). The default (no-viewer) export remains the HOST-frame single-event form.
 
 ## 14.6 Topologies and Multi-Day Conferences
 

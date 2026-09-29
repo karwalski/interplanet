@@ -142,7 +142,7 @@
    * @param {object} opts
    * @param {string}   [opts.title]            Session title
    * @param {string}   [opts.start]            ISO 8601 UTC start time (default: 5 min from now)
-   * @param {number}   [opts.quantum]          Minutes per quantum (default: 3)
+   * @param {number}   [opts.quantum]          Minutes per quantum (default: DEFAULT_QUANTUM = 5)
    * @param {string}   [opts.mode]             Protocol mode (default: 'LTX')
    * @param {object[]} [opts.nodes]            Explicit node list (overrides hostName/remoteName)
    * @param {string}   [opts.hostName]         Host node name (default: 'Earth HQ')
