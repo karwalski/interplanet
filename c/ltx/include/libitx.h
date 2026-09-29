@@ -26,8 +26,8 @@ extern "C" {
 #define ITX_MAX_STR       256    /**< Max string field length */
 #define ITX_PLAN_ID_LEN   128    /**< Plan ID buffer size (non-ASCII names take up to 3 bytes per UTF-16 unit) */
 #define ITX_HASH_BUF      21856  /**< encodeHash output buffer size ("#l=" + base64 of ITX_JSON_BUF bytes) */
-#define ITX_ICS_BUF       8192   /**< generateICS output buffer size */
-#define ITX_URL_BUF       1024   /**< Per-node URL buffer size */
+#define ITX_ICS_BUF       16384  /**< generateICS output buffer size (a full plan needs about 12.7 KB) */
+#define ITX_URL_BUF       (ITX_HASH_BUF + 576) /**< Per-node URL buffer size: base URL (up to 511 bytes) + "?node=" + id + the whole hash */
 #define ITX_JSON_BUF      16384  /**< Largest wire JSON encoded or decoded */
 
 /* ── Structs ─────────────────────────────────────────────────────────────── */

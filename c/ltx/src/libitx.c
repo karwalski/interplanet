@@ -37,6 +37,13 @@ static void _strlcpy(char *dst, const char *src, size_t n) {
     dst[i] = '\0';
 }
 
+/* Append src to the NUL-terminated dst of total size n, truncating. */
+static void _strlcat(char *dst, const char *src, size_t n) {
+    size_t len = strlen(dst);
+    if (len + 1 >= n) return;
+    _strlcpy(dst + len, src, n - len);
+}
+
 /* Base64 character table */
 static const char _b64chars[] =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -470,10 +477,11 @@ void itx_generate_ics(const itx_plan_t *plan, char *buf) {
     _fmt_ical_dt((long long)time(NULL) * 1000LL, dt_stamp);
 
     /* Build segment template string */
-    char seg_tpl[256] = "";
-    for (int i = 0; i < plan->seg_count; i++) {
-        if (i > 0) strcat(seg_tpl, ",");
-        strcat(seg_tpl, plan->segments[i].type);
+    /* Sized for a full plan: ITX_MAX_SEGMENTS types, ITX_MAX_NODES names. */
+    char seg_tpl[ITX_MAX_SEGMENTS * 33] = "";
+    for (int i = 0; i < plan->seg_count && i < ITX_MAX_SEGMENTS; i++) {
+        if (i > 0) _strlcat(seg_tpl, ",", sizeof(seg_tpl));
+        _strlcat(seg_tpl, plan->segments[i].type, sizeof(seg_tpl));
     }
 
     const itx_node_t *host = plan->node_count > 0 ? &plan->nodes[0] : NULL;
@@ -481,24 +489,30 @@ void itx_generate_ics(const itx_plan_t *plan, char *buf) {
     if (host) _strlcpy(host_name, host->name, ITX_MAX_STR);
 
     /* Build participant names and delay description */
-    char part_names[512] = "remote nodes";
-    char delay_desc[512] = "no participant delay configured";
-    if (plan->node_count > 1) {
+    char part_names[ITX_MAX_NODES * (ITX_MAX_STR + 2)] = "remote nodes";
+    char delay_desc[ITX_MAX_NODES * (ITX_MAX_STR + 32)] = "no participant delay configured";
+    int node_count = plan->node_count < ITX_MAX_NODES ? plan->node_count : ITX_MAX_NODES;
+    if (node_count > 1) {
         part_names[0] = '\0';
         delay_desc[0] = '\0';
-        for (int i = 1; i < plan->node_count; i++) {
-            if (i > 1) { strcat(part_names, ", "); strcat(delay_desc, " . "); }
-            strcat(part_names, plan->nodes[i].name);
-            char tmp[128];
+        for (int i = 1; i < node_count; i++) {
+            if (i > 1) {
+                _strlcat(part_names, ", ", sizeof(part_names));
+                _strlcat(delay_desc, " . ", sizeof(delay_desc));
+            }
+            _strlcat(part_names, plan->nodes[i].name, sizeof(part_names));
+            char tmp[ITX_MAX_STR + 32];
             snprintf(tmp, sizeof(tmp), "%s: %d min one-way",
                      plan->nodes[i].name, plan->nodes[i].delay / 60);
-            strcat(delay_desc, tmp);
+            _strlcat(delay_desc, tmp, sizeof(delay_desc));
         }
     }
 
     size_t pos = 0;
+    /* Output past ITX_ICS_BUF - 1 bytes is cut off, never written. */
     #define LN(fmt, ...) do { \
-        pos += snprintf(buf + pos, ITX_ICS_BUF - pos, fmt "\r\n", ##__VA_ARGS__); \
+        int n_ = snprintf(buf + pos, ITX_ICS_BUF - pos, fmt "\r\n", ##__VA_ARGS__); \
+        if (n_ > 0) pos = (pos + (size_t)n_ < ITX_ICS_BUF) ? pos + (size_t)n_ : ITX_ICS_BUF - 1; \
     } while (0)
 
     LN("BEGIN:VCALENDAR");
@@ -521,13 +535,13 @@ void itx_generate_ics(const itx_plan_t *plan, char *buf) {
     LN("LTX-MODE:%s", plan->mode);
 
     /* Node lines */
-    for (int i = 0; i < plan->node_count; i++) {
+    for (int i = 0; i < node_count; i++) {
         char nid[ITX_MAX_STR];
         _to_id(plan->nodes[i].name, nid, sizeof(nid));
         LN("LTX-NODE:ID=%s;ROLE=%s", nid, plan->nodes[i].role);
     }
     /* Delay lines for participants */
-    for (int i = 1; i < plan->node_count; i++) {
+    for (int i = 1; i < node_count; i++) {
         char nid[ITX_MAX_STR];
         _to_id(plan->nodes[i].name, nid, sizeof(nid));
         int d = plan->nodes[i].delay;
@@ -536,7 +550,7 @@ void itx_generate_ics(const itx_plan_t *plan, char *buf) {
     }
     LN("LTX-READINESS:CHECK=PT10M;REQUIRED=TRUE;FALLBACK=LTX-RELAY");
     /* Local time lines for Mars nodes */
-    for (int i = 0; i < plan->node_count; i++) {
+    for (int i = 0; i < node_count; i++) {
         if (strcmp(plan->nodes[i].location, "mars") == 0) {
             char nid[ITX_MAX_STR];
             _to_id(plan->nodes[i].name, nid, sizeof(nid));

@@ -14,19 +14,16 @@
     <RepositoryUrl>https://github.com/karwalski/interplanet</RepositoryUrl>
   </PropertyGroup>
 
-  <!-- Copy the native library next to the output assembly -->
-  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('OSX'))">
-    <NativeLib Include="../../build/libinterplanet.dylib" />
-  </ItemGroup>
-  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Linux'))">
-    <NativeLib Include="../../build/libinterplanet.so" />
-  </ItemGroup>
-  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
-    <NativeLib Include="../../build/interplanet.dll" />
-  </ItemGroup>
+  <!-- Copy the native library (built by `make` in c/planet-time) next to the
+       output assembly when it exists. -->
+  <PropertyGroup>
+    <NativeLibPath Condition="$([MSBuild]::IsOSPlatform('OSX'))">../../build/libinterplanet.dylib</NativeLibPath>
+    <NativeLibPath Condition="$([MSBuild]::IsOSPlatform('Linux'))">../../build/libinterplanet.so</NativeLibPath>
+    <NativeLibPath Condition="$([MSBuild]::IsOSPlatform('Windows'))">../../build/interplanet.dll</NativeLibPath>
+  </PropertyGroup>
 
-  <ItemGroup>
-    <None Include="@(NativeLib)" Condition="Exists('%(FullPath)')">
+  <ItemGroup Condition="'$(NativeLibPath)' != '' And Exists('$(NativeLibPath)')">
+    <None Include="$(NativeLibPath)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>

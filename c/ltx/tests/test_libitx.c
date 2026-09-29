@@ -194,6 +194,47 @@ int main(void) {
     CHECK("urls[1].nodeId == N1",        strcmp(urls[1].node_id, "N1") == 0);
     CHECK("urls[1].role == PARTICIPANT", strcmp(urls[1].role, "PARTICIPANT") == 0);
 
+    /* ── A full plan: 8 long node names, 32 segments ─────────────────────
+     * Node URLs must carry the whole hash, and the ICS must fit its buffer
+     * (these overflowed fixed 256/512-byte buffers and truncated URLs). */
+    SECTION("full plan: node URLs and ICS");
+    {
+        static itx_plan_t big;
+        itx_create_plan(&big, NULL, "2026-01-01T00:00:00Z", 860);
+        memset(big.title, 'T', ITX_MAX_STR - 1);
+        big.title[ITX_MAX_STR - 1] = '\0';
+        big.node_count = ITX_MAX_NODES;
+        for (int i = 0; i < ITX_MAX_NODES; i++) {
+            snprintf(big.nodes[i].id, sizeof(big.nodes[i].id), "N%d", i);
+            memset(big.nodes[i].name, 'A' + i, ITX_MAX_STR - 1);
+            big.nodes[i].name[ITX_MAX_STR - 1] = '\0';
+            snprintf(big.nodes[i].role, sizeof(big.nodes[i].role), "%s", i ? "PARTICIPANT" : "HOST");
+            snprintf(big.nodes[i].location, sizeof(big.nodes[i].location), "mars");
+            big.nodes[i].delay = 860;
+        }
+        big.seg_count = ITX_MAX_SEGMENTS;
+        for (int i = 0; i < ITX_MAX_SEGMENTS; i++) {
+            memset(&big.segments[i], 0, sizeof(big.segments[i]));
+            snprintf(big.segments[i].type, sizeof(big.segments[i].type), "PLAN_CONFIRM");
+            big.segments[i].q = 1;
+        }
+        static itx_node_url_t big_urls[ITX_MAX_NODES];
+        static char big_hash[ITX_HASH_BUF];
+        int big_count = 0;
+        itx_build_node_urls(&big, "https://interplanet.live/ltx.html", big_urls, &big_count);
+        itx_encode_hash(&big, big_hash);
+        size_t ul = strlen(big_urls[7].url), hl = strlen(big_hash);
+        CHECK("full plan: 8 node URLs", big_count == ITX_MAX_NODES);
+        CHECK("full plan: URL ends with the whole hash",
+              ul > hl && strcmp(big_urls[7].url + ul - hl, big_hash) == 0);
+        char *big_ics = (char *)malloc(ITX_ICS_BUF);
+        itx_generate_ics(&big, big_ics);
+        size_t il = big_ics ? strlen(big_ics) : 0;
+        CHECK("full plan: ICS complete (ends with END:VCALENDAR)",
+              il > 15 && strcmp(big_ics + il - 15, "END:VCALENDAR\r\n") == 0);
+        free(big_ics);
+    }
+
     /* ── itx_generate_ics ───────────────────────────────────────────── */
     SECTION("itx_generate_ics");
     char ics[ITX_ICS_BUF];

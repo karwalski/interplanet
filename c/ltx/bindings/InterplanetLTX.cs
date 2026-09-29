@@ -82,7 +82,7 @@ internal struct NativeNodeUrl
     public string Name;
     [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
     public string Role;
-    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 1024)]
+    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 22432)] // ITX_URL_BUF
     public string Url;
 }
 
@@ -99,7 +99,8 @@ internal static class Native
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     internal static extern void itx_compute_segments(
         ref NativePlan plan,
-        [MarshalAs(UnmanagedType.LPArray, SizeConst = 32)] NativeSegment[] segs,
+        // [Out]: an array of non-blittable structs is copied in only by default.
+        [Out, MarshalAs(UnmanagedType.LPArray, SizeConst = 32)] NativeSegment[] segs,
         ref int segCount);
 
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
@@ -126,7 +127,7 @@ internal static class Native
     internal static extern void itx_build_node_urls(
         ref NativePlan plan,
         [MarshalAs(UnmanagedType.LPStr)] string baseUrl,
-        [MarshalAs(UnmanagedType.LPArray, SizeConst = 8)] NativeNodeUrl[] urls,
+        [Out, MarshalAs(UnmanagedType.LPArray, SizeConst = 8)] NativeNodeUrl[] urls,
         ref int urlCount);
 
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
@@ -284,7 +285,7 @@ public sealed class LtxPlan
     /// <summary>Generate LTX-extended iCalendar (.ics) content.</summary>
     public string GenerateICS()
     {
-        var sb = new StringBuilder(8192);
+        var sb = new StringBuilder(16384); // ITX_ICS_BUF
         Native.itx_generate_ics(ref _native, sb);
         return sb.ToString();
     }
