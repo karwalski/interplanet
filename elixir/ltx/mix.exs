@@ -7,7 +7,10 @@ defmodule InterplanetLtx.MixProject do
       version: "1.1.0",
       elixir: "~> 1.14",
       start_permanent: Mix.env() == :prod,
-      deps: []
+      deps: [],
+      # The scripts in test/*.exs are standalone (run by `make test`);
+      # test/exunit wraps them so `mix test` runs the same checks.
+      test_paths: ["test/exunit"]
     ]
   end
 

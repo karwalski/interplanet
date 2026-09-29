@@ -95,6 +95,9 @@ printfn "%s" (formatUTC 1705327200000L)  // => 2024-01-15T14:00:00Z
 
 Loaded from scripts in that order after `#r "nuget: NSec.Cryptography, 24.4.0"`
 (see `tests/ParityTest.fsx`); `make test` runs all four test scripts.
+`InterplanetLtx.fsproj` also compiles these modules (with a
+`PackageReference` to NSec.Cryptography 24.4.0), so `dotnet build` / `make lint`
+type-checks the whole library.
 
 - `makePlanIdFromJson` / `planHashFromJson`: planId and planHash over plan JSON
   with key order preserved, matching `spec/golden/plan-ids.json`. The typed
@@ -125,7 +128,7 @@ interplanet-github/fsharp-ltx/
 │   └── RestClient.fs        HTTP client (storeSession, getSession, downloadICS, submitFeedback)
 ├── tests/
 │   └── UnitTest.fsx         standalone script, >= 80 check() calls
-├── InterplanetLtx.fsproj    .NET 6 project file
+├── InterplanetLtx.fsproj    .NET project file (net10.0)
 ├── Makefile
 └── README.md
 ```

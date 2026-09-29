@@ -19,7 +19,8 @@ ics  = InterplanetLtx.generate_ics(plan)
 ## Running tests
 
 ```bash
-make test
+make test   # runs the four check scripts in test/*.exs directly
+mix test    # runs the same scripts through ExUnit (test/exunit/)
 ```
 
 ## API

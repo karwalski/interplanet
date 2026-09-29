@@ -54,6 +54,14 @@ fun runParityTests() {
     // Typed v3 plan agrees with the generic path.
     val v3 = asMap(byName["v3-upgrade-delays"]!!["plan"])
     check("typed PlanV11 v3 planId matches golden", LtxV11.makePlanId(PlanV11.fromMap(v3)) == byName["v3-upgrade-delays"]!!["planId"])
+    // Typed createPlan with DEFAULT_SEGMENTS: planToJson writes nodes before
+    // segments, which is the v2-key-order-sensitive vector's key order.
+    val typedDefault = InterplanetLTX.createPlan("Golden Default",
+        listOf(LtxNode("N0", "Earth HQ", "HOST", 0, "earth"),
+               LtxNode("N1", "Mars Hab-01", "PARTICIPANT", 840, "mars")),
+        mode = "LTX", start = "2026-03-15T14:00:00.000Z")
+    check("typed createPlan defaults match golden (nodes-first)",
+        InterplanetLTX.makePlanId(typedDefault) == byName["v2-key-order-sensitive"]!!["planId"])
     // JSON.stringify escaping and number formatting
     check("stringify escapes control chars", LtxJson.stringify("a\u0001\n\"") == "\"a\\u0001\\n\\\"\"")
     check("stringify lone surrogate escaped", LtxJson.stringify("\ud83d") == "\"\\ud83d\"")
