@@ -935,7 +935,7 @@ public static class LtxV11
 
     // ── 5. COSE_Sign1 verification (cose.ts) ─────────────────────────────────
 
-    private static byte[] EncodeCborHead(int major, long arg)
+    private static byte[] EncodeCborHead(int major, int arg)
     {
         if (arg < 24) return new[] { (byte)((major << 5) | arg) };
         if (arg < 0x100) return new[] { (byte)((major << 5) | 24), (byte)arg };

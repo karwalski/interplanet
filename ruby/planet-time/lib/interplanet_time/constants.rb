@@ -24,15 +24,19 @@ module InterplanetTime
         solar_day_ms:           (175.9408 * EARTH_DAY_MS).round,
         sidereal_yr_ms:         ( 87.9691 * EARTH_DAY_MS).round,
         epoch_ms:               J2000_MS,
-        work_start:             8,  work_end: 16,
+        work_start:             9,  work_end: 17,
         days_per_period:        1.0, periods_per_week: 7, work_periods_per_week: 5,
+        # Solar day far longer than a human day: crews keep an Earth-clock week
+        # (Mon-Fri, UTC 09:00-17:00), as in planet-time.js earthClockSchedule.
+        earth_clock_schedule:   true,
       },
       'venus'   => {
         solar_day_ms:           (116.7500 * EARTH_DAY_MS).round,
         sidereal_yr_ms:         (224.701  * EARTH_DAY_MS).round,
         epoch_ms:               J2000_MS,
-        work_start:             8,  work_end: 16,
+        work_start:             9,  work_end: 17,
         days_per_period:        1.0, periods_per_week: 7, work_periods_per_week: 5,
+        earth_clock_schedule:   true,
       },
       'earth'   => {
         solar_day_ms:           EARTH_DAY_MS,

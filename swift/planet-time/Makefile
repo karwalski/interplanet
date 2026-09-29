@@ -1,4 +1,4 @@
-.PHONY: build test lint clean
+.PHONY: build test lint release xctest clean
 
 SRC_LIB := $(wildcard Sources/InterplanetTime/*.swift)
 SRC_RUN  = Sources/RunTests/main.swift
@@ -27,6 +27,13 @@ test:
 
 lint:
 	swiftc $(SDK_FLAG) -typecheck $(SRC_LIB) 2>&1
+
+# SwiftPM release build of the library, and the XCTest suite.
+release:
+	swift build -c release --target InterplanetTime
+
+xctest:
+	swift test
 
 clean:
 	rm -rf .build

@@ -17,4 +17,8 @@ endif
 clean:
 	rm -rf .dart_tool/
 
-.PHONY: test lint clean
+.PHONY: test lint publish-check clean
+
+# Validates the package for pub.dev without uploading.
+publish-check:
+	dart pub publish --dry-run

@@ -113,3 +113,17 @@ let planet_time = Time_calc.planet_time
     (including zone_id) for the given body at the given Unix millisecond
     timestamp (float). *)
 let get_planet_time = Time_calc.get_planet_time
+
+(* ── Mars Coordinated Time ───────────────────────────────────────────────── *)
+
+type mtc = Time_calc.mtc = {
+  mtc_sol    : int;
+  mtc_hour   : int;
+  mtc_minute : int;
+  mtc_second : int;
+  mtc_str    : string;
+}
+
+(** [get_mtc ~utc_ms] is Mars Coordinated Time (sol and Mars-clock time at
+    the prime meridian), as getMTC in planet-time.js. *)
+let get_mtc = Time_calc.get_mtc

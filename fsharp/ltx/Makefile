@@ -1,6 +1,6 @@
 DOTNET := $(shell command -v dotnet 2>/dev/null)
 
-.PHONY: test lint clean
+.PHONY: test lint pack clean
 
 test:
 ifdef DOTNET
@@ -11,10 +11,13 @@ endif
 
 lint:
 ifdef DOTNET
-	dotnet build InterplanetLtx.fsproj 2>&1 | tail -5
+	dotnet build InterplanetLtx.fsproj -warnaserror
 else
 	@echo "dotnet not installed -- skipping lint"
 endif
 
 clean:
 	rm -rf bin/ obj/
+
+pack:
+	dotnet pack InterplanetLtx.fsproj -c Release -o bin/pkg

@@ -5,6 +5,8 @@ module InterplanetTime
   module TimeCalc
     extend self
 
+    EARTH_DAY_MS_I = Constants::EARTH_DAY_MS
+
     def get_planet_time(planet, utc_ms, tz_offset = 0.0)
       # Moon uses Earth's solar day (tidally locked; schedules run on Earth time)
       effective = planet == 'moon' ? 'earth' : planet
@@ -31,11 +33,22 @@ module InterplanetTime
       minute      = min_f.to_i
       second      = ((min_f - minute) * 60.0).to_i
 
-      # Work period — positive modulo so pre-epoch dates give valid 0..(n-1) range
-      total_periods  = total_days / days_per_p
-      period_in_week = ((total_periods.floor % per_per_wk) + per_per_wk) % per_per_wk
-      is_work_period = period_in_week < work_per_wk
-      is_work_hour   = is_work_period && local_hour >= work_start && local_hour < work_end
+      if pd[:earth_clock_schedule]
+        # Mercury/Venus: Earth-clock week. UTC weekday as 0=Mon..6=Sun
+        # (1970-01-01 was a Thursday), work hours on the UTC clock.
+        utc_day        = utc_ms.floor.div(EARTH_DAY_MS_I)
+        period_in_week = (utc_day + 3) % 7
+        is_work_period = period_in_week < work_per_wk
+        utc_sec        = (utc_ms.floor - utc_day * EARTH_DAY_MS_I).div(1000)
+        utc_hour       = utc_sec / 3600.0
+        is_work_hour   = is_work_period && utc_hour >= work_start && utc_hour < work_end
+      else
+        # Work period: positive modulo so pre-epoch dates give valid 0..(n-1) range
+        total_periods  = total_days / days_per_p
+        period_in_week = ((total_periods.floor % per_per_wk) + per_per_wk) % per_per_wk
+        is_work_period = period_in_week < work_per_wk
+        is_work_hour   = is_work_period && local_hour >= work_start && local_hour < work_end
+      end
 
       # Year / day-in-year
       year_len_days = sid_yr_ms.to_f / solar_day
@@ -81,16 +94,15 @@ module InterplanetTime
       )
     end
 
+    # Mars Coordinated Time: the Mars clock at the prime meridian (AMT+0), in
+    # Mars hours (1/24 sol), matching getMTC in planet-time.js.
     def get_mtc(utc_ms)
-      ms      = (utc_ms - Constants::MARS_EPOCH_MS).to_f
-      sol     = (ms / Constants::MARS_SOL_MS).floor
-      frac_ms = ms % Constants::MARS_SOL_MS
-      frac_ms += Constants::MARS_SOL_MS if frac_ms < 0.0
-
-      total_sec = frac_ms / 1000.0
-      hour   = (total_sec / 3600.0).to_i
-      minute = ((total_sec % 3600.0) / 60.0).to_i
-      second = (total_sec % 60.0).to_i
+      total_sols = (utc_ms - Constants::MARS_EPOCH_MS).to_f / Constants::MARS_SOL_MS
+      sol    = total_sols.floor
+      frac   = total_sols - sol
+      hour   = (frac * 24).floor
+      minute = ((frac * 24 - hour) * 60).floor
+      second = (((frac * 24 - hour) * 60 - minute) * 60).floor
 
       h2 = hour.to_s.rjust(2, '0')
       m2 = minute.to_s.rjust(2, '0')

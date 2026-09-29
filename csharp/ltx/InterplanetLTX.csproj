@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <!-- The library. The tests live in tests/InterplanetLTX.Tests.csproj, a
+       console runner that references this project, so `dotnet pack` here
+       produces a library package without the test code. -->
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -9,16 +11,15 @@
     <AssemblyName>interplanet_ltx</AssemblyName>
     <Version>1.1.0</Version>
     <Description>C# port of the InterPlanet LTX SDK</Description>
+    <PackageLicenseExpression>GPL-3.0-only</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="NSec.Cryptography" Version="24.4.0" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="src/*.cs" />
-    <Compile Include="tests/UnitTest.cs" />
-    <Compile Include="tests/SecurityTests.cs" />
-    <Compile Include="tests/V11Tests.cs" />
-    <Compile Include="tests/ParityTests.cs" />
-    <Compile Include="tests/PrefixTests.cs" />
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <InternalsVisibleTo Include="InterplanetLTX.Tests" />
   </ItemGroup>
 </Project>

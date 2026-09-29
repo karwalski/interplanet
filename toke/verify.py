@@ -8,6 +8,8 @@
      `interplanet planid <JSON.stringify(plan)>` (v3 vectors are reported as
      skipped: the port does not implement SHA-256 / RFC 8785).
   3. `interplanet ltx` must rebuild the v2-createPlan-default vector.
+  4. spec/golden/plan-id-prefixes.json: every v2 vector through `planid`,
+     compared byte for byte (WTF-8, as the id can hold a lone surrogate).
 
 Usage: python3 toke/verify.py [path/to/interplanet]
 """
@@ -102,6 +104,21 @@ for v in gold["vectors"]:
         check("ltx createPlan-default planId", f.get("Plan ID") == v["planId"], f.get("Plan ID"))
         check("ltx createPlan-default JSON", f.get("JSON") == text, f.get("JSON"))
 print("plan-ids.json: v2 vectors checked; skipped (v3): %s" % ", ".join(skipped))
+
+# planId prefixes: JS whitespace, full Unicode upper-casing, UTF-16 slicing.
+# The id can hold a lone surrogate, so compare raw WTF-8 bytes.
+pref = json.load(open(os.path.join(ROOT, "spec/golden/plan-id-prefixes.json")))
+pskipped = []
+for v in pref["vectors"]:
+    if v["plan"].get("v") != 2:
+        pskipped.append(v["name"])
+        continue
+    text = json.dumps(v["plan"], separators=(",", ":"), ensure_ascii=False)
+    r = subprocess.run([BIN, "planid", text], capture_output=True)
+    got = r.stdout.strip().hex()
+    check("prefix " + v["name"], got == v["planIdWtf8Hex"],
+          (r.stdout.strip().decode("utf-8", "replace"), v["planIdUtf8"]))
+print("plan-id-prefixes.json: v2 vectors checked; skipped (v3): %s" % ", ".join(pskipped))
 
 print("%d checks, %d failures" % (checks, fails))
 sys.exit(1 if fails else 0)

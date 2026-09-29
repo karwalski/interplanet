@@ -14,8 +14,9 @@ test:
 	@echo '==> JS reference parity tests (issue #27)'
 	$(LUA) test/parity_test.lua
 
+# luacheck when installed, else ../lint.sh (luac -p plus a global-access scan).
 lint:
-	@command -v luacheck >/dev/null 2>&1 && luacheck src/ test/ || echo "luacheck not installed, skipping lint"
+	@if command -v luacheck >/dev/null 2>&1; then luacheck src/ test/; else sh ../lint.sh src/*.lua test/*.lua; fi
 
 clean:
 	@find . -name "*.luac" -delete

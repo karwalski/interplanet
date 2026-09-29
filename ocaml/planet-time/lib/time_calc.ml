@@ -159,3 +159,26 @@ let get_planet_time ~(body : int) ~(utc_ms : float) : full_planet_time =
     time_str      = Printf.sprintf "%02d:%02d" h m;
     time_str_full = Printf.sprintf "%02d:%02d:%02d" h m s;
     sol_in_year; sols_per_year; zone_id }
+
+(* ── Mars Coordinated Time ───────────────────────────────────────────────── *)
+
+type mtc = {
+  mtc_sol    : int;
+  mtc_hour   : int;
+  mtc_minute : int;
+  mtc_second : int;
+  mtc_str    : string;  (* "HH:MM" *)
+}
+
+(* Mars Coordinated Time: the Mars clock at the prime meridian (AMT+0), in
+   Mars hours (1/24 sol). Mirrors getMTC in planet-time.js. *)
+let get_mtc ~(utc_ms : float) : mtc =
+  let total_sols = (utc_ms -. Constants.mars_epoch_ms) /. Constants.mars_sol_ms in
+  let sol_f = floor total_sols in
+  let frac  = total_sols -. sol_f in
+  let h = int_of_float (floor (frac *. 24.0)) in
+  let m = int_of_float (floor ((frac *. 24.0 -. float_of_int h) *. 60.0)) in
+  let s = int_of_float (floor (((frac *. 24.0 -. float_of_int h) *. 60.0
+                                -. float_of_int m) *. 60.0)) in
+  { mtc_sol = int_of_float sol_f; mtc_hour = h; mtc_minute = m; mtc_second = s;
+    mtc_str = Printf.sprintf "%02d:%02d" h m }

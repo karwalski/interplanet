@@ -45,4 +45,20 @@ class MTCTest extends TestCase
         $mtc = Time::getMTC(Constants::MARS_EPOCH_MS);
         $this->assertSame(0, $mtc->sol);
     }
+
+    // MTC is in Mars hours (1/24 sol), as getMTC in planet-time.js (issue #38).
+    public function testMTCMarsHoursMatchJs(): void
+    {
+        $mtc = Time::getMTC(860467588517); // 1997-04-08T02:46:28.517Z
+        $this->assertSame([15595, 23, 38, 0], [$mtc->sol, $mtc->hour, $mtc->minute, $mtc->second]);
+    }
+
+    public function testMTCMatchesMarsPrimeMeridian(): void
+    {
+        $ms  = 1815216150793;
+        $mtc = Time::getMTC($ms);
+        $pt  = Time::getPlanetTime('mars', $ms);
+        $this->assertSame([$pt->dayNumber, $pt->hour, $pt->minute, $pt->second],
+                          [$mtc->sol, $mtc->hour, $mtc->minute, $mtc->second]);
+    }
 }

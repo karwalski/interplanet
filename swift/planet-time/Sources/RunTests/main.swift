@@ -72,6 +72,15 @@ check     ("MTC minute in [0,60)", mtc.minute >= 0 && mtc.minute < 60)
 check     ("MTC str format",       mtc.mtcStr.count == 5)
 let mtc0 = InterplanetTime.getMTC(InterplanetTime.marsEpochMs)
 checkEqual("MTC sol at Mars epoch", mtc0.sol, Int64(0))
+// MTC is in Mars hours (1/24 sol), as getMTC in planet-time.js (issue #38).
+let mtcJs = InterplanetTime.getMTC(860_467_588_517) // 1997-04-08T02:46:28.517Z
+checkEqual("MTC sol matches JS",    mtcJs.sol, Int64(15_595))
+check     ("MTC 23:38:00 matches JS", mtcJs.hour == 23 && mtcJs.minute == 38 && mtcJs.second == 0)
+let mtcPt = InterplanetTime.getPlanetTime("mars", 1_815_216_150_793)
+let mtcM  = InterplanetTime.getMTC(1_815_216_150_793)
+check     ("MTC equals Mars prime meridian clock",
+           mtcM.sol == mtcPt.dayNumber && mtcM.hour == mtcPt.hour &&
+           mtcM.minute == mtcPt.minute && mtcM.second == mtcPt.second)
 
 // ── 7. GetPlanetTime ──────────────────────────────────────────────────────────
 for planet in InterplanetTime.planets {

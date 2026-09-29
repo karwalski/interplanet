@@ -48,10 +48,14 @@ var urls = InterplanetLTX.BuildNodeUrls(plan, "https://interplanet.live/ltx.html
 ## Build & Test
 
 ```
-make build   # dotnet build
-make test    # dotnet run (runs ≥80 unit tests)
-make lint    # dotnet build --no-restore
-make clean   # rm -rf bin/ obj/
+make build   # dotnet build InterplanetLTX.csproj (the library)
+make test    # dotnet run --project tests (unit, security, v1.1, golden planId and prefix tests)
+make lint    # library and test runner built with -warnaserror
+make pack    # dotnet pack: library-only NuGet package in bin/pkg/
+make clean   # rm -rf bin/ obj/ tests/bin/ tests/obj/
 ```
+
+`InterplanetLTX.csproj` is the library. `tests/InterplanetLTX.Tests.csproj`
+is a console test runner that references it.
 
 Requires .NET 6+. Tests run without dotnet installed but print a skip message.

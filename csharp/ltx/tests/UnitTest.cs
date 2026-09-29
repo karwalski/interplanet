@@ -260,11 +260,11 @@ Check(escapedIcs.Contains(@"SUMMARY:Hello\, World\; Test"),            "ICS SUMM
 
 // ── SessionState / SessionStateNames (Story 26.4) ─────────────────────────
 
-Check(SessionState.Degraded == SessionState.Degraded,                  "SessionState.Degraded exists");
-Check(SessionState.Init == SessionState.Init,                          "SessionState.Init exists");
-Check(SessionState.Locked == SessionState.Locked,                      "SessionState.Locked exists");
-Check(SessionState.Running == SessionState.Running,                    "SessionState.Running exists");
-Check(SessionState.Complete == SessionState.Complete,                  "SessionState.Complete exists");
+Check(Enum.IsDefined(typeof(SessionState), "Degraded"),"SessionState.Degraded exists");
+Check(Enum.IsDefined(typeof(SessionState), "Init"),"SessionState.Init exists");
+Check(Enum.IsDefined(typeof(SessionState), "Locked"),"SessionState.Locked exists");
+Check(Enum.IsDefined(typeof(SessionState), "Running"),"SessionState.Running exists");
+Check(Enum.IsDefined(typeof(SessionState), "Complete"),"SessionState.Complete exists");
 Check(SessionStateNames.All.Length == 5,                               "SessionStateNames.All has 5 entries");
 Check(SessionStateNames.All[3] == "DEGRADED",                          "SessionStateNames.All[3] is DEGRADED");
 Check(SessionStateNames.All[0] == "INIT",                              "SessionStateNames.All[0] is INIT");

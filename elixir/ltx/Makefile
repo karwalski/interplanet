@@ -1,5 +1,4 @@
 ELIXIR := $(shell command -v elixir 2>/dev/null)
-ELIXIRC := $(shell command -v elixirc 2>/dev/null)
 
 test:
 ifdef ELIXIR
@@ -16,10 +15,10 @@ else
 endif
 
 lint:
-ifdef ELIXIRC
-	elixirc lib/**/*.ex --no-docs 2>&1 | head -20
+ifdef ELIXIR
+	mix compile --warnings-as-errors --force 2>&1
 else
-	@echo "elixirc not installed — skipping lint"
+	@echo "elixir not installed, skipping lint"
 endif
 
 clean:

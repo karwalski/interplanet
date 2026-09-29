@@ -5,7 +5,17 @@
     <Version>1.1.0</Version>
     <OutputType>Library</OutputType>
     <Nullable>enable</Nullable>
+    <!-- FS3261: the plan and register values are untyped JSON trees
+         (Dictionary<string, obj>) in which null is JSON null by design, and
+         `box` yields objnull under F# 9 nullness; the warning is noise there. -->
+    <NoWarn>$(NoWarn);FS3261</NoWarn>
+    <Description>F# port of the InterPlanet LTX SDK</Description>
+    <PackageLicenseExpression>GPL-3.0-only</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
   <ItemGroup>
     <Compile Include="src/Upper.fs" />
     <Compile Include="src/Models.fs" />

@@ -63,7 +63,8 @@ and `planid <plan-json>`. Every command except `planid` takes
 $ python3 verify.py
 reference.json: 54 entries
 plan-ids.json: v2 vectors checked; skipped (v3): v3-upgrade-delays, v3-key-order-insensitive, v3-amendment
-686 checks, 0 failures
+plan-id-prefixes.json: v2 vectors checked; skipped (v3): v3-greek-emoji, v3-sharp-s-split
+703 checks, 0 failures
 ```
 
 `verify.py` runs all 54 entries of `c/planet-time/fixtures/reference.json`
@@ -71,8 +72,11 @@ plan-ids.json: v2 vectors checked; skipped (v3): v3-upgrade-delays, v3-key-order
 `mtc` and compares hour/minute/second, day number, day fraction, local hour,
 year, day in year, period in week, work period, work hour, sol in year, sols
 per year, MTC, light travel time from Earth and heliocentric distance. It then
-runs the six v2 vectors of `spec/golden/plan-ids.json` through `planid`, and
-rebuilds `v2-createPlan-default` with `ltx`. It is not wired into CI.
+runs the six v2 vectors of `spec/golden/plan-ids.json` through `planid`,
+rebuilds `v2-createPlan-default` with `ltx`, and runs the 17 v2 vectors of
+`spec/golden/plan-id-prefixes.json` through `planid`, comparing the id byte
+for byte (WTF-8, since a cut astral character leaves a lone surrogate). It is
+not wired into CI.
 
 ## Limitations
 
@@ -92,10 +96,11 @@ rebuilds `v2-createPlan-default` with `ltx`. It is not wired into CI.
   `createPlan` defaults to now plus 5 minutes.
 - `planid` is not a JSON parser. It expects the exact `JSON.stringify` text of
   a v2 plan (compact, keys in insertion order) and finds the start date and
-  node names by scanning for `"start":"` and `"name":"` keys. The host/node
-  prefixes strip ASCII whitespace and upper-case ASCII only, so non-ASCII node
-  names can give a different prefix than the reference (non-ASCII titles are
-  fine; the hash itself handles full UTF-16).
+  node names by scanning for `"start":"` and `"name":"` keys (string escapes,
+  including `\uXXXX`, are decoded). The host/node prefixes follow the
+  reference: JS `\s` whitespace removed, full Unicode upper-casing (a table
+  generated from JS `toUpperCase` by `scripts/conformance/gen-upper-tables.js`,
+  special casings included) and slicing by UTF-16 code units.
 - Planet time: no timezone zone IDs (AMT etc.), no Mars zone table, no
   `nextPlanetTime`, hourly schedules, lower-quartile light time or multi-location
   meeting finder. `--tz` offsets are in local planet hours as in the reference.
