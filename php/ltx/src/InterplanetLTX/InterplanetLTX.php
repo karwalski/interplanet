@@ -127,47 +127,104 @@ class InterplanetLTX
     /* ── Plan ID ────────────────────────────────────────────────────────── */
 
     /**
-     * Compute the deterministic plan ID string.
-     * Format: "LTX-YYYYMMDD-HOST-NODE-v2-XXXXXXXX"
+     * Compute the deterministic plan ID string (matches makePlanId in ltx-sdk.js).
+     * Format: "LTX-YYYYMMDD-HOST-NODE-v2-XXXXXXXX" or "...-v3-XXXXXXXX"
+     *
+     * Accepts an LtxPlan (v2, serialised by LtxPlan::toJson) or a plan decoded
+     * from JSON (stdClass from json_decode($json), or an associative array),
+     * v2 or v3, key insertion order preserved. v2 uses the FROZEN imul31 hash
+     * over the UTF-16 code units of JSON.stringify(plan) (LTX-SPECIFICATION.md
+     * §4.3); v3 uses SHA-256 over canonical JSON (§4.5). Reproduces every
+     * vector in spec/golden/plan-ids.json.
      */
-    public static function makePlanId(LtxPlan $plan): string
+    public static function makePlanId(LtxPlan|array|\stdClass $plan): string
     {
-        $startMs = self::parseIsoMs($plan->start);
-        $date    = gmdate('Ymd', intdiv($startMs, 1000));
-
-        /* Host string: remove spaces, uppercase, max 8 chars */
-        $hostStr = 'HOST';
-        if (!empty($plan->nodes)) {
-            $nm = $plan->nodes[0]->name;
-            $tmp = strtoupper(str_replace([' ', "\t"], '', $nm));
-            $hostStr = substr($tmp, 0, 8);
+        if ($plan instanceof LtxPlan) {
+            $c     = $plan;
+            $names = array_map(fn(LtxNode $n) => $n->name, $plan->nodes);
+            $start = $plan->start;
+            $v     = 2;
+        } else {
+            $c     = self::upgradeConfigData($plan);
+            $arr   = (array)$c;
+            $names = array_map(fn($n) => ((array)$n)['name'] ?? null, (array)($arr['nodes'] ?? []));
+            $start = (string)($arr['start'] ?? '');
+            $v     = $arr['v'] ?? 1;
         }
+        $date = gmdate('Ymd', intdiv(self::parseIsoMs($start), 1000));
 
-        /* Node string: first 4 non-space chars of each remote node name */
+        /* Host string: remove whitespace, uppercase, max 8 UTF-16 units */
+        $hostStr = self::idPart($names[0] ?? null, 8, 'HOST');
+
+        /* Node string: first 4 of each remote node name, joined, max 16 */
         $nodeStr = 'RX';
-        if (count($plan->nodes) > 1) {
-            $parts = [];
-            foreach (array_slice($plan->nodes, 1) as $n) {
-                $nm   = $n->name;
-                $part = '';
-                foreach (str_split($nm) as $c) {
-                    if ($c === ' ' || $c === "\t") continue;
-                    $part .= strtoupper($c);
-                    if (strlen($part) >= 4) break;
-                }
-                $parts[] = $part;
-            }
-            $nodeStr = implode('-', $parts);
+        if (count($names) > 1) {
+            $parts = array_map(fn($nm) => self::idPart($nm, 4, ''), array_slice($names, 1));
+            $nodeStr = JsJson::utf16Slice(implode('-', $parts), 16);
         }
 
-        /* Polynomial hash matching Math.imul(31, h) in ltx-sdk.js */
-        $json = $plan->toJson();
+        if (is_numeric($v) && $v >= 3) {
+            $digest = hash('sha256', JsJson::canonical($c));
+            return sprintf('LTX-%s-%s-%s-v3-%s', $date, $hostStr, $nodeStr, substr($digest, 0, 8));
+        }
+
+        /* FROZEN v2 path: imul31 over UTF-16 code units of JSON.stringify */
+        $json = $c instanceof LtxPlan ? $c->toJson() : JsJson::stringify($c);
         $h    = 0;
-        foreach (str_split($json) as $c) {
-            $h = ($h * 31 + ord($c)) & 0xFFFFFFFF;
+        foreach (JsJson::utf16Units($json) as $u) {
+            $h = ($h * 31 + $u) & 0xFFFFFFFF;
         }
 
         return sprintf('LTX-%s-%s-%s-v2-%08x', $date, $hostStr, $nodeStr, $h);
+    }
+
+    /** SHA-256 hex of the canonical JSON of a plan (prevPlanHash, §6.4). */
+    public static function planHash(array|\stdClass $plan): string
+    {
+        return hash('sha256', JsJson::canonical($plan));
+    }
+
+    /* ── Plan validation (§3.5, §4, §7) ─────────────────────────────────── */
+
+    /**
+     * Validate a v2 or v3 plan (stdClass or associative array, as decoded from
+     * JSON) against spec/ltx-schema.json and the reserved-field rules:
+     * reserved_streams (non-empty or non-array streams, segment stream) and
+     * reserved_branching (branches, branching, segment branch). Pure.
+     *
+     * @return array{valid: bool, errors: list<array{code: string, path: string, message: string}>}
+     */
+    public static function validatePlan(mixed $plan): array
+    {
+        return PlanValidator::validate($plan);
+    }
+
+    /** (name || default).replace(/\s+/g, '').toUpperCase().slice(0, n) */
+    private static function idPart(mixed $name, int $n, string $default): string
+    {
+        $s = (is_string($name) && $name !== '') ? $name : $default;
+        return JsJson::utf16Slice(mb_strtoupper(preg_replace('/\s+/u', '', $s), 'UTF-8'), $n);
+    }
+
+    /**
+     * upgradeConfig for decoded plans: v1 (txName/rxName/delay) to v2 nodes[];
+     * v2+ plans with nodes are returned unchanged (same key order).
+     */
+    private static function upgradeConfigData(array|\stdClass $cfg): array|\stdClass
+    {
+        $a = (array)$cfg;
+        $v = $a['v'] ?? null;
+        if (is_numeric($v) && $v >= 2 && !empty($a['nodes'])) return $cfg;
+        $rx = strtolower((string)($a['rxName'] ?? ''));
+        $remoteLoc = str_contains($rx, 'mars') ? 'mars' : (str_contains($rx, 'moon') ? 'moon' : 'earth');
+        $a['v'] = 2;
+        $a['nodes'] = [
+            ['id' => 'N0', 'name' => $a['txName'] ?? 'Earth HQ', 'role' => 'HOST',
+             'delay' => 0, 'location' => 'earth'],
+            ['id' => 'N1', 'name' => $a['rxName'] ?? 'Mars Hab-01', 'role' => 'PARTICIPANT',
+             'delay' => $a['delay'] ?? 0, 'location' => $remoteLoc],
+        ];
+        return $a;
     }
 
     /* ── Encoding ───────────────────────────────────────────────────────── */
