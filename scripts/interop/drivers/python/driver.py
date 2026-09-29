@@ -43,6 +43,6 @@ with open(os.path.join(out_dir, 'wire-v3.json'), 'w', encoding='utf-8') as f:
 print('ID_V3', make_plan_id(v3))
 print('NOTE v3 wire via json.dumps (encode_hash takes an LtxPlan v2 only)')
 
-for v in ('2', '3'):
+for v in ('2', '3', 'P'):
     with open(os.path.join(in_dir, f'js-v{v}.json'), encoding='utf-8') as f:
         print(f'JS_V{v}', make_plan_id(json.loads(f.read())))

@@ -39,7 +39,7 @@ void main(List<String> args) {
   print('ID_V3 ${makePlanId(v3)}');
   print('NOTE v3 built as LtxPlan(v: 3, delays, planVersion) (no upgrade function)');
 
-  for (final v in ['2', '3']) {
+  for (final v in ['2', '3', 'P']) {
     final parsed = jsonDecode(File('$inDir/js-v$v.json').readAsStringSync()) as Map<String, dynamic>;
     print('JS_V$v ${makePlanIdFromMap(parsed)}');
   }

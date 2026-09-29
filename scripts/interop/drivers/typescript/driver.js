@@ -35,7 +35,7 @@ const v3 = ltx.upgradePlanToV3(plan, { delays: { 'N1|N2': 842 } });
 fs.writeFileSync(path.join(outDir, 'wire-v3.json'), unhash(ltx.encodeHash(v3)));
 console.log('ID_V3', ltx.makePlanId(v3));
 
-for (const v of ['2', '3']) {
+for (const v of ['2', '3', 'P']) {
   const parsed = JSON.parse(fs.readFileSync(path.join(inDir, `js-v${v}.json`), 'utf8'));
   console.log(`JS_V${v}`, ltx.makePlanId(parsed));
 }

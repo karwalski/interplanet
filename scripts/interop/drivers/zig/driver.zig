@@ -47,7 +47,7 @@ pub fn main() !void {
     try std.fs.cwd().writeFile(.{ .sub_path = wire_path, .data = wire });
     try out(alloc, "ID_V2 {s}\n", .{try ltx.makePlanId(alloc, plan)});
 
-    for ([_][]const u8{ "2", "3" }) |v| {
+    for ([_][]const u8{ "2", "3", "P" }) |v| {
         const path = try std.fmt.allocPrint(alloc, "{s}/js-v{s}.json", .{ in_dir, v });
         const text = try std.fs.cwd().readFileAlloc(alloc, path, 1 << 20);
         const parsed = try std.json.parseFromSlice(std.json.Value, alloc, text, .{});

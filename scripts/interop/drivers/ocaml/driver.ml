@@ -48,4 +48,4 @@ let () =
   List.iter (fun v ->
     let json = read_file (Filename.concat in_dir ("js-v" ^ v ^ ".json")) in
     print_endline ("JS_V" ^ v ^ " " ^ V11.make_plan_id (V11.parse_json json))
-  ) [ "2"; "3" ]
+  ) [ "2"; "3"; "P" ]

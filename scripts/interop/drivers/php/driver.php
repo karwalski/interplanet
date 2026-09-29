@@ -29,7 +29,7 @@ $token = substr(L::encodeHash($plan), 3);
 file_put_contents("$outDir/wire-v2.json", base64_decode(strtr($token, '-_', '+/')));
 echo 'ID_V2 ' . L::makePlanId($plan) . "\n";
 
-foreach (['2', '3'] as $v) {
+foreach (['2', '3', 'P'] as $v) {
     $parsed = json_decode(file_get_contents("$inDir/js-v$v.json"));
     echo "JS_V$v " . L::makePlanId($parsed) . "\n";
 }

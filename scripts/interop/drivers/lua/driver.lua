@@ -60,6 +60,6 @@ write("wire-v3.json", b64url_decode(LTX.encode_hash(v3):sub(4)))
 print("ID_V3 " .. LTX.make_plan_id(v3))
 print("NOTE v3 via v11.upgrade_plan_to_v3; wire via encode_hash")
 
-for _, v in ipairs({ "2", "3" }) do
+for _, v in ipairs({ "2", "3", "P" }) do
   print("JS_V" .. v .. " " .. LTX.plan_id_from_json(read(in_dir .. "/js-v" .. v .. ".json")))
 end

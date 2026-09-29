@@ -30,7 +30,7 @@ wire = L.send(:_b64url_decode, L.encode_hash(plan).sub('#l=', ''))
 File.write(File.join(out_dir, 'wire-v2.json'), wire)
 puts "ID_V2 #{L.make_plan_id(plan)}"
 
-%w[2 3].each do |v|
+%w[2 3 P].each do |v|
   parsed = JSON.parse(File.read(File.join(in_dir, "js-v#{v}.json"), encoding: 'UTF-8'))
   puts "JS_V#{v} #{L.make_plan_id(parsed)}"
 end

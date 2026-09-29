@@ -32,7 +32,7 @@ write_wire("wire-v3.json", encode_hash(v3))
 cat("ID_V3", make_plan_id(v3), "\n")
 cat("NOTE v3 via upgrade_plan_to_v3; wire via encode_hash\n")
 
-for (v in c("2", "3")) {
+for (v in c("2", "3", "P")) {
   txt <- paste(readLines(file.path(in_dir, sprintf("js-v%s.json", v)), encoding = "UTF-8", warn = FALSE),
                collapse = "\n")
   cat(sprintf("JS_V%s", v), make_plan_id(jsonlite::fromJSON(txt, simplifyVector = FALSE)), "\n")

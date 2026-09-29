@@ -13,11 +13,16 @@
  *   (c)     the port computes the planId of a JS createPlan plan (v2) and of
  *           its JS upgradePlanToV3 successor (v3) from the JSON text, and
  *           must match JS makePlanId.
+ *   (c) pfx the same for a JS createPlan plan whose node names stress the
+ *           planId prefix (Unicode upper-casing, JS whitespace, UTF-16 cut;
+ *           plan.js PREFIX_NODES, issue #37). Optional: a driver that does
+ *           not print JS_VP is reported as n/a.
  *
  * Driver contract:  <driver> <inDir> <outDir>
  *   inDir/js-v2.json, inDir/js-v3.json          JS-built plans (UTF-8, compact)
+ *   inDir/js-vP.json                            JS-built prefix plan (optional)
  *   outDir/wire-v2.json, outDir/wire-v3.json    the port's own wire JSON
- *   stdout lines:  ID_V2 <id> | ID_V3 <id> | JS_V2 <id> | JS_V3 <id> | NOTE <text>
+ *   stdout lines:  ID_V2 <id> | ID_V3 <id> | JS_V2 <id> | JS_V3 <id> | JS_VP <id> | NOTE <text>
  *   A missing line means "not supported by this port" and is reported as n/a.
  *
  * Usage:  node scripts/interop/run.js [--only a,b] [--skip a,b] [--verbose]
@@ -34,7 +39,7 @@ const { spawnSync } = require('child_process');
 const ROOT = path.resolve(__dirname, '..', '..');
 const DRIVERS = path.join(__dirname, 'drivers');
 const LTX = require(path.join(ROOT, 'javascript/ltx/ltx-sdk.js'));
-const { REP, V3_EXTRAS } = require('./plan.js');
+const { REP, V3_EXTRAS, PREFIX_NODES } = require('./plan.js');
 const PORTS = require('./ports.js');
 
 // Extra PATH entries (e.g. a local julia or zig) may be given in INTEROP_PATH.
@@ -61,7 +66,7 @@ function tail(r) {
 function parseLines(out) {
   const r = { notes: [] };
   for (const line of out.split(/\r?\n/)) {
-    const m = /^(ID_V2|ID_V3|JS_V2|JS_V3|NOTE)\s+(.*)$/.exec(line.trim());
+    const m = /^(ID_V2|ID_V3|JS_V2|JS_V3|JS_VP|NOTE)\s+(.*)$/.exec(line.trim());
     if (!m) continue;
     if (m[1] === 'NOTE') r.notes.push(m[2]); else r[m[1]] = m[2].trim();
   }
@@ -89,17 +94,21 @@ const jsV2 = LTX.createPlan(REP);
 const jsV3 = LTX.upgradePlanToV3(jsV2, V3_EXTRAS);
 fs.writeFileSync(path.join(inDir, 'js-v2.json'), JSON.stringify(jsV2));
 fs.writeFileSync(path.join(inDir, 'js-v3.json'), JSON.stringify(jsV3));
+const jsVP = LTX.createPlan({ ...REP, nodes: PREFIX_NODES });
+fs.writeFileSync(path.join(inDir, 'js-vP.json'), JSON.stringify(jsVP));
 const expectJsV2 = LTX.makePlanId(jsV2);
 const expectJsV3 = LTX.makePlanId(jsV3);
+const expectJsVP = LTX.makePlanId(jsVP);
 console.log(`JS createPlan v2 planId:      ${expectJsV2}`);
-console.log(`JS upgradePlanToV3 v3 planId: ${expectJsV3}\n`);
+console.log(`JS upgradePlanToV3 v3 planId: ${expectJsV3}`);
+console.log(`JS prefix plan planId:        ${expectJsVP}\n`);
 
 const rows = [];
 const built = {};
 for (const port of PORTS) {
   if (only && !only.includes(port.name)) continue;
   if (skip.includes(port.name)) continue;
-  const row = { port: port.name, status: '', a2: '-', a3: '-', c2: '-', c3: '-', order: '-', notes: [] };
+  const row = { port: port.name, status: '', a2: '-', a3: '-', c2: '-', c3: '-', cp: '-', order: '-', notes: [] };
   rows.push(row);
   const missing = (port.need || []).filter(c => !which(c));
   if (missing.length) {
@@ -156,6 +165,7 @@ for (const port of PORTS) {
   }
   check('c2', o.JS_V2, expectJsV2, '(c) v2 planId of JS JSON');
   check('c3', o.JS_V3, expectJsV3, '(c) v3 planId of JS JSON');
+  check('cp', o.JS_VP, expectJsVP, '(c) prefix planId of JS JSON');
   row.status = bad ? 'FAIL' : 'PASS';
   if (port.xfail) {
     row.status = bad ? 'XFAIL' : 'XPASS';
@@ -164,8 +174,8 @@ for (const port of PORTS) {
 }
 
 // ── Report ──────────────────────────────────────────────────────────────────
-const cols = ['port', 'status', 'a2', 'a3', 'c2', 'c3', 'order'];
-const head = { port: 'port', status: 'status', a2: '(a) v2', a3: '(a) v3', c2: '(c) v2', c3: '(c) v3', order: 'wire key order' };
+const cols = ['port', 'status', 'a2', 'a3', 'c2', 'c3', 'cp', 'order'];
+const head = { port: 'port', status: 'status', a2: '(a) v2', a3: '(a) v3', c2: '(c) v2', c3: '(c) v3', cp: '(c) pfx', order: 'wire key order' };
 const w = Object.fromEntries(cols.map(c => [c, Math.max(head[c].length, ...rows.map(r => String(r[c]).length))]));
 const line = r => cols.map(c => String(r[c]).padEnd(w[c])).join('  ').trimEnd();
 console.log(line(head));
