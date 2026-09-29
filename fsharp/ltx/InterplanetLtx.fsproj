@@ -11,5 +11,13 @@
     <Compile Include="src/Constants.fs" />
     <Compile Include="src/InterplanetLtx.fs" />
     <Compile Include="src/RestClient.fs" />
+    <Compile Include="src/Security.fs" />
+    <Compile Include="src/Validate.fs" />
+    <Compile Include="src/V11.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Ed25519 for Security.fs / V11.fs. Keep in sync with the
+         #r "nuget: NSec.Cryptography, ..." lines in tests/*.fsx. -->
+    <PackageReference Include="NSec.Cryptography" Version="24.4.0" />
   </ItemGroup>
 </Project>
