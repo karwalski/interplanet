@@ -1,4 +1,4 @@
-// parity_test.zig — parity with javascript/ltx/tests/run.js (issue #27):
+// parity_test.zig: parity with javascript/ltx/tests/run.js (issue #27):
 // golden planId vectors (spec/golden/plan-ids.json), validatePlan and the
 // reserved streams / branching fields, buildDelayMatrix via pairDelay, and
 // reduceDecisions + merge_snapshot decisionRegister.

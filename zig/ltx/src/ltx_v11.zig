@@ -352,7 +352,7 @@ pub fn makePlanIdJson(alloc: Allocator, plan: std.json.Value) ![]u8 {
         return std.fmt.allocPrint(alloc, "LTX-{s}-{s}-{s}-v3-{s}", .{ date, host_str, node_str, hex8 });
     }
 
-    // FROZEN v2 path — 32-bit polynomial over the UTF-16 code units of the
+    // FROZEN v2 path: 32-bit polynomial over the UTF-16 code units of the
     // insertion-order JSON (Math.imul / charCodeAt in ltx-sdk.js).
     const raw = try stringifyValue(alloc, plan);
     defer alloc.free(raw);
