@@ -627,7 +627,9 @@ function startRelayPolling(endpoint) {
     try { timeoutOpt = { signal: AbortSignal.timeout(8000) }; } catch(e) {}
     fetch(endpoint + '/health', timeoutOpt).then(function(r) {
       return r.json().then(function(data) {
-        _relayData = { ok: r.ok, sessions: data.sessions, queue: data.queue, checkedAt: new Date().toTimeString().slice(0,8) };
+        // The relays report queued_frames (node/relay-server, demo/relay-server.php).
+        var queued = data.queued_frames !== undefined ? data.queued_frames : data.queue;
+        _relayData = { ok: r.ok, sessions: data.sessions, queue: queued, checkedAt: new Date().toTimeString().slice(0,8) };
       }, function() {
         _relayData = { ok: r.ok, checkedAt: new Date().toTimeString().slice(0,8) };
       });
@@ -707,6 +709,7 @@ function loadFromApi(planId) {
       renderDashboard(cfg);
       setupShare(cfg);
       setInterval(function() { updateSegClock(cfg); updateNodes(cfg); }, 1000);
+      document.getElementById('refresh-btn').addEventListener('click', function() { renderDashboard(cfg); });
     }, function(err) {
       document.getElementById('main-content').innerHTML =
         '<div class="no-plan"><div class="icon" aria-hidden="true">&#9888;</div>' +
