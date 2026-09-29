@@ -12,31 +12,38 @@ If a language has one, it must have both. Any gap is a tracked backlog item.
 
 ## Support Matrix
 
+The version columns come from each port's manifest (or, where a port has no
+manifest version, the source constant named in [`versions.json`](versions.json)).
+`versions.json` is the single list of port versions; `node scripts/check-versions.js`
+fails if a manifest, `versions.json`, this table or the README LTX table disagree,
+and the [Versions workflow](.github/workflows/versions.yml) runs it on every push
+and pull request.
+
 | Language | planet-time | LTX | Min version | Fixture tested | Notes |
 |---|:---:|:---:|---|:---:|---|
-| **JavaScript** | ✓ 1.1.0 | ✓ 1.1.0 | Node ≥ 16 | ✅ 54 | `javascript/planet-time/`, `javascript/ltx/` |
-| **TypeScript** | ✓ 1.1.0 | ✓ 1.0.0 | Node ≥ 16 | ✅ 54 | Native TS types; `typescript/planet-time/`, `typescript/ltx/` |
-| **Python** | ✓ 0.1.0 | ✓ 1.0.0 | Python ≥ 3.10 | ✅ 54 | PyPI names `interplanet-time` / `interplanet-ltx` (not yet published) |
-| **Java** | ✓ 1.0.0 | ✓ 1.0.0 | Java 16+ | ✅ 54 | stdlib-only; `java/planet-time/`, `java/ltx/` |
+| **JavaScript** | ✓ 1.4.0 | ✓ 1.1.0 | Node ≥ 16 | ✅ 54 | `javascript/planet-time/`, `javascript/ltx/` |
+| **TypeScript** | ✓ 1.1.0 | ✓ 1.1.0 | Node ≥ 16 | ✅ 54 | Native TS types; `typescript/planet-time/`, `typescript/ltx/` |
+| **Python** | ✓ 0.1.0 | ✓ 1.1.0 | Python ≥ 3.10 | ✅ 54 | PyPI names `interplanet-time` / `interplanet-ltx` (not yet published) |
+| **Java** | ✓ 1.1.0 | ✓ 1.0.0 | Java 16+ | ✅ 54 | stdlib-only; `java/planet-time/`, `java/ltx/` |
 | **C** | ✓ 1.0.0 | ✓ 1.0.0 | C99 | ✅ 54 | `libinterplanet`; no external deps |
-| **PHP** | ✓ 1.0.0 | ✓ 1.0.0 | PHP 8.1+ | ✅ 54 | Packagist (not yet published); PSR-4; stdlib-only |
-| **Ruby** | ✓ 1.0.0 | ✓ 1.0.0 | Ruby 2.6+ | ✅ 54 | RubyGems (not yet published); stdlib-only |
-| **Go** | ✓ 1.0.0 | ✓ 1.0.0 | Go 1.21+ | ✅ 54 | Go modules (module path not yet fetchable); stdlib-only |
-| **Swift** | ✓ 1.0.0 | ✓ 1.0.0 | Swift 5.9+ | ✅ 54 | Swift Package Index (not yet listed); Foundation-only |
-| **Rust** | ✓ 1.0.0 | ✓ 1.0.0 | Rust 1.70+ | ✅ 54 | crates.io (not yet published); stdlib-only |
-| **R** | ✓ 0.1.0 | ✓ 0.1.0 | R 4.1+ | ✅ 54 | base R only; `r/planet-time/`, `r/ltx/` |
-| **C#** | ✓ 1.0.0 | ✓ 1.0.0 | .NET 8+ | ✅ 54 | NuGet (not yet published); `csharp/planet-time/`, `csharp/ltx/` |
-| **Dart** | ✓ 1.0.0 | ✓ 1.0.0 | Dart 3+ | ✅ 54 | pub.dev (not yet published); `dart/planet-time/`, `dart/ltx/` |
-| **Elixir** | ✓ 1.0.0 | ✓ 1.0.0 | Elixir 1.14+ | ✅ 54 | Hex (not yet published); Mix; `elixir/planet-time/`, `elixir/ltx/` |
-| **F#** | ✓ 1.0.0 | ✓ 1.0.0 | .NET 8+ | ✅ 54 | NuGet (not yet published); `fsharp/planet-time/`, `fsharp/ltx/` |
-| **Kotlin** | ✓ 1.0.0 | ✓ 1.0.0 | Kotlin 1.9+ JVM | ✅ 54 | Maven Central (not yet published); `kotlin/planet-time/`, `kotlin/ltx/` |
-| **Scala** | ✓ 1.0.0 | ✓ 1.0.0 | Scala 3 JVM | ✅ 54 | Maven Central (not yet published); `scala/planet-time/`, `scala/ltx/` |
-| **Lua** | ✓ 1.0.0 | ✓ 1.0.0 | Lua 5.3+ | ✅ 54 | stdlib-only; `lua/planet-time/`, `lua/ltx/` |
-| **OCaml** | ✓ 1.0.0 | ✓ 1.0.0 | OCaml 4.13+ | ✅ 54 | ocamlfind; `ocaml/planet-time/`, `ocaml/ltx/` |
-| **Zig** | ✓ 1.0.0 | ✓ 1.0.0 | Zig 0.12+ | ✅ 54 | stdlib-only; `zig/planet-time/`, `zig/ltx/` |
-| **Julia** | ✓ 1.0.0 | ✓ 1.0.0 | Julia 1.9+ | ✅ 54 | stdlib-only; `julia/planet-time/`, `julia/ltx/` |
+| **PHP** | ✓ 0.1.0 | ✓ 1.0.0 | PHP 8.1+ | ✅ 54 | Packagist (not yet published); PSR-4; stdlib-only |
+| **Ruby** | ✓ 0.1.0 | ✓ 1.0.0 | Ruby 2.6+ | ✅ 54 | RubyGems (not yet published); stdlib-only |
+| **Go** | ✓ unversioned | ✓ 1.1.0 | Go 1.21+ | ✅ 54 | Go modules (module path not yet fetchable); stdlib-only |
+| **Swift** | ✓ unversioned | ✓ 1.1.0 | Swift 5.9+ | ✅ 54 | Swift Package Index (not yet listed); Foundation-only |
+| **Rust** | ✓ 0.1.0 | ✓ 1.1.0 | Rust 1.70+ | ✅ 54 | crates.io (not yet published); stdlib-only |
+| **R** | ✓ 0.1.0 | ✓ 1.0.0 | R 4.1+ | ✅ 54 | base R only; `r/planet-time/`, `r/ltx/` |
+| **C#** | ✓ unversioned | ✓ 1.1.0 | .NET 8+ | ✅ 54 | NuGet (not yet published); `csharp/planet-time/`, `csharp/ltx/` |
+| **Dart** | ✓ 0.1.0 | ✓ 1.1.0 | Dart 3+ | ✅ 54 | pub.dev (not yet published); `dart/planet-time/`, `dart/ltx/` |
+| **Elixir** | ✓ 0.1.0 | ✓ 1.1.0 | Elixir 1.14+ | ✅ 54 | Hex (not yet published); Mix; `elixir/planet-time/`, `elixir/ltx/` |
+| **F#** | ✓ unversioned | ✓ 1.1.0 | .NET 8+ | ✅ 54 | NuGet (not yet published); `fsharp/planet-time/`, `fsharp/ltx/` |
+| **Kotlin** | ✓ 1.0.0 | ✓ 1.1.0 | Kotlin 1.9+ JVM | ✅ 54 | Maven Central (not yet published); `kotlin/planet-time/`, `kotlin/ltx/` |
+| **Scala** | ✓ 0.1.0 | ✓ 1.1.0 | Scala 3 JVM | ✅ 54 | Maven Central (not yet published); `scala/planet-time/`, `scala/ltx/` |
+| **Lua** | ✓ 1.0.0 | ✓ 1.1.0 | Lua 5.3+ | ✅ 54 | stdlib-only; `lua/planet-time/`, `lua/ltx/` |
+| **OCaml** | ✓ unversioned | ✓ 1.1.0 | OCaml 4.13+ | ✅ 54 | ocamlfind; `ocaml/planet-time/`, `ocaml/ltx/` |
+| **Zig** | ✓ 1.0.0 | ✓ 1.1.0 | Zig 0.12+ | ✅ 54 | stdlib-only; `zig/planet-time/`, `zig/ltx/` |
+| **Julia** | ✓ 0.1.0 | ✓ 1.0.0 | Julia 1.9+ | ✅ 54 | stdlib-only; `julia/planet-time/`, `julia/ltx/` |
 
-**Legend:** ✓ = implemented · ✅ 54 = all 54 cross-language fixture entries pass · — = not yet implemented
+**Legend:** ✓ = implemented · ✅ 54 = all 54 cross-language fixture entries pass · — = not yet implemented · unversioned = the port declares no version
 
 ## Package registry status
 
@@ -155,4 +162,4 @@ All LTX implementations conform to the cross-SDK vector test suite
 
 ---
 
-*Last updated: 2026-03-08*
+*Last updated: 2026-09-29*

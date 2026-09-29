@@ -1,0 +1,22 @@
+# Fails when a port manifest, versions.json, the LANGUAGE-SUPPORT.md support
+# matrix or the README LTX table disagree about a version. See scripts/check-versions.js.
+name: Versions
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-versions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Check versions
+        run: node scripts/check-versions.js

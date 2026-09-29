@@ -545,24 +545,24 @@ Source: `python/ltx/` · Python ≥ 3.10 · stdlib only
 | Language | Package | Location | Status |
 |----------|---------|----------|--------|
 | JavaScript | `ltx-sdk.js` | `javascript/ltx/` | ✅ 1.1.0 |
-| TypeScript | `@interplanet/ltx` | `typescript/ltx/` | ✅ 1.0.0 |
-| Python | `interplanet-ltx` | `python/ltx/` | ✅ 1.0.0 |
+| TypeScript | `@interplanet/ltx` | `typescript/ltx/` | ✅ 1.1.0 |
+| Python | `interplanet-ltx` | `python/ltx/` | ✅ 1.1.0 |
 | Java | `interplanet-ltx` | `java/ltx/` | ✅ 1.0.0 |
 | C | `libitx` | `c/ltx/` | ✅ 1.0.0 |
 | PHP | `interplanet/ltx` | `php/ltx/` | ✅ 1.0.0 |
 | Ruby | `interplanet_ltx` | `ruby/ltx/` | ✅ 1.0.0 |
-| Go | `github.com/interplanet/ltx` | `go/ltx/` | ✅ 1.0.0 |
-| Swift | `InterplanetLTX` | `swift/ltx/` | ✅ 1.0.0 |
-| Rust | `interplanet-ltx` | `rust/ltx/` | ✅ 1.0.0 |
-| C# | `InterplanetLTX` | `csharp/ltx/` | ✅ 1.0.0 |
-| Dart | `interplanet_ltx` | `dart/ltx/` | ✅ 1.0.0 |
-| Elixir | `interplanet_ltx` | `elixir/ltx/` | ✅ 1.0.0 |
-| F# | `InterplanetLTX` | `fsharp/ltx/` | ✅ 1.0.0 |
-| Kotlin | `interplanet-ltx` | `kotlin/ltx/` | ✅ 1.0.0 |
-| Scala | `interplanet-ltx` | `scala/ltx/` | ✅ 1.0.0 |
-| Lua | `interplanet_ltx` | `lua/ltx/` | ✅ 1.0.0 |
-| OCaml | `interplanet_ltx` | `ocaml/ltx/` | ✅ 1.0.0 |
-| Zig | `interplanet_ltx` | `zig/ltx/` | ✅ 1.0.0 |
+| Go | `github.com/interplanet/ltx` | `go/ltx/` | ✅ 1.1.0 |
+| Swift | `InterplanetLTX` | `swift/ltx/` | ✅ 1.1.0 |
+| Rust | `interplanet-ltx` | `rust/ltx/` | ✅ 1.1.0 |
+| C# | `InterplanetLTX` | `csharp/ltx/` | ✅ 1.1.0 |
+| Dart | `interplanet_ltx` | `dart/ltx/` | ✅ 1.1.0 |
+| Elixir | `interplanet_ltx` | `elixir/ltx/` | ✅ 1.1.0 |
+| F# | `InterplanetLTX` | `fsharp/ltx/` | ✅ 1.1.0 |
+| Kotlin | `interplanet-ltx` | `kotlin/ltx/` | ✅ 1.1.0 |
+| Scala | `interplanet-ltx` | `scala/ltx/` | ✅ 1.1.0 |
+| Lua | `interplanet_ltx` | `lua/ltx/` | ✅ 1.1.0 |
+| OCaml | `interplanet_ltx` | `ocaml/ltx/` | ✅ 1.1.0 |
+| Zig | `interplanet_ltx` | `zig/ltx/` | ✅ 1.1.0 |
 | CLI | `interplanet ltx` subcommands | `cli/` | — (backlog 22.3) |
 
 <!-- AUDIT: The `conformance/` directory referenced here does not exist in the repository. SDK conformance testing may be tracked elsewhere (e.g. tests/e2e/). -->

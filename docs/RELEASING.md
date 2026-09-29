@@ -21,7 +21,7 @@ Each port is versioned and released independently. A release tag has the form
 ```
 
 where `<language>/<library>` is the port's directory and the version is the one
-in that port's manifest. Examples:
+in that port's manifest (and in [`versions.json`](../versions.json)). Examples:
 
 | Tag | Directory | Registry name |
 |-----|-----------|---------------|
@@ -59,8 +59,9 @@ before either TypeScript package can be published.
 Before tagging:
 
 - [ ] The name in the manifest is the name the documentation advertises.
-- [ ] The manifest version is bumped, and the version tables in `README.md`
-      and `LANGUAGE-SUPPORT.md` match it.
+- [ ] The manifest version is bumped, and `versions.json` and the tables in
+      `LANGUAGE-SUPPORT.md` and `README.md` match it
+      (`node scripts/check-versions.js` passes).
 - [ ] The port's tests and its fixture runner pass against
       `c/planet-time/fixtures/reference.json`.
 - [ ] A local dry run of the package contents looks right:
