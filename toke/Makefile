@@ -1,7 +1,15 @@
 # interplanet — toke interplanetary time CLI
 
-TKC         := /Users/matthew.watt/tk/toke/tkc
-TOKE_ROOT   := /Users/matthew.watt/tk/toke
+# This port is written in the pre-3.0 toke dialect (`=` compares, `_` excluded),
+# so toke 3.0.0 (https://github.com/karwalski/toke) rejects it (E2002).
+# Checked 2026-09-29 on x86_64 Linux: tkc at ad4301b emits wrong ABI
+# types for cross-module f64 parameters (clang link error); tkc at c6d1c8a
+# links, but `ltx` segfaults and `time` prints nothing. The committed LLVM IR
+# (src/main.ll, src/interplanet/*) links and runs once its arm64-apple
+# `target` lines are removed. Override the toolchain location with
+#   make TOKE_ROOT=/path/to/toke
+TOKE_ROOT   ?= /Users/matthew.watt/tk/toke
+TKC         ?= $(TOKE_ROOT)/tkc
 TOKE_STDLIB := $(TOKE_ROOT)/src/stdlib
 
 BIN := interplanet

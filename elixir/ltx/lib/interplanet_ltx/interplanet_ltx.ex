@@ -540,27 +540,19 @@ defmodule InterplanetLtx do
     h |> Integer.to_string(16) |> String.downcase() |> String.pad_leading(8, "0")
   end
 
-  # Parse a plan from decoded JSON string using Erlang :json (OTP 27+) or fallback
+  # Parse a plan from a decoded JSON string
   defp parse_plan_json(json_str) do
     data = try_json_decode(json_str)
     if is_map(data), do: build_plan_from_map(data), else: nil
   end
 
-  # Try multiple JSON decode approaches
+  # Decode with the dependency-free InterplanetLtx.Json (Elixir 1.14+, any OTP),
+  # falling back to the lenient scanner below.
   defp try_json_decode(json_str) do
-    # OTP 27+ has :json module
     try do
-      :json.decode(json_str)
+      InterplanetLtx.Json.decode!(json_str)
     rescue
       _ ->
-        # Fallback: try manual parse
-        try do
-          parse_json_value(String.trim(json_str))
-        rescue
-          _ -> nil
-        end
-    catch
-      _, _ ->
         try do
           parse_json_value(String.trim(json_str))
         rescue
