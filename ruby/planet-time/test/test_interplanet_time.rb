@@ -320,3 +320,42 @@ class TestFormatting < Minitest::Test
     assert_includes result, 'mars'
   end
 end
+
+# ── 12. Parity with planet-time.js (issue #38 accuracy sweep) ────────────────
+
+class TestJsParity < Minitest::Test
+  # MTC is in Mars hours (1/24 sol), not Earth hours: 1997-04-08T02:46:28.517Z.
+  def test_mtc_mars_hours
+    mtc = InterplanetTime.get_mtc(860_467_588_517)
+    assert_equal [15_595, 23, 38, 0], [mtc.sol, mtc.hour, mtc.minute, mtc.second]
+  end
+
+  def test_mtc_matches_mars_prime_meridian
+    ms  = 1_815_216_150_793
+    mtc = InterplanetTime.get_mtc(ms)
+    pt  = InterplanetTime.get_planet_time('mars', ms)
+    assert_equal [pt.day_number, pt.hour, pt.minute, pt.second],
+                 [mtc.sol, mtc.hour, mtc.minute, mtc.second]
+  end
+
+  # Mercury and Venus keep an Earth-clock week (Mon-Fri, UTC 09:00-17:00).
+  def test_mercury_earth_clock_weekend
+    pt = InterplanetTime.get_planet_time('mercury', 1_815_216_150_793) # Sat 10:42 UTC
+    assert_equal 5, pt.period_in_week
+    refute pt.is_work_period
+    refute pt.is_work_hour
+  end
+
+  def test_mercury_earth_clock_work_hour
+    pt = InterplanetTime.get_planet_time('mercury', 1_767_345_008_189) # Fri 09:10 UTC
+    assert_equal 4, pt.period_in_week
+    assert pt.is_work_hour
+  end
+
+  def test_venus_earth_clock_before_hours
+    pt = InterplanetTime.get_planet_time('venus', 860_467_588_517) # Tue 02:46 UTC
+    assert_equal 1, pt.period_in_week
+    assert pt.is_work_period
+    refute pt.is_work_hour
+  end
+end
