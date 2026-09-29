@@ -8,4 +8,4 @@ lint:
 	./gradlew build 2>&1
 
 fixtures:
-	./gradlew run --args="../../c/fixtures/reference.json" 2>&1
+	./gradlew run --args="../../c/planet-time/fixtures/reference.json" 2>&1

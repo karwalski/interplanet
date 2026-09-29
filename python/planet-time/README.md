@@ -8,14 +8,17 @@ calculations for every planet in the solar system.
 
 ## Install
 
+`interplanet-time` is **not yet published** to PyPI, so `pip install interplanet-time`
+does not work yet. Install from source instead (tested 29 Sep 2026 with Python 3.11):
+
 ```bash
-pip install interplanet-time
+pip install "git+https://github.com/karwalski/interplanet.git#subdirectory=python/planet-time"
 ```
 
-Or from source:
+Or from a clone of the repository:
 
 ```bash
-cd python/
+cd python/planet-time
 pip install -e .
 ```
 

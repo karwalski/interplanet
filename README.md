@@ -33,6 +33,7 @@ impossible distances.
 
 ## Table of contents
 
+- [Installation](#installation)
 - [Web app](#web-app)
 - [planet-time.js — JavaScript library](#planet-timejs--javascript-library)
 - [Language ports](#language-ports)
@@ -43,6 +44,82 @@ impossible distances.
 - [CLI](#cli)
 - [Algorithm notes](#algorithm-notes)
 - [Licence](#licence)
+
+---
+
+## Installation
+
+> **No InterPlanet package has been published to a package registry yet.**
+> On 29 September 2026 every advertised name returned "not found":
+> `interplanet-time` and `interplanet-ltx` on PyPI; `@interplanet/time`,
+> `@interplanet/ltx`, `interplanet-ltx`, `interplanet-planet-time` and
+> `interplanet-time-cli` on npm; `interplanet-time` on crates.io; and
+> `interplanet_time` on RubyGems. Registry commands in this repository are
+> marked **not yet published**. Install from source instead. Publishing is a
+> maintainer decision; the process is in [docs/RELEASING.md](docs/RELEASING.md).
+
+The commands below were run against a fresh clone on 29 September 2026
+(Node 22, Python 3.11, Go 1.24, Rust 1.94) and each package was imported
+successfully afterwards.
+
+```bash
+git clone https://github.com/karwalski/interplanet.git
+cd interplanet
+```
+
+**JavaScript** (`interplanet-planet-time`, `interplanet-ltx`):
+
+```bash
+(cd javascript/planet-time && node build.mjs)     # builds dist/ (ESM, IIFE, .d.ts)
+cd /path/to/your-project
+npm install /path/to/interplanet/javascript/planet-time /path/to/interplanet/javascript/ltx
+node -e "console.log(require('interplanet-planet-time').getPlanetTime('mars', new Date()).timeString)"
+```
+
+**TypeScript** (`@interplanet/time`, `@interplanet/ltx`):
+
+```bash
+(cd typescript/planet-time && npm ci && npm run build)
+(cd typescript/ltx && npm ci && npm run build)
+cd /path/to/your-project
+npm install /path/to/interplanet/typescript/planet-time /path/to/interplanet/typescript/ltx
+```
+
+**Python** (`interplanet-time`, `interplanet-ltx`), directly from GitHub without cloning:
+
+```bash
+pip install "git+https://github.com/karwalski/interplanet.git#subdirectory=python/planet-time"
+pip install "git+https://github.com/karwalski/interplanet.git#subdirectory=python/ltx"
+python -c "import interplanet_time as ipt; print(ipt.get_planet_time(ipt.Planet.MARS, 1718409600000).time_str)"
+```
+
+or from a clone: `pip install ./python/planet-time ./python/ltx`.
+
+**Go**: the module path `github.com/interplanet/time` is not served from this
+repository, so `go get` does not work. Use a `replace` directive:
+
+```bash
+go mod edit -require=github.com/interplanet/time@v0.0.0 \
+            -replace=github.com/interplanet/time=/path/to/interplanet/go/planet-time
+# import ipt "github.com/interplanet/time/interplanet_time"
+```
+
+**Rust**: add a path dependency to `Cargo.toml`:
+
+```toml
+interplanet-time = { path = "/path/to/interplanet/rust/planet-time" }
+```
+
+**CLI** (`interplanet-time-cli`):
+
+```bash
+npm install -g /path/to/interplanet/cli
+interplanet time mars
+```
+
+The other ports (Java, C, PHP, Ruby, Swift, R, C#, Dart, Elixir, F#, Kotlin,
+Scala, Lua, OCaml, Zig, Julia) are built from their directories; each port's
+`Makefile` and README give the build and test commands.
 
 ---
 
@@ -108,10 +185,13 @@ const wins = PT.findMeetingWindows('earth', 'mars', 7, new Date());
 wins.forEach(w => console.log(new Date(w.startMs).toUTCString(), w.durationMinutes + ' min'));
 ```
 
-**ESM (npm):**
+**ESM (TypeScript-native ESM/CJS package):**
 
 ```bash
-npm install @interplanet/time   # TypeScript-native ESM/CJS package
+# npm install @interplanet/time    # not yet published to npm
+# Install from source instead (see Installation above):
+(cd typescript/planet-time && npm ci && npm run build)
+npm install /path/to/interplanet/typescript/planet-time
 ```
 
 ```ts
@@ -140,15 +220,18 @@ import { getPlanetTime, lightTravelSeconds, findMeetingWindows } from '@interpla
 
 ## Language ports
 
-All ports implement the same API surface as `planet-time.js` and are
-cross-validated against `c/planet-time/fixtures/reference.json` (54 entries).
+All ports implement the same API surface as `planet-time.js`, and each has a
+fixture runner that checks it against `c/planet-time/fixtures/reference.json`
+(54 entries). Not every port passes yet: see
+[Conformance in LANGUAGE-SUPPORT.md](LANGUAGE-SUPPORT.md#conformance) for the
+latest local results and the CI workflow.
 
 ### JavaScript / TypeScript (native)
 
 | Package | Location | Install |
 |---------|----------|---------|
-| `planet-time.js` (IIFE) | `javascript/planet-time/` | CDN or copy |
-| `@interplanet/time` (npm, TS) | `typescript/planet-time/` | `npm install @interplanet/time` |
+| `planet-time.js` (IIFE) | `javascript/planet-time/` | CDN or copy; npm name `interplanet-planet-time` is not yet published, [install from source](#installation) |
+| `@interplanet/time` (TS) | `typescript/planet-time/` | `npm install @interplanet/time` is not yet published; [install from source](#installation) |
 
 ```ts
 import { getPlanetTime } from '@interplanet/time';
@@ -159,7 +242,8 @@ console.log(pt.timeString, pt.isWorkHour);
 ### Python
 
 ```bash
-pip install interplanet-time
+# pip install interplanet-time    # not yet published to PyPI
+pip install "git+https://github.com/karwalski/interplanet.git#subdirectory=python/planet-time"
 ```
 
 ```python
@@ -174,7 +258,7 @@ Source: `python/planet-time/` · Python ≥ 3.10 · stdlib only
 ### Java
 
 ```bash
-cd java && make && make test
+cd java/planet-time && make test
 ```
 
 ```java
@@ -249,16 +333,17 @@ Source: `ruby/planet-time/` · Ruby 2.6+
 ### Go
 
 ```go
-import ipt "github.com/interplanet/time"
+import ipt "github.com/interplanet/time/interplanet_time"
 
-pt := ipt.GetPlanetTime(ipt.Mars, time.Now().UnixMilli(), 0)
+pt := ipt.GetPlanetTime("mars", time.Now().UnixMilli(), 0)
 fmt.Println(pt.TimeStr, pt.IsWorkHour)
 
-lt := ipt.LightTravelSeconds(ipt.Earth, ipt.Mars, time.Now().UnixMilli())
+lt := ipt.LightTravelSeconds("earth", "mars", time.Now().UnixMilli())
 fmt.Println(ipt.FormatLightTime(lt))
 ```
 
-Source: `go/planet-time/` · Go 1.21+
+Source: `go/planet-time/` · Go 1.21+ · `go get` does not work yet; use a
+`replace` directive as shown in [Installation](#installation)
 
 ### Swift
 
@@ -295,19 +380,23 @@ Source: `r/planet-time/` · R 4.1+ · base R only
 
 ### Port comparison
 
-| Port | Language | Min version | Stdlib only | Fixture tested |
+| Port | Language | Min version | Stdlib only | Fixtures (local, 29 Sep 2026) |
 |------|----------|:-----------:|:-----------:|:--------------:|
 | `planet-time.js` | JavaScript | Node ≥ 16 | ✅ | ✅ 54 |
 | `@interplanet/time` | TypeScript | Node ≥ 16 | ✅ | ✅ 54 |
 | `interplanet-time` | Python | 3.10+ | ✅ | ✅ 54 |
-| `InterplanetTime` | Java | 16+ | ✅ | ✅ 54 |
-| `libinterplanet` | C / C++ | C99 / C++17 | ✅ | ✅ 54 |
-| `interplanet/time` | PHP | 8.1+ | ✅ | ✅ 54 |
-| `interplanet_time` | Ruby | 2.6+ | ✅ | ✅ 54 |
+| `InterplanetTime` | Java | 16+ | ✅ | ❌ 9 of 150 checks fail |
+| `libinterplanet` | C / C++ | C99 / C++17 | ✅ | no runner |
+| `interplanet/time` | PHP | 8.1+ | ✅ | ❌ 64 of 150 checks fail |
+| `interplanet_time` | Ruby | 2.6+ | ✅ | ❌ 9 of 150 checks fail |
 | `github.com/interplanet/time` | Go | 1.21+ | ✅ | ✅ 54 |
-| `InterplanetTime` | Swift | 5.9+ | ✅ | ✅ 54 |
+| `InterplanetTime` | Swift | 5.9+ | ✅ | not run |
 | `interplanet-time` | Rust | 1.70+ | ✅ | ✅ 54 |
 | `interplanet.time` | R | 4.1+ | ✅ | ✅ 54 |
+
+Fixture results are from a local run on 29 September 2026. The
+[Conformance workflow](https://github.com/karwalski/interplanet/actions/workflows/conformance.yml)
+runs every port in CI; details are in [LANGUAGE-SUPPORT.md](LANGUAGE-SUPPORT.md#conformance).
 
 ---
 
@@ -410,7 +499,9 @@ Source: `javascript/ltx/ltx-sdk.js` · TypeScript declarations: `javascript/ltx/
 ### TypeScript SDK
 
 ```bash
-npm install @interplanet/ltx
+# npm install @interplanet/ltx    # not yet published to npm
+(cd typescript/ltx && npm ci && npm run build)
+npm install /path/to/interplanet/typescript/ltx
 ```
 
 ```ts
@@ -422,7 +513,8 @@ Source: `typescript/ltx/` · TypeScript 5+ · stdlib only
 ### Python SDK
 
 ```bash
-pip install interplanet-ltx
+# pip install interplanet-ltx    # not yet published to PyPI
+pip install "git+https://github.com/karwalski/interplanet.git#subdirectory=python/ltx"
 ```
 
 ```python
@@ -460,24 +552,24 @@ Source: `python/ltx/` · Python ≥ 3.10 · stdlib only
 | Language | Package | Location | Status |
 |----------|---------|----------|--------|
 | JavaScript | `ltx-sdk.js` | `javascript/ltx/` | ✅ 1.1.0 |
-| TypeScript | `@interplanet/ltx` | `typescript/ltx/` | ✅ 1.0.0 |
-| Python | `interplanet-ltx` | `python/ltx/` | ✅ 1.0.0 |
+| TypeScript | `@interplanet/ltx` | `typescript/ltx/` | ✅ 1.1.0 |
+| Python | `interplanet-ltx` | `python/ltx/` | ✅ 1.1.0 |
 | Java | `interplanet-ltx` | `java/ltx/` | ✅ 1.0.0 |
 | C | `libitx` | `c/ltx/` | ✅ 1.0.0 |
 | PHP | `interplanet/ltx` | `php/ltx/` | ✅ 1.0.0 |
 | Ruby | `interplanet_ltx` | `ruby/ltx/` | ✅ 1.0.0 |
-| Go | `github.com/interplanet/ltx` | `go/ltx/` | ✅ 1.0.0 |
-| Swift | `InterplanetLTX` | `swift/ltx/` | ✅ 1.0.0 |
-| Rust | `interplanet-ltx` | `rust/ltx/` | ✅ 1.0.0 |
-| C# | `InterplanetLTX` | `csharp/ltx/` | ✅ 1.0.0 |
-| Dart | `interplanet_ltx` | `dart/ltx/` | ✅ 1.0.0 |
-| Elixir | `interplanet_ltx` | `elixir/ltx/` | ✅ 1.0.0 |
-| F# | `InterplanetLTX` | `fsharp/ltx/` | ✅ 1.0.0 |
-| Kotlin | `interplanet-ltx` | `kotlin/ltx/` | ✅ 1.0.0 |
-| Scala | `interplanet-ltx` | `scala/ltx/` | ✅ 1.0.0 |
-| Lua | `interplanet_ltx` | `lua/ltx/` | ✅ 1.0.0 |
-| OCaml | `interplanet_ltx` | `ocaml/ltx/` | ✅ 1.0.0 |
-| Zig | `interplanet_ltx` | `zig/ltx/` | ✅ 1.0.0 |
+| Go | `github.com/interplanet/ltx` | `go/ltx/` | ✅ 1.1.0 |
+| Swift | `InterplanetLTX` | `swift/ltx/` | ✅ 1.1.0 |
+| Rust | `interplanet-ltx` | `rust/ltx/` | ✅ 1.1.0 |
+| C# | `InterplanetLTX` | `csharp/ltx/` | ✅ 1.1.0 |
+| Dart | `interplanet_ltx` | `dart/ltx/` | ✅ 1.1.0 |
+| Elixir | `interplanet_ltx` | `elixir/ltx/` | ✅ 1.1.0 |
+| F# | `InterplanetLTX` | `fsharp/ltx/` | ✅ 1.1.0 |
+| Kotlin | `interplanet-ltx` | `kotlin/ltx/` | ✅ 1.1.0 |
+| Scala | `interplanet-ltx` | `scala/ltx/` | ✅ 1.1.0 |
+| Lua | `interplanet_ltx` | `lua/ltx/` | ✅ 1.1.0 |
+| OCaml | `interplanet_ltx` | `ocaml/ltx/` | ✅ 1.1.0 |
+| Zig | `interplanet_ltx` | `zig/ltx/` | ✅ 1.1.0 |
 | CLI | `interplanet ltx` subcommands | `cli/` | — (backlog 22.3) |
 
 <!-- AUDIT: The `conformance/` directory referenced here does not exist in the repository. SDK conformance testing may be tracked elsewhere (e.g. tests/e2e/). -->
@@ -540,7 +632,8 @@ curl -X POST https://interplanet.live/api/ltx.php?action=session \
 ## CLI
 
 ```bash
-npm install -g interplanet-time-cli
+# npm install -g interplanet-time-cli    # not yet published to npm
+npm install -g /path/to/interplanet/cli   # install from a clone
 interplanet --help
 ```
 
@@ -554,7 +647,7 @@ interplanet --help
 | `windows <from> <to>` | `interplanet windows earth mars --days 7` | Meeting windows |
 | `planets` | `interplanet planets` | List all supported planets |
 
-Source: `cli/` · Node.js ≥ 16
+Source: `cli/` · Node.js ≥ 18
 
 ---
 

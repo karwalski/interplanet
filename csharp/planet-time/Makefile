@@ -11,4 +11,4 @@ lint:
 	dotnet build $(BUILD_DIR) 2>&1
 
 fixtures:
-	dotnet run --project $(TEST_DIR) ../../c/fixtures/reference.json 2>&1
+	dotnet run --project $(TEST_DIR) ../../c/planet-time/fixtures/reference.json 2>&1

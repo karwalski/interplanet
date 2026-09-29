@@ -1,4 +1,8 @@
-name: Publish interplanet-planet-time to npm
+# Builds and publishes javascript/planet-time, whose package.json name is
+# "interplanet-planet-time" (not "@interplanet/time", which is the TypeScript
+# package in typescript/planet-time and has no publish workflow yet).
+# Runs only on a tag such as javascript/planet-time/v1.4.0. See docs/RELEASING.md.
+name: Publish interplanet-planet-time (javascript/planet-time) to npm
 
 on:
   push:

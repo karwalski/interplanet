@@ -5,10 +5,11 @@
 // Validates all 54 entries against the Zig implementation.
 //
 // Usage:
-//   zig run test/fixture_runner.zig -- --fixture ../../c/planet-time/fixtures/reference.json
+//   zig run --dep interplanet_time -Mroot=test/fixture_runner.zig \
+//       -Minterplanet_time=src/interplanet_time.zig -- --fixture ../../c/planet-time/fixtures/reference.json
 
 const std = @import("std");
-const ipt = @import("../src/interplanet_time.zig");
+const ipt = @import("interplanet_time");
 
 const PLANET_NAMES = [_][]const u8{
     "mercury", "venus", "earth", "mars",
