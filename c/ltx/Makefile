@@ -10,6 +10,9 @@ LIB_A    = lib/libitx.a
 LIB_SO   = lib/libitx.so
 TEST_BIN = bin/test_libitx
 PLAN_TEST_BIN = bin/test_plan_json
+CXX      = c++
+CXXFLAGS = -std=c++17 -Wall -Wextra -O2
+HPP_TEST_BIN = bin/test_itx_hpp
 
 .PHONY: all build shared test clean
 
@@ -40,6 +43,10 @@ test: $(LIB_A)
 	@echo ""
 	@echo "── Wire-format plans: golden planIds, validatePlan ─────────────"
 	./$(PLAN_TEST_BIN) ../../spec/golden/plan-ids.json
+	$(CXX) $(CXXFLAGS) $(INC) tests/test_itx_hpp.cpp $(LIB_A) -lm -o $(HPP_TEST_BIN)
+	@echo ""
+	@echo "── C++ wrapper (include/itx.hpp) ─────────────────────────────────"
+	./$(HPP_TEST_BIN) ../../spec/golden/plan-ids.json
 
 clean:
 	rm -rf lib/ bin/
