@@ -350,7 +350,8 @@ func isJSSpace(r rune) bool {
 	return r >= 0x2000 && r <= 0x200A
 }
 
-// jsNameToken is name.replace(/\s+/g, "").toUpperCase().slice(0, max).
+// jsNameToken is name.replace(/\s+/g, "").toUpperCase().slice(0, max), with
+// JS toUpperCase (jsToUpper: strings.ToUpper has no special casing).
 func jsNameToken(name string, max int) string {
 	stripped := strings.Map(func(r rune) rune {
 		if isJSSpace(r) {
@@ -358,7 +359,7 @@ func jsNameToken(name string, max int) string {
 		}
 		return r
 	}, name)
-	return utf16Prefix(strings.ToUpper(stripped), max)
+	return utf16Prefix(jsToUpper(stripped), max)
 }
 
 // utf16Prefix is String.prototype.slice(0, max) (UTF-16 code units).

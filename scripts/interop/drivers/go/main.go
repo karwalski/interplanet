@@ -57,7 +57,7 @@ func main() {
 
 	ctlCase(outDir)
 
-	for _, v := range []string{"2", "3"} {
+	for _, v := range []string{"2", "3", "P"} {
 		data, err := os.ReadFile(filepath.Join(inDir, "js-v"+v+".json"))
 		must(err)
 		id, err := ltx.MakePlanIDFromJSON(data)

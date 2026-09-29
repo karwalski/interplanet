@@ -186,6 +186,7 @@ const FORMATS = {
     'var upperSpecial = map[rune][]rune{',
     ...rows(special, 3, ([cp, u]) => `${hex(cp)}: {${u.map(hex).join(', ')}}`, '\t', ', ').map(l => l + ','),
     '}',
+    '',
   ],
   // Julia: special casing only (Base.uppercase(::Char) does the 1:1 mappings).
   julia: () => [
