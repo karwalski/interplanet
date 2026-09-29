@@ -37,9 +37,16 @@ add_executable(test_libinterplanet tests/test_libinterplanet.c)
 target_include_directories(test_libinterplanet PRIVATE ${LIB_INC})
 target_link_libraries(test_libinterplanet interplanet_static m)
 
+# ── Fixture runner (fixtures/reference.json) ─────────────────────────────────
+add_executable(fixture_runner tests/fixture_runner.c)
+target_include_directories(fixture_runner PRIVATE ${LIB_INC})
+target_link_libraries(fixture_runner interplanet_static m)
+
 # ── CTest integration ─────────────────────────────────────────────────────────
 enable_testing()
 add_test(NAME unit_tests COMMAND test_libinterplanet)
+add_test(NAME reference_fixtures
+         COMMAND fixture_runner ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/reference.json)
 
 # ── Install ───────────────────────────────────────────────────────────────────
 install(TARGETS interplanet_shared interplanet_static

@@ -54,8 +54,8 @@ jobs:
           - port: C
             toolchain: none
             dir: c/planet-time
-            cmd: cc -std=c11 -O2 -Iinclude -o "$RUNNER_TEMP/test_libinterplanet" tests/test_libinterplanet.c src/libinterplanet.c -lm && "$RUNNER_TEMP/test_libinterplanet"
-            note: unit tests only; the C port has no reference.json runner
+            cmd: cc -std=c11 -O2 -Iinclude -o "$RUNNER_TEMP/test_libinterplanet" tests/test_libinterplanet.c src/libinterplanet.c -lm && "$RUNNER_TEMP/test_libinterplanet" && cc -std=c11 -O2 -Iinclude -o "$RUNNER_TEMP/fixture_runner" tests/fixture_runner.c src/libinterplanet.c -lm && "$RUNNER_TEMP/fixture_runner" "$FIXTURE"
+            note: unit tests plus tests/fixture_runner.c against reference.json
           - port: PHP
             toolchain: php
             dir: php/planet-time
