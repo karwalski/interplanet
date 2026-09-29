@@ -36,8 +36,10 @@ $(V11_TEST): $(V11_SRCS) test/v11_test.ml
 $(PARITY_TEST): $(V11_SRCS) $(UNIT_SRCS) test/parity_test.ml
 	$(OCAMLFIND) $(OCAMLOPT) -package $(PKGS_FULL) -linkpkg -I lib $(UNIT_SRCS) $(SEC_SRCS) $(V11_ONLY) test/parity_test.ml -o $(PARITY_TEST)
 
+# Compiles every library module (the unit, security and v1.1 sets), then
+# removes the objects.
 lint:
-	$(OCAMLFIND) $(OCAMLOPT) -linkpkg -i -I lib $(V11_SRCS) > /dev/null
+	$(OCAMLFIND) $(OCAMLOPT) -package $(PKGS_FULL) -I lib -c $(UNIT_SRCS) $(SEC_SRCS) $(V11_ONLY) && rm -f lib/*.cmi lib/*.cmx lib/*.o
 
 clean:
 	rm -f *.cmi *.cmx *.o interplanet_ltx interplanet_ltx_sec

@@ -39,7 +39,7 @@ lib/
   orbital.ml          — julian_day, mean_longitude, true_anomaly,
                         ecliptic_longitude, heliocentric_pos, light_travel_time
   time_calc.ml        — solar_day_seconds, local_solar_time, sol_number,
-                        planet_time, get_planet_time (full, for fixture)
+                        planet_time, get_planet_time (full, for fixture), get_mtc
   interplanet_time.ml — public API module
 test/
   unit_test.ml        — 80+ assertions, fixture validation (54 entries)
@@ -62,6 +62,8 @@ All functions are in the `Interplanet_time` module:
 | `local_solar_time ~body ~jd ~longitude` | Local solar time (seconds since midnight) |
 | `sol_number ~body ~jd` | Fractional sol/day number since planet epoch |
 | `planet_time ~body ~unix_ms` | Full planet_time record |
+| `get_planet_time ~body ~utc_ms` | Clock, day, year and work-schedule fields (as getPlanetTime in planet-time.js) |
+| `get_mtc ~utc_ms` | Mars Coordinated Time: sol and Mars-clock time at the prime meridian (as getMTC) |
 
 ## Bodies
 

@@ -470,6 +470,22 @@ let () =
   end else
     Printf.printf "fixture entries checked: 0 (file not found)\n%!"
 
+(* ── get_mtc (issue #38): Mars hours, as getMTC in planet-time.js ─────────── *)
+
+let () =
+  let m = Time_calc.get_mtc ~utc_ms:860467588517.0 in  (* 1997-04-08T02:46:28.517Z *)
+  check_int "get_mtc sol"    m.Time_calc.mtc_sol 15595;
+  check_int "get_mtc hour"   m.Time_calc.mtc_hour 23;
+  check_int "get_mtc minute" m.Time_calc.mtc_minute 38;
+  check_int "get_mtc second" m.Time_calc.mtc_second 0;
+  let ms = 1815216150793.0 in
+  let m2 = Time_calc.get_mtc ~utc_ms:ms in
+  let pt = Time_calc.get_planet_time ~body:3 ~utc_ms:ms in
+  check_int "get_mtc sol = Mars day_number" m2.Time_calc.mtc_sol pt.Time_calc.day_number;
+  check_int "get_mtc hour = Mars hour"      m2.Time_calc.mtc_hour pt.Time_calc.hour;
+  check_int "get_mtc minute = Mars minute"  m2.Time_calc.mtc_minute pt.Time_calc.minute;
+  check_int "get_mtc second = Mars second"  m2.Time_calc.mtc_second pt.Time_calc.second
+
 (* ── Summary ─────────────────────────────────────────────────────────────── *)
 
 let () =
