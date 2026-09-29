@@ -305,3 +305,27 @@ fn test_sequence_reorder_window() {
         && p.get("ltx_seq_plan-persist_N2_rx_miss_3") == Some(&0));
     c.done();
 }
+
+/// The #l= wire JSON of a typed v3 plan carries its v3 fields, so a receiver
+/// hashing the wire JSON (JS makePlanId) derives the same planId as
+/// make_plan_id (scripts/interop, issue #32).
+#[test]
+fn test_encode_hash_v3_wire_matches_plan_id() {
+    use base64::Engine;
+    let wire_of = |p: &LtxPlan| String::from_utf8(base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(encode_hash(p).trim_start_matches("#l=")).unwrap()).unwrap();
+    let mut p = create_plan(Some("Réunion Mars 🚀"), "2026-03-15T14:00:00.000Z", 840);
+    p.v = 3;
+    p.plan_version = Some(1);
+    p.delays = Some(BTreeMap::from([("N0|N1".to_string(), 842)]));
+    let wire = wire_of(&p);
+    assert!(wire.contains(r#""delays":{"N0|N1":842}"#) && wire.contains(r#""planVersion":1"#), "{}", wire);
+    // JS makePlanId(JSON.parse(wire)) for this plan.
+    let want = "LTX-20260315-EARTHHQ-MARS-v3-4192925c";
+    assert_eq!(make_plan_id(&p), want);
+    assert_eq!(make_plan_id_from_json(&wire).unwrap(), want);
+    // v2 wire JSON is unchanged: no v3 keys.
+    p.v = 2; p.plan_version = None; p.delays = None;
+    let w2 = wire_of(&p);
+    assert!(!w2.contains("delays") && !w2.contains("planVersion"), "{}", w2);
+}

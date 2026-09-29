@@ -459,6 +459,18 @@ fn plan_to_json(plan: &LtxPlan) -> String {
     out.push_str(&json_quote("mode")); out.push(':'); out.push_str(&json_quote(&plan.mode)); out.push(',');
     out.push_str(&json_quote("nodes")); out.push(':'); out.push('['); out.push_str(&nodes_parts.join(",")); out.push(']'); out.push(',');
     out.push_str(&json_quote("segments")); out.push(':'); out.push('['); out.push_str(&segs_parts.join(",")); out.push(']');
+    // v3 fields (§4.4), only when set so v2 bytes are unchanged; without them
+    // a v3 plan's wire JSON would hash to a different planId than make_plan_id.
+    if let Some(delays) = &plan.delays {
+        let parts: Vec<String> = delays.iter().map(|(k, v)| format!("{}:{}", json_quote(k), v)).collect();
+        out.push(','); out.push_str(&json_quote("delays")); out.push_str(":{"); out.push_str(&parts.join(",")); out.push('}');
+    }
+    if let Some(pv) = plan.plan_version {
+        out.push(','); out.push_str(&json_quote("planVersion")); out.push(':'); out.push_str(&pv.to_string());
+    }
+    if let Some(ph) = &plan.prev_plan_hash {
+        out.push(','); out.push_str(&json_quote("prevPlanHash")); out.push(':'); out.push_str(&json_quote(ph));
+    }
     out.push('}'); out
 }
 
