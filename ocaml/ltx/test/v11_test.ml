@@ -1,5 +1,6 @@
 (* v11_test.ml -- Epic 72, Story 72.5: LTX v1.1 core subset conformance tests.
-   Verified against the shared golden vectors: conformance/vectors.json §v11. *)
+   Verified against the shared golden vectors: conformance/vectors.json §v11
+   (vendored as test/v11.json). *)
 
 open Security
 open V11
@@ -30,16 +31,23 @@ let read_file path =
 
 let () =
   (* ---- load golden vectors ---- *)
+  (* conformance/vectors.json (section "v11") when present, else the vendored
+     copy test/v11.json (identical to go/ltx/testdata/v11.json). *)
   let candidates = [
-    "../../../conformance/vectors.json";      (* from ocaml/ltx *)
-    "../../../../conformance/vectors.json";   (* from ocaml/ltx/test *)
+    "../../conformance/vectors.json";         (* from ocaml/ltx *)
+    "../../../conformance/vectors.json";      (* from ocaml/ltx/test *)
   ] in
-  let path =
-    try List.find Sys.file_exists candidates
-    with Not_found -> failwith "conformance/vectors.json not found"
+  let v11 =
+    match List.find_opt Sys.file_exists candidates with
+    | Some path ->
+      (match obj_get (parse_json (read_file path)) "v11" with
+       | Some v -> v | None -> failwith "no v11")
+    | None ->
+      let vendored = List.find_opt Sys.file_exists [ "test/v11.json"; "v11.json" ] in
+      (match vendored with
+       | Some path -> parse_json (read_file path)
+       | None -> failwith "v11 vectors not found (conformance/vectors.json or test/v11.json)")
   in
-  let root = parse_json (read_file path) in
-  let v11 = match obj_get root "v11" with Some v -> v | None -> failwith "no v11" in
   let key = match obj_get v11 "key" with Some v -> v | None -> failwith "no key" in
   let nik_json = match obj_get key "nik" with Some v -> v | None -> failwith "no nik" in
   let seed = b64u_decode (get_str key "privateSeedB64") in

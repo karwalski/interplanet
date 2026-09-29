@@ -1,0 +1,8 @@
+*.cmi
+*.cmx
+*.o
+test/unit_test
+test/security_test
+test/v11_test
+test/parity_test
+interplanet_ltx_sec

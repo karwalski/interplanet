@@ -54,15 +54,16 @@ let parse_json (src : string) : json_val =
         | 'u'  ->
           let code = int_of_string ("0x" ^ String.sub src !pos 4) in
           pos := !pos + 4;
-          if code < 0x80 then Buffer.add_char buf (Char.chr code)
-          else if code < 0x800 then begin
-            Buffer.add_char buf (Char.chr (0xC0 lor (code lsr 6)));
-            Buffer.add_char buf (Char.chr (0x80 lor (code land 0x3F)))
-          end else begin
-            Buffer.add_char buf (Char.chr (0xE0 lor (code lsr 12)));
-            Buffer.add_char buf (Char.chr (0x80 lor ((code lsr 6) land 0x3F)));
-            Buffer.add_char buf (Char.chr (0x80 lor (code land 0x3F)))
-          end
+          (* A \uD8xx\uDCxx surrogate pair is one astral code point. *)
+          let code =
+            if code >= 0xD800 && code <= 0xDBFF && !pos + 6 <= n
+               && src.[!pos] = '\\' && src.[!pos + 1] = 'u' then begin
+              let lo = int_of_string ("0x" ^ String.sub src (!pos + 2) 4) in
+              pos := !pos + 6;
+              0x10000 + ((code - 0xD800) lsl 10) + (lo - 0xDC00)
+            end else code
+          in
+          Buffer.add_utf_8_uchar buf (Uchar.of_int code)
         | c -> raise (Json_error (Printf.sprintf "bad escape '\\%c'" c))
       end
       else Buffer.add_char buf c
@@ -189,6 +190,26 @@ let djb_hash32 (s : string) : int32 =
         0xFFFFFFFFl)
     0l s
 
+(* (Math.imul(31, h) + charCodeAt(i)) >>> 0 over the UTF-16 code units of a
+   UTF-8 string: the FROZEN v2 planId hash (LTX-SPECIFICATION.md §4.3).
+   djb_hash32 above runs over bytes and differs for any non-ASCII text. *)
+let imul31_utf16 (s : string) : int32 =
+  let h = ref 0 in
+  let add u = h := (!h * 31 + u) land 0xFFFFFFFF in
+  let n = String.length s in
+  let i = ref 0 in
+  while !i < n do
+    let d = String.get_utf_8_uchar s !i in
+    let cp = Uchar.to_int (Uchar.utf_decode_uchar d) in
+    i := !i + Uchar.utf_decode_length d;
+    if cp >= 0x10000 then begin
+      let x = cp - 0x10000 in
+      add (0xD800 + (x lsr 10));
+      add (0xDC00 + (x land 0x3FF))
+    end else add cp
+  done;
+  Int32.of_int !h
+
 let remove_ws (s : string) : string =
   String.concat ""
     (List.filter (fun c -> c <> " " && c <> "\t" && c <> "\n" && c <> "\r")
@@ -246,9 +267,10 @@ let make_plan_id (plan : json_val) : string =
     let digest = hex_of_string (sha256 (canonical_json plan)) in
     Printf.sprintf "LTX-%s-%s-%s-v3-%s" date host_str node_str (String.sub digest 0 8)
   else
-    (* FROZEN v2 path — 32-bit polynomial hash over insertion-order JSON. *)
+    (* FROZEN v2 path — 32-bit polynomial hash over the UTF-16 code units of
+       the insertion-order JSON (JSON.stringify). *)
     Printf.sprintf "LTX-%s-%s-%s-v2-%08lx" date host_str node_str
-      (djb_hash32 (json_stringify plan))
+      (imul31_utf16 (json_stringify plan))
 
 (* ---- pair_delay (LTX-SPECIFICATION.md §3.7) ---- *)
 
@@ -284,6 +306,41 @@ let pair_delay (plan : json_val) (a : string) (b : string) : int =
          if a = host_id then get_int nb "delay"
          else if b = host_id then get_int na "delay"
          else get_int na "delay" + get_int nb "delay")
+
+(* ---- build_delay_matrix (LTX-SPECIFICATION.md §3.7.3) ---- *)
+
+type delay_pair = { dm_from : string; dm_from_name : string; dm_to : string;
+                    dm_to_name : string; dm_delay : int }
+
+(* Delay for every ordered node pair: each entry is pair_delay, so a v3
+   `delays` entry is authoritative, HOST pairs use the node's delay, and
+   non-HOST pairs the SUM (not the max) of both HOST-relative delays. *)
+let build_delay_matrix (plan : json_val) : delay_pair list =
+  let nodes = get_list plan "nodes" in
+  List.concat_map
+    (fun f ->
+      List.filter_map
+        (fun t ->
+          let fi = get_str f "id" and ti = get_str t "id" in
+          if fi = ti then None
+          else Some { dm_from = fi; dm_from_name = get_str f "name"; dm_to = ti;
+                      dm_to_name = get_str t "name"; dm_delay = pair_delay plan fi ti })
+        nodes)
+    nodes
+
+(* ---- upgrade_plan_to_v3 (LTX-SPECIFICATION.md §4.4) ---- *)
+
+(* Explicitly upgrade a v2 plan to v3: never automatic, the result is a NEW
+   plan with a new (v3) planId. [extras] (e.g. [("delays", JObj ...)]) are
+   merged with JS spread semantics; v becomes 3 and planVersion defaults to 1.
+   Raises Validate.Reserved_field_error if the result carries reserved
+   fields (§3.5, §7). *)
+let upgrade_plan_to_v3 ?(extras = []) (plan : json_val) : json_val =
+  let merged = List.fold_left (fun acc (k, v) -> obj_set acc k v) plan extras in
+  let pv = match List.assoc_opt "planVersion" extras with Some v -> v | None -> JInt 1 in
+  let result = obj_set (obj_set merged "v" (JInt 3)) "planVersion" pv in
+  Validate.assert_no_reserved_fields result "upgradePlanToV3";
+  result
 
 (* ---- compute_segments_for (LTX-SPECIFICATION.md §14.3) ---- *)
 
@@ -426,7 +483,10 @@ let quorum_count (plan : json_val) (quorum : session_quorum) : int =
   | QCount n -> min (max n 1) total
   | QAll -> total
 
+(* Raises Validate.Reserved_field_error (code "reserved_streams" or
+   "reserved_branching") if the plan uses reserved fields (§3.5, §7). *)
 let create_session ?(quorum = QAll) (plan : json_val) (plan_id : string) : session_ctx =
+  Validate.assert_no_reserved_fields plan "createSession";
   {
     state = "DRAFT";
     plan;
@@ -782,7 +842,7 @@ let entry_prefix = function
   | "amendment" -> "AMD"
   | "state_transition" -> "STA"
   | "merge_snapshot" -> "MRG"
-  | "decision" -> "DEC"
+  | "decision" | "decision_update" -> "DEC"
   | _ -> "ENT"
 
 (* Create a signed register entry (LTX-SECURITY.md §9.5): Ed25519 over the
@@ -1031,6 +1091,95 @@ let reduce_actions (entries : json_val list)
               by_id :=
                 List.map (fun (k, v) -> if k = aid then (k, state) else (k, v)) !by_id;
               winners := (aid, incoming) :: List.remove_assoc aid !winners))
+      | _ -> ())
+    (order_entries entries);
+  (!by_id, !superseded)
+
+type decision_state = {
+  d_did           : string;
+  d_text          : string;
+  d_recorded_by   : string;
+  d_rationale     : string option;
+  d_origin_window : string option;
+  d_status        : string; (* RECORDED | RESCINDED *)
+  d_editor        : string option;
+  d_version       : int;
+}
+
+let decision_statuses = ["RECORDED"; "RESCINDED"]
+
+(* Reduce decision register state from log entries (§10.3). `decision`
+   entries record a decision (did = entryId, version 1); `decision_update`
+   entries reference content.did and revise text/rationale or rescind it.
+   Conflicts follow §8.2 as for questions and actions: higher version wins,
+   then the lowest editor nodeId; losers and orphan updates are superseded. *)
+let reduce_decisions (entries : json_val list)
+    : (string * decision_state) list * string list =
+  let by_id = ref [] and winners = ref [] and superseded = ref [] in
+  List.iter
+    (fun e ->
+      let content = match obj_get e "content" with Some c -> c | None -> JObj [] in
+      let entry_id = get_str e "entryId" in
+      let node_id = get_str e "nodeId" in
+      match get_str e "type" with
+      | "decision" ->
+        let did = entry_id in
+        if List.mem_assoc did !by_id then superseded := !superseded @ [entry_id]
+        else begin
+          let state = {
+            d_did = did;
+            d_text = content_str content "text";
+            d_recorded_by = node_id;
+            d_rationale = content_str_opt content "rationale";
+            d_origin_window = content_str_opt content "originWindow";
+            d_status = "RECORDED";
+            d_editor = None;
+            d_version = 1;
+          } in
+          by_id := !by_id @ [(did, state)];
+          winners := (did, { w_version = 1; w_editor = node_id; w_entry_id = entry_id })
+                     :: List.remove_assoc did !winners
+        end
+      | "decision_update" ->
+        let did = content_str content "did" in
+        (match List.assoc_opt did !by_id with
+         | None -> superseded := !superseded @ [entry_id]
+         | Some d ->
+           let version =
+             match obj_get content "version" with
+             | Some (JInt i) -> i
+             | _ -> d.d_version + 1
+           in
+           let incoming =
+             { w_version = version; w_editor = node_id; w_entry_id = entry_id }
+           in
+           let current = List.assoc_opt did !winners in
+           (match current with
+            | Some cur when not (wins incoming cur) ->
+              superseded := !superseded @ [entry_id]
+            | _ ->
+              (match current with
+               | Some cur when cur.w_entry_id <> d.d_did ->
+                 superseded := !superseded @ [cur.w_entry_id]
+               | _ -> ());
+              let status =
+                let s = content_str content "status" in
+                if List.mem s decision_statuses then s else d.d_status
+              in
+              let state = { d with
+                d_status = status;
+                d_text =
+                  (match content_str_opt content "text" with
+                   | Some t -> t | None -> d.d_text);
+                d_rationale =
+                  (match content_str_opt content "rationale" with
+                   | Some r -> Some r | None -> d.d_rationale);
+                d_editor = Some node_id;
+                d_version = version;
+              } in
+              by_id :=
+                List.map (fun (k, v) -> if k = did then (k, state) else (k, v)) !by_id;
+              winners := (did, incoming) :: List.remove_assoc did !winners))
       | _ -> ())
     (order_entries entries);
   (!by_id, !superseded)
