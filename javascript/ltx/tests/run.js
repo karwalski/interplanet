@@ -171,6 +171,51 @@ check('checkSeq missing reason',        noSeq.reason === 'missing_seq');
 check('lastSeenSeq correct',            tracker.lastSeenSeq('N0') === 6);
 check('currentSeq correct',             tracker.currentSeq('N0') === 2);
 
+// Late arrival vs replay (LTX-SECURITY §11.2): seqs 3,4 were skipped by the gap
+check('missingSeqs lists gap',          JSON.stringify(tracker.missingSeqs('N0')) === '[3,4]');
+const late4 = tracker.recordSeq('N0', 4);
+check('late seq accepted',              late4.accepted === true && late4.late === true);
+check('late seq no gap, no reason',     late4.gap === false && late4.gapSize === 0 && late4.reason === undefined);
+check('late seq keeps high-water mark', tracker.lastSeenSeq('N0') === 6);
+const dup4 = tracker.recordSeq('N0', 4);
+check('late seq duplicate is replay',   dup4.accepted === false && dup4.reason === 'replay' && dup4.late === false);
+check('in-order result late=false',     tracker.recordSeq('N0', 7).late === false);
+check('duplicate of in-order is replay', tracker.recordSeq('N0', 6).reason === 'replay');
+check('missingSeqs after late',         JSON.stringify(tracker.missingSeqs('N0')) === '[3]');
+check('invalid seq rejected',           tracker.recordSeq('N0', 1.5).reason === 'invalid_seq' &&
+                                        tracker.recordSeq('N0', NaN).accepted === false);
+check('default reorder window',         ltx.SEQ_REORDER_WINDOW === 64);
+
+// Reorder window: seqs that slide below it are rejected (cannot prove not a replay)
+const trackerW = ltx.createSequenceTracker('plan-window', undefined, { reorderWindow: 4 });
+trackerW.recordSeq('N1', 1);
+const bigGap = trackerW.recordSeq('N1', 10);             // skips 2..9; only 7,8,9 fit the window
+check('window gap reported in full',    bigGap.gap === true && bigGap.gapSize === 8);
+check('window bounds missing markers',  JSON.stringify(trackerW.missingSeqs('N1')) === '[7,8,9]');
+check('below window rejected',          trackerW.recordSeq('N1', 5).reason === 'replay');
+check('inside window accepted late',    trackerW.recordSeq('N1', 8).late === true);
+trackerW.recordSeq('N1', 12);                           // window slides to (8,12]: 7 falls out
+check('slid-out marker rejected',       trackerW.recordSeq('N1', 7).accepted === false);
+check('slid-in gap accepted late',      trackerW.recordSeq('N1', 11).late === true);
+check('window 0 = strict monotonic',    (() => {
+  const t0 = ltx.createSequenceTracker('plan-strict', undefined, { reorderWindow: 0 });
+  t0.recordSeq('N0', 1); t0.recordSeq('N0', 3);
+  return t0.recordSeq('N0', 2).reason === 'replay';
+})());
+let badWindowThrew = false;
+try { ltx.createSequenceTracker('p', undefined, { reorderWindow: Infinity }); } catch (_) { badWindowThrew = true; }
+check('non-integer window throws',      badWindowThrew);
+
+// Persistent adapter without delete(): markers survive a restart
+const persisted = new Map();
+const adapter = { get: (k) => persisted.get(k), set: (k, v) => persisted.set(k, v) };
+const tA = ltx.createSequenceTracker('plan-persist', adapter);
+tA.recordSeq('N2', 1); tA.recordSeq('N2', 4);
+const tB = ltx.createSequenceTracker('plan-persist', adapter);   // "restart"
+check('persisted late accepted',        tB.recordSeq('N2', 3).late === true);
+check('persisted late not replayable',  tB.recordSeq('N2', 3).reason === 'replay');
+check('persisted replay rejected',      tB.recordSeq('N2', 4).reason === 'replay');
+
 // ── Security: Merkle Audit Log ────────────────────────────────────────────
 
 console.log('\n── Security: Merkle Audit Log ────────────────────────────────');

@@ -135,6 +135,7 @@ export type {
 
 export {
   createSequenceTracker,
+  SEQ_REORDER_WINDOW,
   createGlobalSequenceTracker,
   checkIssuedAt,
   ISSUED_AT_MAX_AGE_DAYS,
@@ -144,6 +145,7 @@ export {
 export type {
   SeqCheckResult,
   SequenceTrackerStorage,
+  SequenceTrackerOptions,
   SequenceTracker,
   GlobalSequenceTracker,
 } from './sequence.js';
