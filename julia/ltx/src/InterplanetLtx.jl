@@ -41,11 +41,22 @@ struct LtxNode
     location ::String   # e.g. "earth", "mars"
 end
 
-"""A segment specification: type + quantum multiplier."""
+"""
+A segment specification: type + quantum multiplier, with the optional
+attribution of LTX-SPECIFICATION.md 3.4.1: `speaker` (a node id) and `label`
+(an agenda title). `nothing` is absent and is not serialised; set fields are
+written as {type, q, speaker?, label?}, the ltx-sdk.js key order.
+"""
 struct LtxSegmentSpec
-    type ::String
-    q    ::Int
+    type    ::String
+    q       ::Int
+    speaker ::Union{String,Nothing}
+    label   ::Union{String,Nothing}
 end
+LtxSegmentSpec(type::AbstractString, q::Integer; speaker = nothing, label = nothing) =
+    LtxSegmentSpec(String(type), Int(q),
+                   speaker === nothing ? nothing : String(speaker),
+                   label === nothing ? nothing : String(label))
 
 """Full LTX session plan."""
 struct LtxPlan
@@ -237,7 +248,7 @@ end
 Serialize a plan to compact JSON with exact key order:
 v, title, start, quantum, mode, nodes, segments.
 Node key order: id, name, role, delay, location.
-Segment key order: type, q.
+Segment key order: type, q, speaker?, label? (absent fields omitted).
 """
 function _plan_to_json(plan::LtxPlan)::String
     buf = IOBuffer()
@@ -258,34 +269,17 @@ function _plan_to_json(plan::LtxPlan)::String
     print(buf, "],\"segments\":[")
     for (i, s) in enumerate(plan.segments)
         if i > 1; print(buf, ","); end
-        print(buf, "{\"type\":", _json_str(s.type), ",\"q\":", s.q, "}")
+        print(buf, "{\"type\":", _json_str(s.type), ",\"q\":", s.q)
+        s.speaker === nothing || print(buf, ",\"speaker\":", _json_str(s.speaker))
+        s.label === nothing || print(buf, ",\"label\":", _json_str(s.label))
+        print(buf, "}")
     end
     print(buf, "]}")
     return String(take!(buf))
 end
 
-"""JSON-encode a string value with proper escaping."""
-function _json_str(s::AbstractString)::String
-    buf = IOBuffer()
-    print(buf, '"')
-    for c in s
-        if c == '"'
-            print(buf, "\\\"")
-        elseif c == '\\'
-            print(buf, "\\\\")
-        elseif c == '\n'
-            print(buf, "\\n")
-        elseif c == '\r'
-            print(buf, "\\r")
-        elseif c == '\t'
-            print(buf, "\\t")
-        else
-            print(buf, c)
-        end
-    end
-    print(buf, '"')
-    return String(take!(buf))
-end
+"""JSON-encode a string value exactly as JSON.stringify does (`_js_quote`)."""
+_json_str(s::AbstractString)::String = _js_quote(s)
 
 # ── Plan hash ─────────────────────────────────────────────────────────────────
 
@@ -451,41 +445,25 @@ function _parse_plan_json(json::String)::Union{Dict{String,Any},Nothing}
 end
 
 """Convert a Dict{String,Any} parsed from JSON into an LtxPlan. Returns nothing on failure."""
-function _dict_to_plan(d::Dict{String,Any})::Union{LtxPlan,Nothing}
+function _dict_to_plan(d)::Union{LtxPlan,Nothing}
+    _is_obj(d) || return nothing
     try
-        v_raw   = get(d, "v", 2)
-        v_int   = v_raw isa Int ? v_raw : Int(v_raw)
-        title   = get(d, "title", "")::String
-        start   = get(d, "start", "")::String
-        q_raw   = get(d, "quantum", DEFAULT_QUANTUM)
-        quantum = q_raw isa Int ? q_raw : Int(q_raw)
-        mode    = get(d, "mode", "LTX")::String
-
-        # Parse nodes
+        str(o, k, default) = (x = _jget(o, k); x === nothing ? default : String(x))
+        int(o, k, default) = (x = _jget(o, k); x === nothing ? default : Int(x))
         nodes = LtxNode[]
-        for rn in get(d, "nodes", Any[])
-            nd = rn isa Dict{String,Any} ? rn : Dict{String,Any}()
-            delay_raw = get(nd, "delay", 0)
-            delay_int = delay_raw isa Int ? delay_raw : Int(delay_raw)
-            push!(nodes, LtxNode(
-                get(nd, "id",       "N0")::String,
-                get(nd, "name",     "")::String,
-                get(nd, "role",     "HOST")::String,
-                delay_int,
-                get(nd, "location", "earth")::String,
-            ))
+        for nd in something(_jget(d, "nodes"), Any[])
+            _is_obj(nd) || continue
+            push!(nodes, LtxNode(str(nd, "id", "N0"), str(nd, "name", ""), str(nd, "role", "HOST"),
+                                 int(nd, "delay", 0), str(nd, "location", "earth")))
         end
-
-        # Parse segments
         segs = LtxSegmentSpec[]
-        for rs in get(d, "segments", Any[])
-            sd = rs isa Dict{String,Any} ? rs : Dict{String,Any}()
-            q_raw2 = get(sd, "q", 2)
-            q_int  = q_raw2 isa Int ? q_raw2 : Int(q_raw2)
-            push!(segs, LtxSegmentSpec(get(sd, "type", "TX")::String, q_int))
+        for sd in something(_jget(d, "segments"), Any[])
+            _is_obj(sd) || continue
+            push!(segs, LtxSegmentSpec(str(sd, "type", "TX"), int(sd, "q", 2);
+                                       speaker = _jget(sd, "speaker"), label = _jget(sd, "label")))
         end
-
-        return LtxPlan(v_int, title, start, quantum, mode, nodes, segs)
+        return LtxPlan(int(d, "v", 2), str(d, "title", ""), str(d, "start", ""),
+                       int(d, "quantum", DEFAULT_QUANTUM), str(d, "mode", "LTX"), nodes, segs)
     catch
         return nothing
     end
@@ -577,19 +555,15 @@ function make_plan_id(plan::LtxPlan)::String
     yr, mo, dy = _days_to_date(days)
     date_str = string(yr) * lpad(mo, 2, '0') * lpad(dy, 2, '0')
 
-    # Host string: first node name, spaces removed, uppercased, max 8 chars
-    host_str = if !isempty(plan.nodes)
-        first(uppercase(replace(plan.nodes[1].name, r"\s+" => "")), 8)
+    # HOSTSTR / NODESTR: name.replace(/\s+/g, '').toUpperCase().slice(0, n)
+    # with JavaScript's \s, slices in UTF-16 code units (_short, parity.jl)
+    host_str = if !isempty(plan.nodes) && !isempty(plan.nodes[1].name)
+        _short(plan.nodes[1].name, 8)
     else
         "HOST"
     end
-
-    # Node string: remaining nodes abbreviated to 4 chars each, max 16 chars total
     node_str = if length(plan.nodes) > 1
-        parts = map(plan.nodes[2:end]) do n
-            first(uppercase(replace(n.name, r"\s+" => "")), 4)
-        end
-        first(join(parts, "-"), 16)
+        _utf16_first(join([_short(n.name, 4) for n in plan.nodes[2:end]], "-"), 16)
     else
         "RX"
     end
@@ -626,8 +600,11 @@ function decode_hash(fragment::AbstractString)::Union{LtxPlan,Nothing}
     if startswith(token, "l="); token = token[3:end]; end
     json_str = _b64dec(token)
     json_str === nothing && return nothing
-    d = _parse_plan_json(json_str)
-    d === nothing && return nothing
+    d = try
+        parse_json_ordered(json_str)
+    catch
+        return nothing
+    end
     return _dict_to_plan(d)
 end
 
@@ -658,7 +635,7 @@ end
 
 """Convert a node name to an ICS-safe ID (whitespace → "-", uppercased)."""
 function _to_node_id(name::AbstractString)::String
-    return uppercase(replace(String(name), r"\s+" => "-"))
+    return uppercase(_js_space_replace(String(name), "-"))  # ltx-sdk.js toId
 end
 
 """

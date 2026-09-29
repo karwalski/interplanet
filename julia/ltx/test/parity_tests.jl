@@ -84,4 +84,60 @@ end
     @test startswith(make_plan_id(up3), "LTX-20260801-EARTHHQ-MARS-v3-")
 end
 
+@testset "attributed segments and JS string rules (#36)" begin
+    IL = InterplanetLtx
+    unhash(h) = IL._b64dec(h[4:end])
+    rep_nodes = [LtxNode("N0", "Earth HQ", "HOST", 0, "earth"),
+                 LtxNode("N1", "Mars Hab-01", "PARTICIPANT", 840, "mars"),
+                 LtxNode("N2", "L-1 Gateway", "PARTICIPANT", 2, "moon")]
+    att = LtxPlan(2, "Réunion Mars 🚀", "2026-03-15T14:00:00.000Z", 3, "LTX-ASYNC", rep_nodes,
+        [LtxSegmentSpec("PLAN_CONFIRM", 2),
+         LtxSegmentSpec("TX", 3; speaker = "N0", label = "Ouverture: état de la mission"),
+         LtxSegmentSpec("RX", 3),
+         LtxSegmentSpec("TX", 2; speaker = "N1", label = "Réponse 🔴"),
+         LtxSegmentSpec("BUFFER", 1)])
+    aw = unhash(encode_hash(att))
+    # {type, q, speaker?, label?}: JS key order, absent fields omitted
+    @test endswith(aw, "\"segments\":[{\"type\":\"PLAN_CONFIRM\",\"q\":2},{\"type\":\"TX\",\"q\":3,\"speaker\":\"N0\"," *
+                       "\"label\":\"Ouverture: état de la mission\"},{\"type\":\"RX\",\"q\":3}," *
+                       "{\"type\":\"TX\",\"q\":2,\"speaker\":\"N1\",\"label\":\"Réponse 🔴\"},{\"type\":\"BUFFER\",\"q\":1}]}")
+    # JS makePlanId of the same object (nodes before segments)
+    @test make_plan_id(att) == "LTX-20260315-EARTHHQ-MARS-L-1G-v2-1e382346"
+    @test make_plan_id(att) == plan_id_from_json(aw)
+    back = decode_hash(encode_hash(att))
+    @test back !== nothing
+    @test back.title == att.title
+    @test back.segments[2].speaker == "N0" && back.segments[4].label == "Réponse 🔴"
+    @test back.segments[1].speaker === nothing && back.segments[1].label === nothing
+    @test make_plan_id(back) == make_plan_id(att)
+    lp = LtxPlan(att.v, att.title, att.start, att.quantum, att.mode, att.nodes,
+                 [LtxSegmentSpec("RX", 2; label = "Q&A {\"x\"}\n")])
+    @test endswith(unhash(encode_hash(lp)), "\"segments\":[{\"type\":\"RX\",\"q\":2,\"label\":\"Q&A {\\\"x\\\"}\\n\"}]}")
+    @test decode_hash(encode_hash(lp)).segments[1].label == "Q&A {\"x\"}\n"
+
+    # Control characters, JS whitespace (/\s/ is Unicode-aware in JS) and
+    # non-whitespace look-alikes (U+0085, U+200B) in node names.
+    wp = LtxPlan(2, "C\u0001\b\t\n\v\f\r\u001f\"\\/\u007f\u2028\u2029é🚀", "2026-03-15T14:00:00.000Z", 3, "LTX",
+        [LtxNode("N0", "Earth\u00a0\tHQ", "HOST", 0, "earth"),
+         LtxNode("N1", "\u3000M\u2003a\u2028rs", "PARTICIPANT", 840, "mars"),
+         LtxNode("N2", "\ufeffL\u0085u\u200bna", "PARTICIPANT", 2, "moon")],
+        [LtxSegmentSpec("TX", 2; speaker = "N1"), LtxSegmentSpec("RX", 2; label = "Q\0&A")])
+    @test make_plan_id(wp) == "LTX-20260315-EARTHHQ-MARS-L\u0085U\u200b-v2-4bd132bb"
+    ww = unhash(encode_hash(wp))
+    @test plan_id_from_json(ww) == "LTX-20260315-EARTHHQ-MARS-L\u0085U\u200b-v2-4bd132bb"
+    @test startswith(ww, "{\"v\":2,\"title\":\"C\\u0001\\b\\t\\n\\u000b\\f\\r\\u001f\\\"\\\\/\u007f\u2028\u2029é🚀\",")
+    @test occursin("LTX-NODE:ID=EARTH-HQ;ROLE=HOST", generate_ics(wp))
+
+    # Lone UTF-16 surrogates (a Julia String holds them as WTF-8)
+    segs = copy(att.segments)
+    segs[2] = LtxSegmentSpec("TX", 3; speaker = "N0", label = "\udbff")
+    sp = LtxPlan(att.v, "x\ud800y\udc00z", att.start, att.quantum, att.mode, att.nodes, segs)
+    sw = unhash(encode_hash(sp))
+    @test occursin("\"title\":\"x\\ud800y\\udc00z\"", sw) && occursin("\"label\":\"\\udbff\"", sw)
+    @test make_plan_id(sp) == "LTX-20260315-EARTHHQ-MARS-L-1G-v2-35164df8"
+    @test plan_id_from_json(sw) == "LTX-20260315-EARTHHQ-MARS-L-1G-v2-35164df8"
+    @test IL._js_quote("\ud83d\ude80") == "\"🚀\""
+    @test json_stringify(parse_json_ordered("\"\\ud800\\u0041\"")) == "\"\\ud800A\""
+end
+
 end  # @testset "JS reference parity"
