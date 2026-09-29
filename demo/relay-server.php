@@ -89,22 +89,22 @@ function safeEqual(string $a, string $b): bool {
     return hash_equals($a, $b);
 }
 
+require_once __DIR__ . '/api/ltx-planid.php';
+
 /**
- * Compute a deterministic session ID from a plan.
- * Uses CRC32 over canonical JSON, base64url-encoded — mirrors the Node.js logic.
+ * Relay session ID: the spec planId (docs/LTX-SPECIFICATION.md sections 4.3
+ * and 4.5) of the plan JSON exactly as received, key order preserved, so it
+ * equals makePlanId() in every SDK. Mirrors node/relay-server/server.js.
+ * Returns null when no planId can be computed (e.g. invalid start).
  */
-function makePlanId(array $plan): string {
-    $canonical = json_encode([
-        'v'        => $plan['v']        ?? null,
-        'title'    => $plan['title']    ?? null,
-        'start'    => $plan['start']    ?? null,
-        'quantum'  => $plan['quantum']  ?? null,
-        'mode'     => $plan['mode']     ?? null,
-        'nodes'    => $plan['nodes']    ?? [],
-        'segments' => $plan['segments'] ?? [],
-    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    $hash = sprintf('%08x', crc32($canonical));
-    return rtrim(strtr(base64_encode(hex2bin($hash)), '+/', '-_'), '=');
+function makePlanId(string $rawJson): ?string {
+    $plan = ltx_plan_decode($rawJson);
+    if (!($plan instanceof stdClass)) return null;
+    try {
+        return ltx_make_plan_id($plan);
+    } catch (Throwable) {
+        return null;
+    }
 }
 
 // ── Route handlers ────────────────────────────────────────────────────────────
@@ -127,7 +127,8 @@ function handleRegisterSession(): void {
         sendJSON(400, ['error' => 'Plan must include nodes array']);
     }
 
-    $sessionId = makePlanId($body);
+    $sessionId = makePlanId((string)file_get_contents('php://input'));
+    if ($sessionId === null) sendJSON(400, ['error' => 'Plan must include a valid start timestamp']);
     $nodes     = $body['nodes'];
 
     $participants = array_values(array_filter($nodes, fn($n) => ($n['role'] ?? '') !== 'HOST'));
@@ -150,15 +151,16 @@ function handleRegisterSession(): void {
     $stmt->bindValue(':plan',       json_encode($body));
     $stmt->execute();
 
-    sendJSON(200, ['sessionId' => $sessionId, 'status' => 'ready', 'delay_ms' => $delay_ms, 'tls_fingerprint' => $tls_fingerprint]);
+    sendJSON(200, ['sessionId' => $sessionId, 'planId' => $sessionId, 'status' => 'ready', 'delay_ms' => $delay_ms, 'tls_fingerprint' => $tls_fingerprint]);
 }
 
 function handleDeleteSession(string $sessionId): void {
     global $db;
-    $row = $db->querySingle("SELECT session_id FROM relay_sessions WHERE session_id = '$sessionId'");
+    $sid = SQLite3::escapeString($sessionId);
+    $row = $db->querySingle("SELECT session_id FROM relay_sessions WHERE session_id = '$sid'");
     if (!$row) sendJSON(404, ['error' => 'Session not found']);
-    $db->exec("DELETE FROM relay_sessions WHERE session_id = " . SQLite3::escapeString($sessionId));
-    $db->exec("DELETE FROM relay_frames WHERE session_id = "   . SQLite3::escapeString($sessionId));
+    $db->exec("DELETE FROM relay_sessions WHERE session_id = '$sid'");
+    $db->exec("DELETE FROM relay_frames WHERE session_id = '$sid'");
     sendJSON(200, ['deleted' => true, 'sessionId' => $sessionId]);
 }
 
@@ -259,7 +261,9 @@ function handleReceive(string $sessionId): void {
 // ── Router ────────────────────────────────────────────────────────────────────
 
 $method   = $_SERVER['REQUEST_METHOD'];
-$pathInfo = $_SERVER['PATH_INFO'] ?? parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH);
+// PATH_INFO is already percent-decoded; REQUEST_URI is not (planIds may
+// contain non-ASCII node names, sent percent-encoded).
+$pathInfo = $_SERVER['PATH_INFO'] ?? rawurldecode((string)parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH));
 
 // Strip script name from path if present
 $script = $_SERVER['SCRIPT_NAME'] ?? '';

@@ -46,42 +46,50 @@ function jsonError(string $msg, int $code = 400): never {
     exit;
 }
 
+function rawBody(): string {
+    static $raw = null;
+    if ($raw === null) $raw = (string)file_get_contents('php://input');
+    return $raw;
+}
+
 function parsedBody(): array {
-    $raw = file_get_contents('php://input');
+    $raw = rawBody();
     if (!$raw) jsonError('Empty body');
     $data = json_decode($raw, true);
     if (!is_array($data)) jsonError('Invalid JSON body');
     return $data;
 }
 
-// ── Plan ID (mirrors ltx.html makePlanId) ─────────────────────────────────────
+// ── Plan ID ─────────────────────────────────────────────────────────────────────
+//
+// The spec planId (docs/LTX-SPECIFICATION.md sections 4.3 and 4.5) of the plan
+// exactly as the client sent it: key order preserved, hashed before any
+// sanitising, so it equals makePlanId() in every SDK and in ltx.html.
 
-function makePlanId(array $cfg): string {
-    $start   = $cfg['start'] ?? 'unknown';
-    $date    = preg_replace('/[^0-9]/', '', substr($start, 0, 10));   // YYYYMMDD
-    $nodes   = $cfg['nodes'] ?? [];
+require_once __DIR__ . '/ltx-planid.php';
 
-    $hostStr = strtoupper(substr(preg_replace('/\s+/', '', $nodes[0]['name'] ?? ($cfg['txName'] ?? 'HOST')), 0, 8));
-    if (count($nodes) > 1) {
-        $parts = array_slice($nodes, 1);
-        $nodeStr = substr(implode('-', array_map(
-            fn($n) => strtoupper(substr(preg_replace('/\s+/', '', $n['name'] ?? 'NODE'), 0, 4)),
-            $parts
-        )), 0, 16);
-    } else {
-        $nodeStr = strtoupper(substr(preg_replace('/\s+/', '', $cfg['rxName'] ?? 'RX'), 0, 8));
+/** planId of the raw JSON request body (the plan as received). */
+function makePlanIdFromJson(string $raw): string {
+    $plan = ltx_plan_decode($raw);
+    if (!($plan instanceof stdClass)) jsonError('Invalid JSON body');
+    try {
+        return ltx_make_plan_id($plan);
+    } catch (Throwable) {
+        jsonError('Invalid plan: cannot compute plan_id');
     }
+}
 
-    // 32-bit djb2-style hash of JSON (matches JS Math.imul loop)
-    $raw = json_encode($cfg, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    $h = 0;
-    $len = strlen($raw);
-    for ($i = 0; $i < $len; $i++) {
-        // Simulate 32-bit unsigned overflow (matches JS >>> 0)
-        $h = (($h * 31 + ord($raw[$i])) & 0xFFFFFFFF);
-    }
-
-    return sprintf('LTX-%s-%s-%s-v2-%08x', $date, $hostStr, $nodeStr, $h);
+/**
+ * Clamp the fields the API derives values from (segments, ICS). Never used
+ * for the planId or the stored plan_json.
+ */
+function sanitizePlan(array $plan): array {
+    $plan['title']   = substr(trim(is_scalar($plan['title'] ?? null) ? (string)$plan['title'] : 'LTX Meeting'), 0, 200);
+    $plan['quantum'] = max(1, min(60, (int)($plan['quantum'] ?? 5)));
+    // "LTX" (the spec alias of LTX-LIVE, section 3.6) and unknown modes -> LTX-LIVE
+    $plan['mode']    = in_array($plan['mode'] ?? '', ['LTX-LIVE','LTX-RELAY','LTX-ASYNC'], true)
+                       ? $plan['mode'] : 'LTX-LIVE';
+    return $plan;
 }
 
 // ── Segment helpers ────────────────────────────────────────────────────────────
@@ -217,28 +225,30 @@ function handleSession(): void {
         jsonError('start (ISO 8601 UTC) is required');
     }
 
-    // Sanitise
-    $plan['title']   = substr(trim((string)($plan['title']   ?? 'LTX Meeting')), 0, 200);
-    $plan['quantum'] = max(1, min(60, (int)($plan['quantum'] ?? 5)));
-    $plan['mode']    = in_array($plan['mode'] ?? '', ['LTX-LIVE','LTX-RELAY','LTX-ASYNC'], true)
-                       ? $plan['mode'] : 'LTX-LIVE';
-
     // Parse start time
     try {
-        $dt      = new DateTimeImmutable($plan['start'], new DateTimeZone('UTC'));
+        $dt      = new DateTimeImmutable((string)$plan['start'], new DateTimeZone('UTC'));
         $startMs = $dt->getTimestamp() * 1000;
     } catch (Throwable) {
         jsonError("Invalid start timestamp: {$plan['start']}");
     }
 
-    $planId   = makePlanId($plan);
+    // planId of the plan as received, hashed before sanitising (sanitising
+    // must not change the id: mode "LTX" is the spec alias of "LTX-LIVE").
+    $planId = makePlanIdFromJson(rawBody());
+
+    // Sanitised copy for derived values only; the stored plan is as received.
+    $plan = sanitizePlan($plan);
+
     $segments = expandSegments($plan, $startMs);
     $totalM   = totalMin($plan);
 
     $stored = false;
     try {
         $db       = getDB();
-        $planJson = json_encode($plan, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        // Store the plan as received, re-serialised like JSON.stringify, so the
+        // stored plan_json hashes back to plan_id.
+        $planJson = ltx_js_stringify(ltx_plan_decode(rawBody()));
         // Upsert — ignore duplicate plan_id (idempotent)
         $db->prepare(
             'INSERT IGNORE INTO ltx_sessions (plan_id, plan_json, total_min)
@@ -270,7 +280,7 @@ function handleGetSession(): void {
     }
 
     $planId = trim($_GET['plan_id'] ?? '');
-    if (!preg_match('/^LTX-[A-Z0-9\-]+$/', $planId)) {
+    if (!ltx_is_plan_id($planId)) {
         jsonError('Invalid or missing plan_id');
     }
 
@@ -294,7 +304,8 @@ function handleGetSession(): void {
 
         jsonOk([
             'plan_id'    => $planId,
-            'plan'       => json_decode($row['plan_json'], true),
+            // stdClass decode keeps {} distinct from [] (plan as stored)
+            'plan'       => json_decode($row['plan_json']),
             'total_min'  => (int)$row['total_min'],
             'created_at' => $row['created_at'],
             'views'      => (int)$row['views'] + 1,
@@ -317,7 +328,7 @@ function handleIcs(): void {
     }
 
     $planId = trim($_GET['plan_id'] ?? '');
-    if (!preg_match('/^LTX-[A-Z0-9\-]+$/', $planId)) {
+    if (!ltx_is_plan_id($planId)) {
         jsonError('Invalid or missing plan_id');
     }
 
@@ -334,7 +345,7 @@ function handleIcs(): void {
         if (!$row) {
             jsonError('Session not found', 404);
         }
-        $plan = json_decode($row['plan_json'], true);
+        $plan = sanitizePlan((array)json_decode($row['plan_json'], true));
     } catch (Throwable $e) {
         error_log('ltx ics db error: ' . $e->getMessage());
         jsonError('Database error', 500);

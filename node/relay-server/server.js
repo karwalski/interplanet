@@ -26,30 +26,61 @@ const startTime = Date.now();
 // ── Plan ID ────────────────────────────────────────────────────────────────
 
 /**
- * Compute a deterministic relay session ID from a plan object.
- * Hashes a canonical JSON subset with a 32-bit polynomial.
- * @param {object} plan
+ * upgradeConfig() from javascript/ltx/ltx-sdk.js: a v1 plan gains v: 2 and a
+ * nodes[] pair; a v2+ plan with nodes is returned unchanged (same key order).
+ * @param {object} cfg
+ * @returns {object}
+ */
+function upgradeConfig(cfg) {
+  if (cfg.v >= 2 && Array.isArray(cfg.nodes) && cfg.nodes.length) return cfg;
+  const remoteLoc = (cfg.rxName || '').toLowerCase().includes('mars') ? 'mars'
+    : (cfg.rxName || '').toLowerCase().includes('moon') ? 'moon' : 'earth';
+  return {
+    ...cfg,
+    v: 2,
+    nodes: [
+      { id: 'N0', name: cfg.txName || 'Earth HQ',    role: 'HOST',        delay: 0,              location: 'earth'   },
+      { id: 'N1', name: cfg.rxName || 'Mars Hab-01', role: 'PARTICIPANT', delay: cfg.delay || 0, location: remoteLoc },
+    ],
+  };
+}
+
+/** Canonical JSON (RFC 8785 for plan data), as canonicalJSON() in ltx-sdk.js. */
+function canonicalJSON(obj) {
+  if (obj === null || typeof obj !== 'object') return JSON.stringify(obj);
+  if (Array.isArray(obj)) return '[' + obj.map(canonicalJSON).join(',') + ']';
+  const keys = Object.keys(obj).sort();
+  return '{' + keys.map(k => JSON.stringify(k) + ':' + canonicalJSON(obj[k])).join(',') + '}';
+}
+
+/**
+ * Relay session ID: the spec planId (docs/LTX-SPECIFICATION.md sections 4.3
+ * and 4.5) of the plan exactly as received, identical to makePlanId() in
+ * javascript/ltx/ltx-sdk.js (golden vectors: spec/golden/plan-ids.json).
+ * v2: imul31 over the UTF-16 code units of JSON.stringify(plan), in the plan's
+ * own key order. v3: first 8 hex of SHA-256 over canonical JSON.
+ * @param {object} plan  Plan as parsed from the request body (JSON.parse)
  * @returns {string}
+ * @throws {RangeError} when plan.start is not a valid date
  */
 function makePlanId(plan) {
-  const subset = {
-    v:        plan.v,
-    title:    plan.title,
-    start:    plan.start,
-    quantum:  plan.quantum,
-    mode:     plan.mode,
-    nodes:    plan.nodes,
-    segments: plan.segments,
-  };
-  // v3 additive fields (LTX-SPECIFICATION.md §4.4) — included only when
-  // present, so v2 session ids are unchanged.
-  if (plan.delays !== undefined)       subset.delays       = plan.delays;
-  if (plan.planVersion !== undefined)  subset.planVersion  = plan.planVersion;
-  if (plan.prevPlanHash !== undefined) subset.prevPlanHash = plan.prevPlanHash;
-  const canonical = JSON.stringify(subset);
+  const c       = upgradeConfig(plan);
+  const date    = new Date(c.start).toISOString().slice(0, 10).replace(/-/g, '');
+  const nodes   = c.nodes || [];
+  const idPart  = (name, n) => String(name || '').replace(/\s+/g, '').toUpperCase().slice(0, n);
+  const hostStr = (nodes[0] && nodes[0].name) ? idPart(nodes[0].name, 8) : 'HOST';
+  const nodeStr = nodes.length > 1
+    ? nodes.slice(1).map(n => idPart(n && n.name, 4)).join('-').slice(0, 16)
+    : 'RX';
+  if (c.v >= 3) {
+    const digest = crypto.createHash('sha256').update(canonicalJSON(c), 'utf8').digest('hex');
+    return `LTX-${date}-${hostStr}-${nodeStr}-v3-${digest.slice(0, 8)}`;
+  }
+  // FROZEN v2 path (section 4.3).
+  const raw = JSON.stringify(c);
   let h = 0;
-  for (const b of Buffer.from(canonical)) h = ((h * 31) + b) >>> 0;
-  return Buffer.from(h.toString(16).padStart(8, '0')).toString('base64url');
+  for (let i = 0; i < raw.length; i++) h = (Math.imul(31, h) + raw.charCodeAt(i)) >>> 0;
+  return `LTX-${date}-${hostStr}-${nodeStr}-v2-${h.toString(16).padStart(8, '0')}`;
 }
 
 // ── Request helpers ────────────────────────────────────────────────────────
@@ -104,7 +135,9 @@ async function handleRegisterSession(req, res) {
     return sendJSON(res, 400, { error: 'Plan must include nodes array' });
   }
 
-  const sessionId   = makePlanId(body);
+  let sessionId;
+  try { sessionId = makePlanId(body); }
+  catch (_) { return sendJSON(res, 400, { error: 'Plan must include a valid start timestamp' }); }
   const participants = body.nodes.filter(n => n.role !== 'HOST');
   const delayS       = (participants[0] && participants[0].delay != null)
     ? Number(participants[0].delay) : 0;
@@ -119,7 +152,7 @@ async function handleRegisterSession(req, res) {
   });
   if (!queues.has(sessionId)) queues.set(sessionId, []);
 
-  sendJSON(res, 200, { sessionId, status: 'ready', delay_ms, tls_fingerprint });
+  sendJSON(res, 200, { sessionId, planId: sessionId, status: 'ready', delay_ms, tls_fingerprint });
 }
 
 function handleDeleteSession(req, res, sessionId) {
@@ -212,6 +245,11 @@ function handleHealth(req, res) {
   });
 }
 
+/** Percent-decode a session id path segment (planIds may hold non-ASCII names). */
+function decodeId(seg) {
+  try { return decodeURIComponent(seg); } catch (_) { return seg; }
+}
+
 // ── Router ─────────────────────────────────────────────────────────────────
 
 const server = http.createServer(async (req, res) => {
@@ -224,13 +262,13 @@ const server = http.createServer(async (req, res) => {
     if (method === 'POST' && path === '/relay/session')  return handleRegisterSession(req, res);
 
     const delMatch  = path.match(/^\/relay\/session\/([^/]+)$/);
-    if (method === 'DELETE' && delMatch)  return handleDeleteSession(req, res, delMatch[1]);
+    if (method === 'DELETE' && delMatch)  return handleDeleteSession(req, res, decodeId(delMatch[1]));
 
     const sendMatch = path.match(/^\/relay\/([^/]+)\/send$/);
-    if (method === 'POST' && sendMatch)   return handleSend(req, res, sendMatch[1]);
+    if (method === 'POST' && sendMatch)   return handleSend(req, res, decodeId(sendMatch[1]));
 
     const recvMatch = path.match(/^\/relay\/([^/]+)\/receive$/);
-    if (method === 'GET'  && recvMatch)   return handleReceive(req, res, recvMatch[1]);
+    if (method === 'GET'  && recvMatch)   return handleReceive(req, res, decodeId(recvMatch[1]));
 
     sendJSON(res, 404, { error: 'Not found', path });
   } catch (err) {
@@ -253,4 +291,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { server, sessions, queues, makePlanId, safeEqual };
+module.exports = { server, sessions, queues, makePlanId, upgradeConfig, canonicalJSON, safeEqual };

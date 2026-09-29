@@ -32,6 +32,15 @@ PORT=8080 node server.js
 | POST | `/relay/{id}/send` | Queue a frame |
 | GET | `/relay/{id}/receive?node={n}` | Dequeue ready frames |
 
+The session `{id}` (`sessionId`, also returned as `planId`) is the spec planId
+of the registered plan (docs/LTX-SPECIFICATION.md sections 4.3 and 4.5), the
+same value `makePlanId()` gives in every SDK. It can contain non-ASCII node
+names, so percent-encode it in URLs.
+
+`npm test` in `relay-server/` checks it against `spec/golden/plan-ids.json`;
+`php api/tests/test_planid.php` (repository root) does the same for
+`api/ltx.php` and `demo/relay-server.php`.
+
 ## PHP equivalents
 
 PHP versions are in `../demo/mcp-server.php` and `../demo/relay-server.php`.
