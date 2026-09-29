@@ -7,13 +7,14 @@ No external dependencies — uses only the Scala standard library,
 
 ## Requirements
 
-- Scala 3 (`scalac` / `scala` in PATH)
-- JVM 11+
+- Scala 3 (`scalac` / `scala` in PATH) for `make test`, or sbt 1.10 for `make sbt-test`
+- JVM 11+ (tested with JDK 17)
 
 ## Compile and test
 
 ```sh
-make test
+make test       # scalac + java
+make sbt-test   # sbt, fetches Scala 3.6.4 from Maven Central
 ```
 
 ## Usage
@@ -52,7 +53,7 @@ val ics: String = InterplanetLtx.generateICS(plan)
 val urls: List[LtxNodeUrl] = InterplanetLtx.buildNodeUrls(plan, "https://interplanet.live/ltx.html")
 
 // Total duration in minutes
-val mins: Int = InterplanetLtx.totalMin(plan)  // 39
+val mins: Int = InterplanetLtx.totalMin(plan)  // 65 (13 quanta x 5 min)
 
 // Format helpers
 val hms: String = InterplanetLtx.formatHMS(3661)  // "01:01:01"
@@ -74,6 +75,17 @@ val utc: String = InterplanetLtx.formatUTC(System.currentTimeMillis())
 | `generateICS(plan)` | iCalendar (.ics) content |
 | `formatHMS(seconds)` | Format seconds as HH:MM:SS or MM:SS |
 | `formatUTC(ms)` | Format UTC ms as YYYY-MM-DDTHH:MM:SSZ |
+
+## Plan maps, validation and registers
+
+| Method | Description |
+|--------|-------------|
+| `LtxPlans.makePlanId(map)` / `LtxPlans.planHash(map)` | planId and plan hash over a plain JSON plan map (insertion order kept, as ltx-sdk.js); passes `spec/golden/plan-ids.json` |
+| `LtxPlans.validatePlan(value)` | `PlanValidation(valid, errors)` with every ltx-sdk.js code, including `reserved_streams` / `reserved_branching` (spec §3.5, §7) |
+| `LtxJson.parse` / `stringify` / `canonical` | JSON parse, `JSON.stringify` and canonical JSON equivalents |
+| `V11.createSession(plan, planId)` / `V11.createSessionFromMap(map, planId)` | Throw `LtxPlanException` (code `reserved_streams` / `reserved_branching`) for reserved fields |
+| `V11.reduceDecisions(entries)` | Decision register (`decision` / `decision_update`, spec §10.3) |
+| `V11.runMergeSegment(...)` | MERGE: verified merge + signed `merge_snapshot` with question, action and decision registers |
 
 ## REST client (RestClient object)
 

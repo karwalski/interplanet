@@ -48,11 +48,11 @@ class InterplanetTimeTest {
 
     @Test fun `ORB_ELEMS has 9 entries`() = assertEquals(9, ORB_ELEMS.size)
     @Test fun `Earth semi-major axis is 1 AU`() = assertEquals(1.0, ORB_ELEMS[Planet.EARTH]!!.a, 0.0001)
-    @Test fun `Mars a = 1.52366`() = assertEquals(1.52366, ORB_ELEMS[Planet.MARS]!!.a, 0.00001)
-    @Test fun `Jupiter a = 5.20336`() = assertEquals(5.20336, ORB_ELEMS[Planet.JUPITER]!!.a, 0.00001)
+    @Test fun `Mars a = 1_52366`() = assertEquals(1.52366, ORB_ELEMS[Planet.MARS]!!.a, 0.00001)
+    @Test fun `Jupiter a = 5_20336`() = assertEquals(5.20336, ORB_ELEMS[Planet.JUPITER]!!.a, 0.00001)
     @Test fun `Moon uses Earth elements`() = assertEquals(ORB_ELEMS[Planet.EARTH], ORB_ELEMS[Planet.MOON])
-    @Test fun `Mercury L0 = 252.2507`() = assertEquals(252.2507, ORB_ELEMS[Planet.MERCURY]!!.l0, 0.0001)
-    @Test fun `Neptune dL = 219.8997`() = assertEquals(219.8997, ORB_ELEMS[Planet.NEPTUNE]!!.dL, 0.0001)
+    @Test fun `Mercury L0 = 252_2507`() = assertEquals(252.2507, ORB_ELEMS[Planet.MERCURY]!!.l0, 0.0001)
+    @Test fun `Neptune dL = 219_8997`() = assertEquals(219.8997, ORB_ELEMS[Planet.NEPTUNE]!!.dL, 0.0001)
 
     // ── taiMinusUtc ───────────────────────────────────────────────────────────
 
@@ -78,7 +78,7 @@ class InterplanetTimeTest {
     @Test fun `keplerE circular orbit E=M`() = assertEquals(1.0, keplerE(1.0, 0.0), 1e-10)
     @Test fun `keplerE converges for Mars eccentricity`() {
         val E = keplerE(1.5, 0.09341)
-        assertTrue(abs(E - 1.5 + 0.09341 * Math.sin(E)) < 1e-10)
+        assertTrue(abs(E - 0.09341 * Math.sin(E) - 1.5) < 1e-10)
     }
 
     // ── helioPosOf ────────────────────────────────────────────────────────────
@@ -88,12 +88,12 @@ class InterplanetTimeTest {
         assertTrue(abs(p.r - 1.0) < 0.02, "Earth r=${p.r} expected ~1 AU")
     }
 
-    @Test fun `Mars helio pos r between 1.38 and 1.67 AU`() {
+    @Test fun `Mars helio pos r between 1_38 and 1_67 AU`() {
         val p = helioPosOf(Planet.MARS, UTC_2024_01_15)
         assertTrue(p.r in 1.38..1.67, "Mars r=${p.r}")
     }
 
-    @Test fun `Jupiter helio pos r near 5.2 AU`() {
+    @Test fun `Jupiter helio pos r near 5_2 AU`() {
         val p = helioPosOf(Planet.JUPITER, UTC_2024_01_15)
         assertTrue(abs(p.r - 5.20336) < 0.5, "Jupiter r=${p.r}")
     }
@@ -111,12 +111,12 @@ class InterplanetTimeTest {
 
     // ── bodyDistanceAu ────────────────────────────────────────────────────────
 
-    @Test fun `Earth to Mars distance between 0.4 and 2.5 AU`() {
+    @Test fun `Earth to Mars distance between 0_4 and 2_5 AU`() {
         val d = bodyDistanceAu(Planet.EARTH, Planet.MARS, UTC_2024_01_15)
         assertTrue(d in 0.4..2.5, "Earth-Mars=${d} AU")
     }
 
-    @Test fun `Earth to Jupiter distance between 4.0 and 6.5 AU`() {
+    @Test fun `Earth to Jupiter distance between 4_0 and 6_5 AU`() {
         val d = bodyDistanceAu(Planet.EARTH, Planet.JUPITER, UTC_2024_01_15)
         assertTrue(d in 4.0..6.5, "Earth-Jupiter=${d} AU")
     }
@@ -145,7 +145,7 @@ class InterplanetTimeTest {
 
     // ── checkLineOfSight ──────────────────────────────────────────────────────
 
-    @Test fun `Line of sight Earth-Mars has closestSunAu >= 0`() {
+    @Test fun `Line of sight Earth-Mars has closestSunAu at least 0`() {
         val los = checkLineOfSight(Planet.EARTH, Planet.MARS, UTC_2024_01_15)
         assertTrue(los.closestSunAu >= 0.0)
     }
@@ -186,12 +186,12 @@ class InterplanetTimeTest {
         }
     }
 
-    @Test fun `Earth timeStr format HH:MM`() {
+    @Test fun `Earth timeStr format HH-MM`() {
         val pt = getPlanetTime(Planet.EARTH, UTC_2024_01_15)
         assertTrue(pt.timeStr.matches(Regex("\\d{2}:\\d{2}")))
     }
 
-    @Test fun `Earth timeStrFull format HH:MM:SS`() {
+    @Test fun `Earth timeStrFull format HH-MM-SS`() {
         val pt = getPlanetTime(Planet.EARTH, UTC_2024_01_15)
         assertTrue(pt.timeStrFull.matches(Regex("\\d{2}:\\d{2}:\\d{2}")))
     }
@@ -203,10 +203,10 @@ class InterplanetTimeTest {
         assertNotNull(pt.solInYear)
     }
 
-    @Test fun `Mars has solsPerYear near 687`() {
+    @Test fun `Mars has solsPerYear near 669`() {
         val pt = getPlanetTime(Planet.MARS, UTC_2024_01_15)
         assertNotNull(pt.solsPerYear)
-        assertTrue(pt.solsPerYear!! in 686..688)
+        assertTrue(pt.solsPerYear!! in 668..670)
     }
 
     @Test fun `Mars solInYear in valid range`() {
@@ -302,7 +302,7 @@ class InterplanetTimeTest {
         assertTrue(mtc.sol < 0)
     }
 
-    @Test fun `getMtc mtcStr format HH:MM`() {
+    @Test fun `getMtc mtcStr format HH-MM`() {
         val mtc = getMtc(UTC_2024_01_15)
         assertTrue(mtc.mtcStr.matches(Regex("\\d{2}:\\d{2}")))
     }
@@ -390,11 +390,11 @@ class InterplanetTimeTest {
         assertEquals(88775244L, PLANET_DATA[Planet.MARS]!!.solarDayMs)
     }
 
-    @Test fun `Jupiter daysPerPeriod is 2.5`() {
+    @Test fun `Jupiter daysPerPeriod is 2_5`() {
         assertEquals(2.5, PLANET_DATA[Planet.JUPITER]!!.daysPerPeriod, 0.001)
     }
 
-    @Test fun `Saturn daysPerPeriod is 2.25`() {
+    @Test fun `Saturn daysPerPeriod is 2_25`() {
         assertEquals(2.25, PLANET_DATA[Planet.SATURN]!!.daysPerPeriod, 0.001)
     }
 
@@ -426,7 +426,7 @@ class InterplanetTimeTest {
         }
     }
 
-    @Test fun `All planets timeStr matches HH:MM pattern`() {
+    @Test fun `All planets timeStr matches HH-MM pattern`() {
         Planet.entries.forEach { p ->
             val pt = getPlanetTime(p, UTC_2024_01_15)
             assertTrue(pt.timeStr.matches(Regex("\\d{2}:\\d{2}")), "timeStr=${pt.timeStr} for $p")

@@ -1,0 +1,3 @@
+# The root .gitignore excludes *.jar; the Gradle wrapper jar must be committed
+# so ./gradlew (used by the Conformance workflow) can start.
+!gradle/wrapper/gradle-wrapper.jar

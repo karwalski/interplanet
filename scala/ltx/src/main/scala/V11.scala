@@ -16,6 +16,7 @@
 import java.security.Signature
 import java.security.spec.X509EncodedKeySpec
 import java.time.Instant
+import scala.collection.immutable.VectorMap
 import scala.util.Try
 
 object V11:
@@ -60,6 +61,8 @@ object V11:
     delays:       Option[Map[String, Long]] = None, // v3 pair matrix, "A|B" sorted ids
     planVersion:  Option[Int] = None,
     prevPlanHash: Option[String] = None,
+    /** v3 streams[]: RESERVED (§3.5), MUST be absent (None) or empty. */
+    streams:      Option[List[Any]] = None,
   ):
     /** Generic map projection used for canonical JSON hashing. */
     def toMap: Map[String, Any] =
@@ -82,7 +85,43 @@ object V11:
       delays.foreach(d => m = m + ("delays" -> d))
       planVersion.foreach(pv => m = m + ("planVersion" -> pv))
       prevPlanHash.foreach(ph => m = m + ("prevPlanHash" -> ph))
+      streams.foreach(st => m = m + ("streams" -> st))
       m
+
+  object PlanV11:
+    private def asLong(v: Any, fallback: Long): Long = v match
+      case n: Int    => n.toLong
+      case n: Long   => n
+      case n: Double => n.toLong
+      case _         => fallback
+    private def str(v: Any): Option[String] = Option(v).map(_.toString)
+    private def maps(v: Any): List[Map[String, Any]] = v match
+      case xs: Seq[?] => xs.collect { case m: Map[?, ?] => m.asInstanceOf[Map[String, Any]] }.toList
+      case _          => Nil
+
+    /**
+     * Typed view of a plain plan map (for example LtxJson.parse output).
+     * Fields the typed model does not carry (relay, questions, actions,
+     * reserved branch fields) are dropped, so validate the map first.
+     */
+    def fromMap(m: Map[String, Any]): PlanV11 = PlanV11(
+      v = asLong(m.getOrElse("v", null), 2).toInt,
+      title = str(m.getOrElse("title", null)).getOrElse(""),
+      start = str(m.getOrElse("start", null)).getOrElse(""),
+      quantum = asLong(m.getOrElse("quantum", null), DEFAULT_QUANTUM.toLong).toInt,
+      mode = str(m.getOrElse("mode", null)).getOrElse("LTX"),
+      nodes = maps(m.getOrElse("nodes", null)).map(n => NodeV11(
+        String.valueOf(n.getOrElse("id", null)), str(n.getOrElse("name", null)).getOrElse(""),
+        str(n.getOrElse("role", null)).getOrElse("PARTICIPANT"), asLong(n.getOrElse("delay", null), 0),
+        str(n.getOrElse("location", null)).getOrElse("earth"))),
+      segments = maps(m.getOrElse("segments", null)).map(sg => SegV11(
+        String.valueOf(sg.getOrElse("type", null)), asLong(sg.getOrElse("q", null), 1).toInt,
+        str(sg.getOrElse("speaker", null)), str(sg.getOrElse("label", null)))),
+      delays = m.get("delays").collect { case d: Map[?, ?] =>
+        d.map((k, dv) => k.toString -> asLong(dv, 0)).toMap },
+      planVersion = m.get("planVersion").collect { case n: Int => n; case n: Long => n.toInt },
+      prevPlanHash = m.get("prevPlanHash").collect { case s: String => s },
+      streams = m.get("streams").collect { case xs: Seq[?] => xs.toList })
 
   /** SHA-256 hex of the RFC 8785 canonical JSON of a plan (amend.ts). */
   def planHash(p: PlanV11): String =
@@ -359,6 +398,18 @@ object V11:
     version:      Int = 1,
   )
 
+  /** Decision register state (LTX-SPECIFICATION.md §10.3). */
+  case class DecisionStateV11(
+    did:          String,
+    text:         String,
+    recordedBy:   String,
+    rationale:    Option[String] = None,
+    originWindow: Option[String] = None,
+    status:       String = "RECORDED", // RECORDED | RESCINDED
+    editor:       Option[String] = None,
+    version:      Int = 1,
+  )
+
   private case class Versioned(version: Int, editor: String, entryId: String)
 
   /** §8.2 conflict rule: higher version wins; tie -> lowest editor nodeId. */
@@ -464,6 +515,124 @@ object V11:
                 version = version))
     (byId, superseded)
 
+  private val DECISION_STATUSES = Set("RECORDED", "RESCINDED")
+
+  /** String(x) as JS would render a content value. */
+  private def jsString(v: Any): String = v match
+    case null      => "null"
+    case d: Double => LtxJson.jsNumber(d)
+    case f: Float  => LtxJson.jsNumber(f.toDouble)
+    case other     => other.toString
+
+  /** `x ?? fallback` then String(x). */
+  private def jsStringOr(content: Map[String, Any], key: String, fallback: String): String =
+    content.get(key) match
+      case Some(v) if v != null => jsString(v)
+      case _                    => fallback
+
+  /**
+   * Reduce decision register state from log entries (§10.3). Pure.
+   * `decision` entries record a decision (did = entryId, version 1);
+   * `decision_update` entries reference content.did and revise text/rationale
+   * or rescind it. Conflicts follow §8.2 exactly as for questions and actions:
+   * higher object version wins, then the lowest editor nodeId; losers are
+   * returned in `superseded`. Mirrors ltx-sdk.js reduceDecisions.
+   */
+  def reduceDecisions(entries: List[RegisterEntryV11]): (Map[String, DecisionStateV11], List[String]) =
+    var byId = Map.empty[String, DecisionStateV11]
+    var winners = Map.empty[String, Versioned]
+    var superseded = List.empty[String]
+    for e <- orderEntries(entries) do
+      if e.entryType == "decision" then
+        val did = e.entryId
+        if byId.contains(did) then superseded = superseded :+ e.entryId
+        else
+          winners = winners + (did -> Versioned(1, e.nodeId, e.entryId))
+          byId = byId + (did -> DecisionStateV11(
+            did = did,
+            text = jsStringOr(e.content, "text", ""),
+            recordedBy = e.nodeId,
+            rationale = e.content.get("rationale").map(jsString),
+            originWindow = e.content.get("originWindow").map(jsString),
+            status = "RECORDED", version = 1))
+      else if e.entryType == "decision_update" then
+        val did = jsStringOr(e.content, "did", "")
+        byId.get(did) match
+          case None => superseded = superseded :+ e.entryId
+          case Some(d) =>
+            val version = asInt(e.content.get("version"), d.version + 1)
+            val incoming = Versioned(version, e.nodeId, e.entryId)
+            val skip = winners.get(did) match
+              case Some(cur) if !wins(incoming, cur) =>
+                superseded = superseded :+ e.entryId; true
+              case Some(cur) =>
+                if cur.entryId != d.did then superseded = superseded :+ cur.entryId
+                false
+              case None => false
+            if !skip then
+              winners = winners + (did -> incoming)
+              val status = e.content.get("status").collect { case st: String if DECISION_STATUSES(st) => st }
+                .getOrElse(d.status)
+              byId = byId + (did -> d.copy(
+                status = status,
+                text = e.content.get("text").map(jsString).getOrElse(d.text),
+                rationale = e.content.get("rationale").map(jsString).orElse(d.rationale),
+                editor = Some(e.nodeId),
+                version = version))
+    (byId, superseded)
+
+  // ---- register state as plain maps (merge_snapshot content, §8.4) ----
+
+  def questionStateMap(q: QuestionStateV11): Map[String, Any] =
+    VectorMap[String, Any]("qid" -> q.qid, "text" -> q.text, "submitter" -> q.submitter) ++
+      q.urgency.map("urgency" -> _) ++ q.intendedWindow.map("intendedWindow" -> _) ++
+      VectorMap[String, Any]("status" -> q.status, "version" -> q.version) ++
+      q.response.map("response" -> _) ++ q.responder.map("responder" -> _)
+
+  def actionStateMap(a: ActionStateV11): Map[String, Any] =
+    VectorMap[String, Any]("aid" -> a.aid, "description" -> a.description) ++
+      a.owner.map("owner" -> _) ++ a.dueTimeUTC.map("dueTimeUTC" -> _) ++
+      a.originWindow.map("originWindow" -> _) ++
+      VectorMap[String, Any]("status" -> a.status, "version" -> a.version)
+
+  def decisionStateMap(d: DecisionStateV11): Map[String, Any] =
+    VectorMap[String, Any]("did" -> d.did, "text" -> d.text, "recordedBy" -> d.recordedBy) ++
+      d.rationale.map("rationale" -> _) ++ d.originWindow.map("originWindow" -> _) ++
+      VectorMap[String, Any]("status" -> d.status, "version" -> d.version) ++
+      d.editor.map("editor" -> _)
+
+  // ---- signed register entries (LTX-SECURITY.md §9.5) ----
+
+  /** Entry id prefixes per entry type (ltx-sdk.js ENTRY_PREFIX). */
+  val ENTRY_PREFIX: Map[String, String] = Map(
+    "question" -> "QST", "question_response" -> "QST",
+    "action" -> "ACT", "action_update" -> "ACT",
+    "amendment" -> "AMD", "state_transition" -> "STA",
+    "merge_snapshot" -> "MRG", "decision" -> "DEC", "decision_update" -> "DEC")
+
+  private val PKCS8_HDR = Array[Byte](0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x04, 0x22, 0x04, 0x20)
+
+  private def signBytes(data: Array[Byte], nik: Security.Nik): String =
+    val key = java.security.KeyFactory.getInstance("Ed25519")
+      .generatePrivate(new java.security.spec.PKCS8EncodedKeySpec(PKCS8_HDR ++ nik.privRaw))
+    val signer = Signature.getInstance("Ed25519")
+    signer.initSign(key)
+    signer.update(data)
+    Security.b64uEncode(signer.sign())
+
+  /**
+   * Create a register entry signed with `signer` (its privRaw). `nodeId` is
+   * the log node id (for example "N0"); keyCache for verification maps that
+   * id to the signer's NIK. entryId defaults to PREFIX-nodeId-seq.
+   */
+  def createRegisterEntry(entryType: String, content: Map[String, Any],
+                          sessionId: String, nodeId: String, seq: Int, timestamp: String,
+                          signer: Security.Nik, entryId: Option[String] = None): RegisterEntryV11 =
+    val id = entryId.getOrElse(s"${ENTRY_PREFIX.getOrElse(entryType, "undefined")}-$nodeId-$seq")
+    val unsigned = RegisterEntryV11(id, sessionId, nodeId, seq, entryType, content, timestamp, "")
+    val canon = Security.canonicalJson(unsigned.toMap(false))
+    unsigned.copy(sig = signBytes(canon.getBytes("UTF-8"), signer))
+
   // ---- Merkle root over ordered entries (merkle.ts / merge.ts) ----
 
   private def leafHash(entryBytes: Array[Byte]): Array[Byte] =
@@ -487,6 +656,48 @@ object V11:
     val leaves = entries.map(e =>
       leafHash(Security.canonicalJson(e.toMap(true)).getBytes("UTF-8"))).toVector
     hex(rootOf(leaves))
+
+  // ---- merge (LTX-SPECIFICATION.md §8.2 / §8.4) ----
+
+  /** mergeLogs result: verified entries in §8.2 order plus rejected entries with reasons. */
+  case class MergeResultV11(entries: List[RegisterEntryV11], rejected: List[(RegisterEntryV11, String)])
+
+  /** runMergeSegment result: the merge plus the HOST-signed merge_snapshot entry (§8.4). */
+  case class MergeSegmentV11(merged: MergeResultV11, snapshot: RegisterEntryV11)
+
+  /**
+   * Deterministic merge of two entry logs (§8.2): verify, union de-duplicated
+   * by (nodeId, seq), order totally. Symmetric by construction.
+   */
+  def mergeLogs(entriesA: List[RegisterEntryV11], entriesB: List[RegisterEntryV11],
+                keyCache: Map[String, Security.Nik]): MergeResultV11 =
+    val checked = (entriesA ++ entriesB).map(e => (e, verifyRegisterEntry(e, keyCache)))
+    MergeResultV11(
+      orderEntries(checked.collect { case (e, (true, _)) => e }),
+      checked.collect { case (e, (false, reason)) => (e, reason) })
+
+  /**
+   * MERGE segment (§8.4): merge + HOST-signed merge_snapshot entry carrying
+   * the question, action and decision registers and every superseded entry id.
+   */
+  def runMergeSegment(localEntries: List[RegisterEntryV11], remoteEntries: List[RegisterEntryV11],
+                      keyCache: Map[String, Security.Nik],
+                      sessionId: String, nodeId: String, seq: Int, timestamp: String,
+                      signer: Security.Nik): MergeSegmentV11 =
+    val merged = mergeLogs(localEntries, remoteEntries, keyCache)
+    val (questions, qSup) = reduceQuestions(merged.entries)
+    val (actions, aSup) = reduceActions(merged.entries)
+    val (decisions, dSup) = reduceDecisions(merged.entries)
+    val content = VectorMap[String, Any](
+      "mergedRoot" -> entriesRoot(merged.entries),
+      "entryCount" -> merged.entries.length,
+      "rejectedCount" -> merged.rejected.length,
+      "questionRegister" -> questions.map((k, q) => k -> questionStateMap(q)),
+      "actionRegister" -> actions.map((k, a) => k -> actionStateMap(a)),
+      "decisionRegister" -> decisions.map((k, d) => k -> decisionStateMap(d)),
+      "superseded" -> (qSup ++ aSup ++ dSup))
+    MergeSegmentV11(merged, createRegisterEntry("merge_snapshot", content,
+      sessionId, nodeId, seq, timestamp, signer))
 
   // ---- 5. CBOR decode (RFC 8949 deterministic subset, cbor.ts) ----
 
@@ -687,9 +898,29 @@ object V11:
       case n: Int     => math.min(math.max(n, 1), total)
       case _          => total // "all" (default)
 
-  /** Create a session context in DRAFT state (§5). */
+  /**
+   * Create a session context in DRAFT state (§5).
+   * @throws LtxPlanException code reserved_streams if plan.streams is non-empty (§3.5)
+   */
   def createSession(plan: PlanV11, planId: String,
                     quorum: "all" | "majority" | Int = "all"): SessionCtxV11 =
+    LtxPlans.assertNoReservedFields(plan.toMap, "createSession")
+    newSession(plan, planId, quorum)
+
+  /**
+   * Create a session from a plain plan map (LtxJson.parse output), as
+   * ltx-sdk.js createSession does. Rejects reserved fields the typed model
+   * cannot carry: non-empty streams[], segment stream, branches, branching,
+   * segment branch.
+   * @throws LtxPlanException code reserved_streams | reserved_branching (§3.5, §7)
+   */
+  def createSessionFromMap(plan: Map[String, Any], planId: String,
+                           quorum: "all" | "majority" | Int = "all"): SessionCtxV11 =
+    LtxPlans.assertNoReservedFields(plan, "createSession")
+    newSession(PlanV11.fromMap(plan), planId, quorum)
+
+  private def newSession(plan: PlanV11, planId: String,
+                         quorum: "all" | "majority" | Int): SessionCtxV11 =
     SessionCtxV11(
       state = "DRAFT",
       plan = plan,

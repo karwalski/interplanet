@@ -16,10 +16,13 @@ build:
 	$(JAVAC) -d $(OUT_DIR) $(SRC_DIR)/com/interplanet/ltx/*.java
 
 test: build
-	$(JAVAC) -d $(OUT_DIR) -cp $(OUT_DIR) $(TEST_DIR)/TestInterplanetLTX.java
+	$(JAVAC) -d $(OUT_DIR) -cp $(OUT_DIR) $(TEST_DIR)/TestInterplanetLTX.java $(TEST_DIR)/TestParity.java
 	@echo ""
 	@echo "── Running unit tests ──────────────────────────────────────────"
 	$(JAVA) -cp $(OUT_DIR) TestInterplanetLTX
+	@echo ""
+	@echo "── Running parity tests (spec/golden/plan-ids.json) ────────────"
+	$(JAVA) -cp $(OUT_DIR) TestParity ../../spec/golden/plan-ids.json
 
 clean:
 	rm -rf out/

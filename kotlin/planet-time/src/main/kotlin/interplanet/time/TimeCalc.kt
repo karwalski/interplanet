@@ -101,14 +101,13 @@ private fun Double.roundToInt(): Int = (this + 0.5).toInt()
  * Get Mars Coordinated Time (MTC) — the Martian equivalent of UTC.
  */
 fun getMtc(utcMs: Long): MtcResult {
-    val ms = (utcMs - MARS_EPOCH_MS).toDouble()
-    val sol = floor(ms / MARS_SOL_MS.toDouble()).toLong()
-    var fracMs = ms % MARS_SOL_MS.toDouble()
-    if (fracMs < 0) fracMs += MARS_SOL_MS.toDouble()
-    val totalSec = fracMs / 1000.0
-    val h = (totalSec / 3600.0).toInt()
-    val minute = ((totalSec % 3600.0) / 60.0).toInt()
-    val second = (totalSec % 60.0).toInt()
+    // Mirror planet-time.js getMTC: hours are Mars hours (1/24 sol), not Earth hours.
+    val totalSols = (utcMs - MARS_EPOCH_MS).toDouble() / MARS_SOL_MS.toDouble()
+    val sol = floor(totalSols).toLong()
+    val frac = totalSols - sol.toDouble()
+    val h = floor(frac * 24.0).toInt()
+    val minute = floor((frac * 24.0 - h) * 60.0).toInt()
+    val second = floor(((frac * 24.0 - h) * 60.0 - minute) * 60.0).toInt()
 
     return MtcResult(
         sol = sol,

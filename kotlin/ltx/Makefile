@@ -3,13 +3,16 @@ SRCS = src/main/kotlin/com/interplanet/ltx/Models.kt \
        src/main/kotlin/com/interplanet/ltx/RestClient.kt \
        src/main/kotlin/com/interplanet/ltx/Security.kt \
        src/main/kotlin/com/interplanet/ltx/V11.kt \
+       src/main/kotlin/com/interplanet/ltx/PlanJson.kt \
        src/test/kotlin/com/interplanet/ltx/InterplanetLTXTest.kt \
-       src/test/kotlin/com/interplanet/ltx/V11Test.kt
+       src/test/kotlin/com/interplanet/ltx/V11Test.kt \
+       src/test/kotlin/com/interplanet/ltx/ParityTest.kt
 
 test:
 	@if command -v kotlinc >/dev/null 2>&1; then \
 		kotlinc $(SRCS) -include-runtime -d kotlin-ltx.jar && java -jar kotlin-ltx.jar; \
-	else echo "kotlinc not in PATH -- skipped"; fi
+	elif command -v gradle >/dev/null 2>&1; then gradle ltxTest; \
+	else echo "kotlinc and gradle not in PATH -- skipped"; fi
 
 lint:
 	@if command -v kotlinc >/dev/null 2>&1; then \
@@ -19,14 +22,15 @@ lint:
 		        src/main/kotlin/com/interplanet/ltx/RestClient.kt \
 		        src/main/kotlin/com/interplanet/ltx/Security.kt \
 		        src/main/kotlin/com/interplanet/ltx/V11.kt \
+		        src/main/kotlin/com/interplanet/ltx/PlanJson.kt \
 		        -include-runtime -d /tmp/kotlin-lint-out 2>&1; \
 	else echo "kotlinc not in PATH -- skipped"; fi
 
 build:
-	@if command -v ./gradlew >/dev/null 2>&1; then ./gradlew build; \
+	@if command -v gradle >/dev/null 2>&1; then gradle build; \
 	elif command -v kotlinc >/dev/null 2>&1; then kotlinc $(SRCS) -include-runtime -d kotlin-ltx.jar; \
 	else echo "No build tool found"; fi
 
 clean:
 	rm -f kotlin-ltx.jar
-	@if [ -d .gradle ]; then ./gradlew clean 2>/dev/null || true; fi
+	@if [ -d .gradle ]; then gradle clean 2>/dev/null || true; fi

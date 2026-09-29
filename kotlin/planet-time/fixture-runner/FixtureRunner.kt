@@ -18,7 +18,7 @@ fun main(args: Array<String>) {
     if (!file.exists()) {
         println("SKIP: fixture file not found at $fixturePath")
         println("0 passed  0 failed  (fixtures skipped)")
-        return
+        System.exit(1)
     }
 
     val json = JSONObject(file.readText())
@@ -27,18 +27,26 @@ fun main(args: Array<String>) {
     var passed = 0
     var failed = 0
 
+    // reference.json writes JSON null for fields that do not apply (for example
+    // light_travel_s on Earth and Moon, mtc on non-Mars planets), so every
+    // optional field is read through these null-safe helpers.
+    fun JSONObject.optIntOrNull(key: String): Int? = if (has(key) && !isNull(key)) getInt(key) else null
+    fun JSONObject.optDoubleOrNull(key: String): Double? = if (has(key) && !isNull(key)) getDouble(key) else null
+    fun JSONObject.optObjectOrNull(key: String): JSONObject? = if (has(key) && !isNull(key)) getJSONObject(key) else null
+
     for (i in 0 until entries.length()) {
         val entry = entries.getJSONObject(i)
         val utcMs = entry.getLong("utc_ms")
         val planetStr = entry.getString("planet")
         val expectedHour = entry.getInt("hour")
         val expectedMinute = entry.getInt("minute")
-        val lightTravelS = if (entry.has("light_travel_s")) entry.getDouble("light_travel_s") else 0.0
+        val lightTravelS = entry.optDoubleOrNull("light_travel_s")
+        val expectedMtc = entry.optObjectOrNull("mtc")
 
         val tag = "$planetStr@$utcMs"
-        val expectedPeriodInWeek = if (entry.has("period_in_week")) entry.getInt("period_in_week") else -1
-        val expectedIsWorkPeriod = if (entry.has("is_work_period")) entry.getInt("is_work_period") else -1
-        val expectedIsWorkHour   = if (entry.has("is_work_hour"))   entry.getInt("is_work_hour")   else -1
+        val expectedPeriodInWeek = entry.optIntOrNull("period_in_week") ?: -1
+        val expectedIsWorkPeriod = entry.optIntOrNull("is_work_period") ?: -1
+        val expectedIsWorkHour   = entry.optIntOrNull("is_work_hour")   ?: -1
 
         val planet = try {
             Planet.fromString(planetStr)
@@ -64,13 +72,27 @@ fun main(args: Array<String>) {
             println("FAIL: $tag minute=$expectedMinute (got ${pt.minute})")
         }
 
-        if (lightTravelS != 0.0 && planetStr != "earth" && planetStr != "moon") {
+        if (lightTravelS != null && planetStr != "earth" && planetStr != "moon") {
             val lt = lightTravelSeconds(Planet.EARTH, planet, utcMs)
             if (abs(lt - lightTravelS) <= 2.0) {
                 passed++
             } else {
                 failed++
                 println("FAIL: $tag lightTravel — expected ${"%.3f".format(lightTravelS)}, got ${"%.3f".format(lt)}")
+            }
+        }
+
+        if (expectedMtc != null) {
+            val mtc = getMtc(utcMs)
+            for ((key, got) in listOf("sol" to mtc.sol, "hour" to mtc.hour.toLong(),
+                                      "minute" to mtc.minute.toLong(), "second" to mtc.second.toLong())) {
+                val want = expectedMtc.getLong(key)
+                if (got == want) {
+                    passed++
+                } else {
+                    failed++
+                    println("FAIL: $tag mtc.$key=$want (got $got)")
+                }
             }
         }
 
