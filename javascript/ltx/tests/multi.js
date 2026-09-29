@@ -1,12 +1,14 @@
 'use strict';
 /**
- * test_multi.js — Unit tests for computeSegmentsMulti and buildDelayMatrix
+ * multi.js — Unit tests for computeSegmentsMulti and buildDelayMatrix
  * Story 39.1 — Multi-party LTX conference
+ * (moved from javascript/planet-time/test_multi.js, where its require path
+ * no longer resolved after the repository reorganisation)
  *
- * Run: node interplanet-github/js/test_multi.js
+ * Run: node javascript/ltx/tests/multi.js
  */
 
-const LTX = require('./ltx-sdk.js');
+const LTX = require('../ltx-sdk.js');
 
 let passed = 0;
 let failed = 0;

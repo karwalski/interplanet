@@ -16,14 +16,16 @@
     "url": "https://github.com/karwalski/interplanet/issues"
   },
   "main": "ltx-sdk.js",
-  "types": "dist/ltx-sdk.d.ts",
+  "types": "ltx-sdk.d.ts",
   "files": [
     "ltx-sdk.js",
+    "ltx-sdk.d.ts",
     "ltx-protocol-templates.js",
     "dist/",
     "README.md"
   ],
   "scripts": {
+    "build:types": "node build-types.mjs",
     "test": "node -e \"const sdk = require('./ltx-sdk'); console.assert(typeof sdk.createPlan === 'function', 'createPlan ok'); console.assert(typeof sdk.computeSegments === 'function', 'computeSegments ok'); console.assert(typeof sdk.encodeHash === 'function', 'encodeHash ok'); console.log('smoke tests passed');\""
   },
   "engines": {

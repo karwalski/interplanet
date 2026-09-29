@@ -1,7 +1,7 @@
 # Makefile — interplanet-ltx JavaScript SDK
 # Usage: make test | make lint | make clean
 
-.PHONY: test test-topics lint clean
+.PHONY: test test-topics lint types check-types clean
 
 # Run SDK smoke tests via Node.js
 test:
@@ -25,6 +25,8 @@ test:
 	"
 	@$(MAKE) --no-print-directory test-topics
 	node tests/protocol-templates.js
+	node tests/multi.js
+	node tests/run.js
 	@echo "All tests passed ✓"
 
 # EXPERIMENTAL topics extension (docs/LTX-TOPICS-RFC.md, not for production)
@@ -38,6 +40,19 @@ lint:
 	node --check ltx-topics.js
 	node --check ltx-protocol-templates.js
 	@echo "Lint passed ✓"
+
+# Regenerate ltx-sdk.d.ts from the JSDoc in ltx-sdk.js (needs tsc on PATH)
+types:
+	node build-types.mjs
+
+# Check ltx-sdk.d.ts is current and usable from a strict TypeScript consumer
+check-types:
+	@tmp=$$(mktemp -d) && node build-types.mjs $$tmp && \
+	  if ! diff -q ltx-sdk.d.ts $$tmp/ltx-sdk.d.ts >/dev/null; then \
+	    echo "ltx-sdk.d.ts is stale: run 'make types'"; rm -rf $$tmp; exit 1; fi; \
+	  rm -rf $$tmp
+	tsc -p tests/types
+	@echo "Type declarations OK ✓"
 
 # Remove generated files
 clean:

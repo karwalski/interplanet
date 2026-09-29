@@ -107,7 +107,7 @@ const loaded = await getSession(planId, 'https://api.interplanet.live');
 
 ## TypeScript
 
-The typed variant lives in `@interplanet/ltx` (see `typescript/ltx/`). The JS package ships a `dist/ltx-sdk.d.ts` declaration file for IDE support.
+The typed variant lives in `@interplanet/ltx` (see `typescript/ltx/`). The JS package ships an `ltx-sdk.d.ts` declaration file for IDE support. It is generated from the JSDoc in `ltx-sdk.js` with `make types` (needs `tsc` on PATH), and `make check-types` confirms it is current and compiles under a strict TypeScript consumer (`tests/types/consumer.ts`).
 
 ## API reference
 
