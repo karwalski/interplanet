@@ -24,6 +24,7 @@ const Map<String, String> _entryPrefix = {
   'state_transition': 'STA',
   'merge_snapshot': 'MRG',
   'decision': 'DEC',
+  'decision_update': 'DEC',
 };
 
 /// Create a signed register entry (LTX-SECURITY.md §9.5).
@@ -235,6 +236,74 @@ RegisterReduction reduceActions(List<Map<String, dynamic>> entries) {
   return RegisterReduction(byId: byId, superseded: superseded);
 }
 
+const List<String> _decisionStatuses = ['RECORDED', 'RESCINDED'];
+
+/// Reduce decision register state from log entries (§10.3). Pure.
+/// `decision` entries record a decision (did = entryId, version 1);
+/// `decision_update` entries reference content.did and revise text/rationale
+/// or rescind it. Conflicts follow §8.2 exactly as for questions and actions:
+/// higher object version wins, then the lowest editor nodeId; losers are
+/// returned in `superseded`.
+RegisterReduction reduceDecisions(List<Map<String, dynamic>> entries) {
+  final byId = <String, Map<String, dynamic>>{};
+  final winners = <String, List<dynamic>>{};
+  final superseded = <String>[];
+
+  for (final e in orderEntries(entries)) {
+    final content = (e['content'] as Map).cast<String, dynamic>();
+    if (e['type'] == 'decision') {
+      final did = e['entryId'] as String;
+      if (byId.containsKey(did)) {
+        superseded.add(e['entryId'] as String);
+        continue;
+      }
+      winners[did] = [1, e['nodeId'], e['entryId']];
+      byId[did] = {
+        'did': did,
+        'text': '${content['text'] ?? ''}',
+        'recordedBy': e['nodeId'],
+        if (content['rationale'] != null) 'rationale': '${content['rationale']}',
+        if (content['originWindow'] != null)
+          'originWindow': '${content['originWindow']}',
+        'status': 'RECORDED',
+        'version': 1,
+      };
+    } else if (e['type'] == 'decision_update') {
+      final did = '${content['did'] ?? ''}';
+      final d = byId[did];
+      if (d == null) {
+        superseded.add(e['entryId'] as String);
+        continue;
+      }
+      final version =
+          (content['version'] as num?)?.toInt() ?? (d['version'] as int) + 1;
+      final current = winners[did];
+      if (current != null &&
+          !_wins(version, e['nodeId'] as String, current[0] as int,
+              current[1] as String)) {
+        superseded.add(e['entryId'] as String);
+        continue;
+      }
+      if (current != null && current[2] != d['did']) {
+        superseded.add(current[2] as String);
+      }
+      winners[did] = [version, e['nodeId'], e['entryId']];
+      final status = _decisionStatuses.contains(content['status'])
+          ? content['status'] as String
+          : d['status'] as String;
+      byId[did] = {
+        ...d,
+        'status': status,
+        if (content['text'] != null) 'text': '${content['text']}',
+        if (content['rationale'] != null) 'rationale': '${content['rationale']}',
+        'editor': e['nodeId'],
+        'version': version,
+      };
+    }
+  }
+  return RegisterReduction(byId: byId, superseded: superseded);
+}
+
 // ── Merkle audit-log root (RFC 9162 style) ─────────────────────────────────
 // Leaf hash: SHA-256(0x00 || canonicalJSON(entry)); node hash:
 // SHA-256(0x01 || left || right); empty root: 32 zero bytes.
@@ -285,4 +354,75 @@ Future<List<Map<String, dynamic>>> emitQuestionSeeds(
     seq += 1;
   }
   return out;
+}
+
+// ── Merge (LTX-SPECIFICATION.md §8.2 / §8.4) ────────────────────────────────
+
+/// Result of [mergeLogs]: verified entries in §8.2 order, plus the rejected
+/// ones as `{entry, reason}` maps.
+class MergeLogsResult {
+  final List<Map<String, dynamic>> entries;
+  final List<Map<String, dynamic>> rejected;
+  const MergeLogsResult({required this.entries, required this.rejected});
+}
+
+/// Result of [runMergeSegment]: the merge and the signed merge_snapshot entry.
+class MergeSegmentResult {
+  final MergeLogsResult merged;
+  final Map<String, dynamic> snapshot;
+  const MergeSegmentResult({required this.merged, required this.snapshot});
+}
+
+/// Deterministic merge of two entry logs (§8.2): verify, union de-duplicated
+/// by (nodeId, seq), order totally. Symmetric by construction.
+Future<MergeLogsResult> mergeLogs(List<Map<String, dynamic>> entriesA,
+    List<Map<String, dynamic>> entriesB, Map<String, Nik> keyCache) async {
+  final rejected = <Map<String, dynamic>>[];
+  final verified = <Map<String, dynamic>>[];
+  for (final entry in [...entriesA, ...entriesB]) {
+    final v = await verifyRegisterEntry(entry, keyCache);
+    if (v.valid) {
+      verified.add(entry);
+    } else {
+      rejected.add({'entry': entry, 'reason': v.reason ?? 'invalid'});
+    }
+  }
+  return MergeLogsResult(entries: orderEntries(verified), rejected: rejected);
+}
+
+/// MERGE segment (§8.4): merge + HOST-signed merge_snapshot entry carrying
+/// the question, action and decision registers and every superseded entryId.
+Future<MergeSegmentResult> runMergeSegment(
+  List<Map<String, dynamic>> localEntries,
+  List<Map<String, dynamic>> remoteEntries,
+  Map<String, Nik> keyCache, {
+  required String sessionId,
+  required String nodeId,
+  required int seq,
+  required String timestamp,
+  required String privateKeyB64,
+}) async {
+  final merged = await mergeLogs(localEntries, remoteEntries, keyCache);
+  final questions = reduceQuestions(merged.entries);
+  final actions = reduceActions(merged.entries);
+  final decisions = reduceDecisions(merged.entries);
+  final snapshot = await createRegisterEntry('merge_snapshot', {
+    'mergedRoot': entriesRoot(merged.entries),
+    'entryCount': merged.entries.length,
+    'rejectedCount': merged.rejected.length,
+    'questionRegister': questions.byId,
+    'actionRegister': actions.byId,
+    'decisionRegister': decisions.byId,
+    'superseded': [
+      ...questions.superseded,
+      ...actions.superseded,
+      ...decisions.superseded,
+    ],
+  },
+      sessionId: sessionId,
+      nodeId: nodeId,
+      seq: seq,
+      timestamp: timestamp,
+      privateKeyB64: privateKeyB64);
+  return MergeSegmentResult(merged: merged, snapshot: snapshot);
 }

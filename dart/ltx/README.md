@@ -42,7 +42,7 @@ final urls = buildNodeUrls(plan, baseUrl: 'https://interplanet.live/ltx.html');
 
 ### Constants
 - `kVersion` — SDK version string
-- `kDefaultQuantum` — default quantum in minutes (3)
+- `kDefaultQuantum` — default quantum in minutes (5)
 - `kDefaultApiBase` — default API URL
 - `kDefaultSegments` — default segment template list
 - `kSegTypes` — valid segment type strings
@@ -59,6 +59,15 @@ final urls = buildNodeUrls(plan, baseUrl: 'https://interplanet.live/ltx.html');
 - `generateIcs(LtxPlan)` → `String`
 - `formatHms(int)` → `String`
 - `formatUtc(DateTime)` → `String`
+- `makePlanIdFromMap(Map)` → `String` (planId over a jsonDecode map, key order preserved; matches spec/golden/plan-ids.json)
+
+### Plan validation
+- `validatePlan(plan)` → `PlanValidation` (`valid`, `errors` with `code`, `path`, `message`), including `reserved_streams` and `reserved_branching`
+- `createAmendment` and `createSession` throw `ReservedFieldException` (`code`, `errors`) for reserved streams or branching fields
+
+### Registers
+- `reduceQuestions`, `reduceActions`, `reduceDecisions` (`decision`, `decision_update`)
+- `mergeLogs`, `runMergeSegment` (merge_snapshot carries `questionRegister`, `actionRegister`, `decisionRegister`)
 
 ### REST client (async, dart:io)
 - `storeSession(LtxPlan, {apiBase})` → `Future<Map>`
