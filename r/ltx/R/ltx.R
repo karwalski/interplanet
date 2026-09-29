@@ -468,11 +468,16 @@ make_plan_id <- function(plan) {
 # ── Hash encoding / decoding ──────────────────────────────────────────────────
 
 #' Encode a plan to a URL hash fragment ("#l=<base64url>").
-#' JSON uses canonical key order: v, title, start, quantum, mode, nodes, segments.
+#' The JSON is json_stringify(plan): the list's own key order and every field
+#' it carries, i.e. exactly the bytes make_plan_id hashes for a v2 plan, so a
+#' receiver derives the same planId (issue #32). A create_plan() plan keeps
+#' the key order v, title, start, quantum, mode, nodes, segments; v3 fields
+#' (delays, planVersion, ...) are transmitted too.
+#' Needs R/parity.R (json_stringify).
 #' @param plan LtxPlan list
 #' @return character string starting with "#l="
 encode_hash <- function(plan) {
-  json <- .plan_to_json(plan)
+  json <- json_stringify(plan)
   paste0("#l=", b64url_encode(json))
 }
 
@@ -518,8 +523,7 @@ decode_hash <- function(hash_str) {
 #' @param base_url character base page URL (e.g. "https://interplanet.live/ltx.html")
 #' @return list of lists, each with node_id, name, url
 build_node_urls <- function(plan, base_url = "") {
-  json       <- .plan_to_json(plan)
-  token      <- paste0("#l=", b64url_encode(json))
+  token      <- encode_hash(plan)
   clean_base <- sub("#.*$", "", sub("\\?.*$", "", base_url))
   lapply(plan$nodes, function(n) {
     list(
