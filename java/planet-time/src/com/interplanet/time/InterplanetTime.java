@@ -52,7 +52,7 @@ public final class InterplanetTime {
         86400000.0,                // Earth
         88775244.0,                // Mars
         9.9250   * 3600000,        // Jupiter
-        10.5606  * 3600000,        // Saturn
+        10.578   * 3600000,        // Saturn (Mankovich et al. 2023, matches planet-time.js)
         17.2479  * 3600000,        // Uranus
         16.1100  * 3600000,        // Neptune
         86400000.0,                // Moon (Earth)
