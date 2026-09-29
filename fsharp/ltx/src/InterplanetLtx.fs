@@ -365,7 +365,7 @@ let makePlanId (plan: LtxPlan) : string =
     // whitespace is removed (tab, NBSP, U+2028, U+3000, BOM, ...);
     // punctuation such as '-' is kept (§4.3).
     let token (name: string) =
-        System.String(name.ToCharArray() |> Array.filter (isJsSpace >> not)).ToUpperInvariant()
+        Upper.jsToUpper (System.String(name.ToCharArray() |> Array.filter (isJsSpace >> not)))
     let hostStr =
         let raw = if nodes.Length > 0 && nodes.[0].name <> "" then token nodes.[0].name else "HOST"
         if raw.Length > 8 then raw.Substring(0, 8) else raw

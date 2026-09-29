@@ -147,7 +147,8 @@ let toJsonV2 (p: PlanV11) : string =
 let makePlanId (p: PlanV11) : string =
     let date = p.start.Substring(0, 10).Replace("-", "")
     let hostStr =
-        let h = if p.nodes.IsEmpty then "HOST" else stripJsSpaceUpper p.nodes.Head.name
+        // (nodes[0]?.name || 'HOST') as in ltx-sdk.js: an empty name is HOST too.
+        let h = stripJsSpaceUpper (if p.nodes.IsEmpty || p.nodes.Head.name = "" then "HOST" else p.nodes.Head.name)
         if h.Length > 8 then h.Substring(0, 8) else h
     let nodeStr =
         if p.nodes.Length > 1 then

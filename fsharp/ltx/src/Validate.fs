@@ -312,7 +312,8 @@ let makePlanIdFromJson (json: string) : string =
         | Some n when n.ValueKind = JsonValueKind.Array ->
             n.EnumerateArray() |> Seq.map (fun x -> defaultArg (str (get x "name")) "") |> List.ofSeq
         | _ -> []
-    let hostStr = match names with h :: _ -> slice (compactUpper h) 8 | [] -> "HOST"
+    // (nodes[0]?.name || 'HOST') as in ltx-sdk.js: an empty name is HOST too.
+    let hostStr = slice (compactUpper (match names with h :: _ when h <> "" -> h | _ -> "HOST")) 8
     let nodeStr =
         if names.Length > 1 then
             slice (names.Tail |> List.map (fun n -> slice (compactUpper n) 4) |> String.concat "-") 16

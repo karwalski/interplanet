@@ -3,6 +3,7 @@
 //   main  InterplanetLtx.createPlan / encodeHash / makePlanId (LtxPlan)
 //   v11   V11 model: PlanV11 / toJsonV2 / makePlanId, plus v3
 #r "nuget: NSec.Cryptography, 24.4.0"
+#load "../../../../fsharp/ltx/src/Upper.fs"
 #load "../../../../fsharp/ltx/src/Models.fs"
 #load "../../../../fsharp/ltx/src/Constants.fs"
 #load "../../../../fsharp/ltx/src/InterplanetLtx.fs"
@@ -102,6 +103,6 @@ else
     printfn "ID_V3 %s" (V11.makePlanId v3)
     printfn "NOTE PlanV11: v2 wire via toJsonV2, v3 wire via canonicalJson(planToDict); v3 via record copy"
 
-for v in [ "2"; "3" ] do
+for v in [ "2"; "3"; "P" ] do
     let json = File.ReadAllText(Path.Combine(inDir, sprintf "js-v%s.json" v), Encoding.UTF8)
     printfn "JS_V%s %s" v (Validate.makePlanIdFromJson json)

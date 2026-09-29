@@ -3,6 +3,7 @@
 // Run with: dotnet fsi tests/SecurityTest.fsx
 
 #r "nuget: NSec.Cryptography, 24.4.0"
+#load "../src/Upper.fs"
 #load "../src/Security.fs"
 
 open InterplanetLtx.Security

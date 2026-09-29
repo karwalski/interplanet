@@ -4,6 +4,7 @@
 // Run with: dotnet fsi tests/V11Test.fsx
 
 #r "nuget: NSec.Cryptography, 24.4.0"
+#load "../src/Upper.fs"
 #load "../src/Security.fs"
 #load "../src/Validate.fs"
 #load "../src/V11.fs"

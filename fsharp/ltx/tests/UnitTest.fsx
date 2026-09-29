@@ -3,6 +3,7 @@
 // >= 80 check() assertions covering all public API functions.
 // Run with: dotnet fsi tests/UnitTest.fsx
 
+#load "../src/Upper.fs"
 #load "../src/Models.fs"
 #load "../src/Constants.fs"
 #load "../src/InterplanetLtx.fs"

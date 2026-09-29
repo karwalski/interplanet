@@ -24,6 +24,7 @@ make lint
 ## Usage example
 
 ```fsharp
+#load "src/Upper.fs"   // JS toUpperCase (planId); load first
 #load "src/Models.fs"
 #load "src/Constants.fs"
 #load "src/InterplanetLtx.fs"
@@ -94,7 +95,8 @@ printfn "%s" (formatUTC 1705327200000L)  // => 2024-01-15T14:00:00Z
 ### LTX v1.1 modules (`src/Security.fs`, `src/Validate.fs`, `src/V11.fs`)
 
 Loaded from scripts in that order after `#r "nuget: NSec.Cryptography, 24.4.0"`
-(see `tests/ParityTest.fsx`); `make test` runs all four test scripts.
+(see `tests/ParityTest.fsx`), with `src/Upper.fs` loaded first; `make test`
+runs all five test scripts.
 `InterplanetLtx.fsproj` also compiles these modules (with a
 `PackageReference` to NSec.Cryptography 24.4.0), so `dotnet build` / `make lint`
 type-checks the whole library.

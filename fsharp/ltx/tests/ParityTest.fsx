@@ -5,6 +5,7 @@
 // Run with: dotnet fsi tests/ParityTest.fsx
 
 #r "nuget: NSec.Cryptography, 24.4.0"
+#load "../src/Upper.fs"
 #load "../src/Models.fs"
 #load "../src/Constants.fs"
 #load "../src/InterplanetLtx.fs"

@@ -107,8 +107,9 @@ let isJsSpace (c: char) : bool =
     | c -> c >= '\u2000' && c <= '\u200a'
 
 /// s.replace(/\s+/g, '').toUpperCase() as in ltx-sdk.js makePlanId.
+/// (ToUpperInvariant has no special casing: Upper.jsToUpper does JS toUpperCase.)
 let stripJsSpaceUpper (s: string) : string =
-    String(s.ToCharArray() |> Array.filter (isJsSpace >> not)).ToUpperInvariant()
+    Upper.jsToUpper (String(s.ToCharArray() |> Array.filter (isJsSpace >> not)))
 
 // ---- SHA-256 helper ----
 
