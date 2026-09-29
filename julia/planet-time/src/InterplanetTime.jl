@@ -439,19 +439,18 @@ end
 """
     get_mtc(utc_ms) -> MtcResult
 
-Return Mars Coordinated Time (MTC) for the given UTC milliseconds.
+Return Mars Coordinated Time (MTC) for the given UTC milliseconds: the Mars
+clock at the prime meridian (AMT+0), in Mars hours (1/24 sol), matching getMTC
+in planet-time.js.
 """
 function get_mtc(utc_ms::Int64)::MtcResult
-    ms       = Float64(utc_ms - MARS_EPOCH_MS)
-    sol_f    = ms / Float64(MARS_SOL_MS)
+    sol_f    = Float64(utc_ms - MARS_EPOCH_MS) / Float64(MARS_SOL_MS)
     sol      = Int64(floor(sol_f))
     frac     = sol_f - Float64(sol)
 
-    total_sec = frac * Float64(MARS_SOL_MS) / 1000.0
-    h  = Int(floor(total_sec / 3600.0))
-    mf = mod(total_sec, 3600.0) / 60.0
-    m  = Int(floor(mf))
-    sc = Int(floor(mod(total_sec, 60.0)))
+    h  = Int(floor(frac * 24))
+    m  = Int(floor((frac * 24 - h) * 60))
+    sc = Int(floor(((frac * 24 - h) * 60 - m) * 60))
 
     mtc_str = @sprintf("%02d:%02d", h, m)
     return MtcResult(sol, h, m, sc, mtc_str)
