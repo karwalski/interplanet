@@ -864,6 +864,33 @@ void main() async {
   check(createPlan().quantum == 5 && kDefaultQuantum == 5,
       'createPlan default quantum is 5');
 
+  // ── Conformance: planId prefix vectors (spec/golden/plan-id-prefixes.json) ─
+  // Unicode upper-casing and UTF-16 slicing of HOSTSTR / NODESTR (issue #37).
+  // Dart strings are UTF-16 and hold a lone surrogate, so the exact JS
+  // planId is expected.
+
+  final prefixVectors = ((jsonDecode(
+              File('../../spec/golden/plan-id-prefixes.json')
+                  .readAsStringSync()) as Map)['vectors'] as List)
+      .map((e) => (e as Map).cast<String, dynamic>())
+      .toList();
+  check(prefixVectors.length >= 18, 'prefix: vectors present');
+  for (final gv in prefixVectors) {
+    final raw = (gv['plan'] as Map).cast<String, dynamic>();
+    final want = gv['planId'] as String;
+    final got = makePlanIdFromMap(raw);
+    check(got == want, 'prefix planId ${gv['name']} (got $got)');
+    final typed = LtxPlan.fromJson(jsonEncode(raw));
+    final tid = typed == null ? '' : makePlanId(typed);
+    check(
+        typed != null &&
+            tid.substring(0, tid.length - 12) ==
+                want.substring(0, want.length - 12),
+        'prefix typed planId ${gv['name']} (got $tid)');
+  }
+  check(jsToUpperCase('straße ﬁ ŉ ΐ ᾳ և ȿ ꞵ') == 'STRASSE FI ʼN Ϊ́ ΑΙ ԵՒ Ȿ Ꞵ',
+      'jsToUpperCase full mapping');
+
   // ── Plan validation: reserved streams / branching (§3.5, §7) ────────────
 
   for (final gv in gVectors) {
