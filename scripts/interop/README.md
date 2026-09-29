@@ -104,26 +104,28 @@ v3 `LTX-20260315-EARTHHQ-MARS-L-1G-v3-f3abaee9`.
 | c | PASS | ok | n/a | ok | ok | nodes first | `itx_plan_t`: no speaker/label; the C port builds no v3 plans |
 | dart | PASS | ok | ok | ok | ok | nodes first | |
 | swift | PASS | ok | ok | ok | ok | nodes first | |
-| zig | XFAIL | MISMATCH | n/a | ok | ok | nodes first | typed `Plan` API is not the v2 schema, see below |
+| zig | PASS | ok | n/a | ok | ok | segments first (as JS) | typed `LtxPlan` is v2 only; v3 through `makePlanIdJson` |
 | elixir | PASS | ok | ok | ok | ok | nodes first | |
 | lua | PASS | ok | ok | ok | ok | nodes first | |
 | ocaml | PASS | ok | ok | ok | ok | nodes first | typed plan: no speaker/label; v3 through `V11` on the parsed wire JSON |
 | r | PASS | ok | ok | ok | ok | nodes first | `ltx_segment_spec`: no speaker/label |
 | julia | PASS | ok | ok | ok | ok | nodes first | `LtxSegmentSpec`: no speaker/label |
 
-24 pass, 0 fail, 1 known-incompatible (xfail), 0 skipped. Every toolchain was
+25 pass, 0 fail, 0 known-incompatible (xfail), 0 skipped. Every toolchain was
 available; sbt, Dart, Zig and Julia were not on the default PATH and were
 supplied through `INTEROP_PATH`.
 
 Every port's JSON-based planId function reproduces JS for both the v2
-(segments first) and v3 inputs, and every port except Zig now transmits
-exactly what it hashes.
+(segments first) and v3 inputs, and every port now transmits exactly what
+it hashes.
 
 ### Port fixes found by this runner
 
-Before the fixes the runner reported these disagreements. Each fix is
-minimal, leaves the frozen algorithm and the v2 bytes of existing plans
-unchanged, and has a regression test in the port.
+Before the fixes the runner reported these disagreements. Each fix leaves
+the frozen algorithm unchanged and has a regression test in the port. All
+but Zig are minimal and keep the v2 bytes of existing plans; the Zig typed
+model was not the v2 schema, so its plans (and their ids) change to what JS
+produces for the same values.
 
 | Port | Problem | Fix | Test |
 |---|---|---|---|
@@ -135,19 +137,7 @@ unchanged, and has a regression test in the port.
 | F# | `InterplanetLtx.makePlanId` (typed `LtxPlan`) kept only letters and digits in HOSTSTR/NODESTR, dropping `-`: `L1GA` instead of `L-1G` | strip whitespace only, as the spec says | `tests/UnitTest.fsx` |
 | Lua | `encode_hash` serialised with alphabetically sorted keys (`mode, nodes, quantum, ...`) while `make_plan_id` hashes a plain v2 table in schema order: v2 ids of shared plans disagreed | new `wire_json` serialises in the hashed order; used by `encode_hash` and `build_node_urls` | `test/parity_test.lua` |
 | R | `encode_hash` serialised a fixed v2 field list while `make_plan_id` hashes `json_stringify(plan)`: v3 fields were not transmitted, and a plan list in another key order was re-shared in a different order than hashed | `encode_hash` and `build_node_urls` use `json_stringify(plan)` | `test/test_parity.R` |
-
-### Known incompatibility (not fixed)
-
-**Zig typed API.** `zig/ltx/src/interplanet_ltx.zig` (`createPlan`,
-`encodeHash`, `makePlanId`) predates the v2 schema. Its `#l=` JSON has
-`"v":"2"` as a string, nodes with `is_host` instead of `role`/`delay`, and
-timed segments (`id`, `duration`, `start_offset`, `speaker`) instead of
-`{type, q}`; `makePlanId` builds HOSTSTR/NODESTR from node ids rather than
-names (`LTX-20260315-N0-N1-v2-...`) and hashes UTF-8 bytes. No other port can
-read that JSON as a plan, so no minimal fix exists; it needs the typed model
-rewritten to the v2 schema (a separate change). The Zig JSON API
-(`ltx_v11.zig`: `makePlanIdJson`, `planHashJson`, ...) is conformant, as (c)
-shows.
+| Zig | the typed model in `interplanet_ltx.zig` predated the v2 schema: `"v":"2"` as a string, nodes with `is_host` instead of `role`/`delay`, timed segments instead of `{type, q}`, and `makePlanId` built HOSTSTR/NODESTR from node ids and hashed UTF-8 bytes; no other port could read its `#l=` JSON as a plan (issue #35) | typed model rewritten to the v2 schema as JS `createPlan`: `LtxPlan` with `v: 2`, nodes `{id, name, role, delay, location}`, segments `{type, q, speaker?, label?}`, JS default segments, wire JSON in the JS key order, and `makePlanId` hashing exactly that JSON (UTF-16 imul31, name-based HOSTSTR/NODESTR) | `src/unit_test.zig` |
 
 ### Gaps and observations
 

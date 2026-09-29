@@ -48,10 +48,6 @@ module.exports = [
   { name: 'swift', need: ['swift'], build: 'swift build -c release --scratch-path build 2>&1 | tail -n 3 && test -x build/release/Driver',
     run: './build/release/Driver' },
   { name: 'zig', need: ['zig'],
-    xfail: 'typed Plan API (interplanet_ltx.zig) predates the v2 schema: its #l= JSON has "v":"2" as a string, '
-      + 'nodes with is_host instead of role/delay, timed segments instead of {type,q}, and makePlanId builds '
-      + 'HOSTSTR/NODESTR from node ids and hashes UTF-8 bytes. Not fixable minimally; the JSON API '
-      + '(ltx_v11.zig makePlanIdJson) is conformant.',
     build: 'mkdir -p build && zig build-exe -O ReleaseSafe --cache-dir build/cache --global-cache-dir build/gcache -femit-bin=build/driver --dep ltx --dep v11 -Mroot=driver.zig -Mltx="$ROOT/zig/ltx/src/interplanet_ltx.zig" -Mv11="$ROOT/zig/ltx/src/ltx_v11.zig"',
     run: './build/driver' },
   { name: 'elixir', need: ['elixirc', 'elixir'],

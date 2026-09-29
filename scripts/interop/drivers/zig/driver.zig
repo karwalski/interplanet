@@ -19,17 +19,17 @@ pub fn main() !void {
     const in_dir = args[1];
     const out_dir = args[2];
 
-    // The typed Node has no role/delay and the typed segment template has no
-    // speaker/label; segments are expanded to timed entries by createPlan.
     const nodes = [_]ltx.Node{
-        .{ .id = "N0", .name = "Earth HQ", .location = "earth", .is_host = true },
-        .{ .id = "N1", .name = "Mars Hab-01", .location = "mars", .is_host = false },
-        .{ .id = "N2", .name = "L-1 Gateway", .location = "moon", .is_host = false },
+        .{ .id = "N0", .name = "Earth HQ", .role = "HOST", .delay = 0, .location = "earth" },
+        .{ .id = "N1", .name = "Mars Hab-01", .role = "PARTICIPANT", .delay = 840, .location = "mars" },
+        .{ .id = "N2", .name = "L-1 Gateway", .role = "PARTICIPANT", .delay = 2, .location = "moon" },
     };
     const segs = [_]ltx.SegmentTemplate{
-        .{ .seg_type = "PLAN_CONFIRM", .duration = 2 }, .{ .seg_type = "TX", .duration = 3 },
-        .{ .seg_type = "RX", .duration = 3 },           .{ .seg_type = "TX", .duration = 2 },
-        .{ .seg_type = "BUFFER", .duration = 1 },
+        .{ .seg_type = "PLAN_CONFIRM", .q = 2 },
+        .{ .seg_type = "TX", .q = 3, .speaker = "N0", .label = "Ouverture: état de la mission" },
+        .{ .seg_type = "RX", .q = 3 },
+        .{ .seg_type = "TX", .q = 2, .speaker = "N1", .label = "Réponse 🔴" },
+        .{ .seg_type = "BUFFER", .q = 1 },
     };
     const plan = try ltx.createPlan(alloc, .{
         .title = "Réunion Mars 🚀",
@@ -39,7 +39,7 @@ pub fn main() !void {
         .nodes = &nodes,
         .segments = &segs,
     });
-    try out(alloc, "NOTE typed Plan: nodes carry is_host (no role/delay), segments are timed (no q/label), no v3\n", .{});
+    try out(alloc, "NOTE typed LtxPlan is v2 only; v3 plans go through the JSON API (makePlanIdJson)\n", .{});
 
     const hash = try ltx.encodeHash(alloc, plan);
     const wire = try ltx.decodeHash(alloc, hash);

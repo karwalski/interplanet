@@ -28,71 +28,62 @@ make lint
 
 ## API
 
-### Constants
+### Typed v2 plans (`src/interplanet_ltx.zig`)
+
+The typed model is the v2 plan schema (LTX-SPECIFICATION.md §4.1) and mirrors
+`javascript/ltx/ltx-sdk.js` `createPlan` / `makePlanId`.
 
 ```zig
-pub const VERSION        = "1.1.0";
-pub const DEFAULT_QUANTUM: u32 = 5;        // minutes per quantum
-pub const DEFAULT_API_BASE = "https://api.interplanettime.net/ltx/v1";
-pub const SEG_TYPES      = [_][]const u8{ "TX", "RX", "BUFFER", "HOLD", "PREP" };
-pub const DEFAULT_SEGMENTS: [5]SegmentTemplate = ...;   // TX/3, RX/1, TX/2, RX/1, BUFFER/2
-```
+pub const DEFAULT_QUANTUM: u32 = 5;  // minutes per quantum
+pub const SEG_TYPES = [_][]const u8{ "PLAN_CONFIRM", "TX", "RX", "CAUCUS", "BUFFER", "MERGE" };
+pub const DEFAULT_SEGMENTS = ...;    // PLAN_CONFIRM/2 TX/2 RX/2 CAUCUS/2 TX/2 RX/2 BUFFER/1, as JS
 
-### Types
+pub const SegmentTemplate = struct {  // wire {"type","q"[,"speaker"][,"label"]}
+    seg_type: []const u8,
+    q: u32,
+    speaker: ?[]const u8 = null,
+    label: ?[]const u8 = null,
+};
 
-```zig
-pub const SegmentTemplate = struct { seg_type: []const u8, duration: u32 };
-
-pub const Node = struct {
-    id:       []const u8,
-    name:     []const u8,
+pub const Node = struct {             // wire {"id","name","role","delay","location"}
+    id: []const u8,
+    name: []const u8,
+    role: []const u8,                 // HOST | PARTICIPANT | OBSERVER
+    delay: i64 = 0,                   // one-way seconds to the HOST
     location: []const u8,
-    is_host:  bool,
 };
 
-pub const Segment = struct {
-    id:           []const u8,
-    seg_type:     []const u8,
-    speaker:      ?[]const u8,  // null for BUFFER / HOLD / PREP
-    duration:     u32,          // minutes
-    start_offset: u32,          // minutes from plan start
-};
-
-pub const NodeUrl = struct {
-    node_id:     []const u8,
-    base_url:    []const u8,
-    session_url: []const u8,
-};
-
-pub const Plan = struct {
-    v:        []const u8,   // "2"
-    title:    []const u8,
-    start:    []const u8,   // ISO 8601 UTC
-    quantum:  u32,
-    mode:     []const u8,   // "LTX"
-    nodes:    []const Node,
-    segments: []const Segment,
+pub const LtxPlan = struct {
+    v: u32 = 2,
+    title: []const u8,
+    start: []const u8,                // ISO 8601 UTC
+    quantum: u32,
+    mode: []const u8,                 // LTX | LTX-LIVE | LTX-RELAY | LTX-ASYNC
+    nodes: []const Node,              // HOST first
+    segments: []const SegmentTemplate,
 };
 ```
-
-### Functions
 
 | Function | Description |
 |---|---|
-| `createPlan(allocator, opts)` | Build a new Plan from CreatePlanOpts |
-| `upgradeConfig(allocator, plan)` | Ensure plan is v2 (adds default nodes if missing) |
-| `totalMin(plan)` | Sum of all segment durations in minutes |
-| `computeSegments(allocator, nodes, template, quantum)` | Compute timed Segment array |
-| `makePlanId(allocator, plan)` | Deterministic plan ID string |
-| `encodeHash(allocator, plan)` | Base64url encode plan as `#l=…` fragment |
-| `decodeHash(allocator, encoded)` | Decode `#l=…` or raw base64url back to JSON |
-| `buildNodeUrls(allocator, plan, base_url)` | Per-node session URLs |
-| `buildDelayMatrix(allocator, plan)` | Legacy N×N placeholder matrix from the quantum only (the struct `Node` carries no delay). Not the spec §3.7 matrix: use `ltx_v11.buildDelayMatrixJson` |
-| `generateIcs(allocator, plan)` | iCalendar (.ics) string with CRLF endings |
-| `formatHms(allocator, total_minutes)` | Format minutes as "Xh Ym" / "Xh" / "Ym" / "0m" |
-| `planToJson(allocator, plan)` | Serialise Plan to canonical JSON |
+| `createPlan(allocator, opts)` | JS `createPlan`: defaults title `LTX Session`, mode `LTX`, quantum 5, `DEFAULT_SEGMENTS`, nodes N0 `Earth HQ` (HOST) and N1 `Mars Hab-01` (PARTICIPANT, `opts.delay`), start = now at the whole minute + 5 min. Returns a deep copy; free with `deinitPlan` |
+| `clonePlan` / `deinitPlan` / `planFromJson(allocator, json)` | Deep copy, free, and parse wire JSON into an `LtxPlan` |
+| `planToJson(allocator, plan)` | Wire JSON, key order `v, title, start, quantum, mode, segments, nodes` (as `JSON.stringify` of a JS `createPlan` plan) |
+| `makePlanId(allocator, plan)` | Frozen v2 planId (§4.3): imul31 over the UTF-16 code units of exactly `planToJson(plan)`; HOSTSTR/NODESTR from node names |
+| `encodeHash` / `decodeHash` | `#l=` base64url of the wire JSON, and back to JSON text |
+| `computeSegments(allocator, plan)` | Timed segments (`start_ms`, `end_ms`, `dur_min`, speaker, label) |
+| `totalMin(plan)` | Sum of `q * quantum` |
+| `pairDelay(plan, a, b)` / `buildDelayMatrix(allocator, plan)` | §3.7 pair delay (HOST-relative, sum between non-HOST nodes) over every ordered pair |
+| `buildNodeUrls(allocator, plan, base_url)` | `{base}?node={id}#l=...` per node; free with `freeNodeUrls` |
+| `generateIcs(allocator, plan)` | JS `generateICS` (organiser form), CRLF line endings |
+| `escapeIcsText`, `formatHms`, `planLockTimeoutMs`, `checkDelayViolation` | Helpers |
 
-All allocating functions take an `std.mem.Allocator` and return `!T`. The caller owns all returned memory.
+Because the typed plan hashes what it transmits, a Zig `createPlan` plan has
+the same planId as a JS `createPlan` plan built from the same values. For a
+plan received as JSON text from another sender, compute the planId from that
+text with `ltx_v11.makePlanIdJson`: re-serialising a parsed plan uses this
+port's key order, which need not be the sender's. The typed model is v2
+only; v3 plans go through the JSON API.
 
 ### Wire-format plans (`src/ltx_v11.zig`)
 
@@ -111,27 +102,14 @@ depends on) and mirror `javascript/ltx/ltx-sdk.js`.
 | `createRegisterEntryJson(arena, type, content, opts)` | Signed register entry (`decision_update` uses the `DEC-` prefix) |
 | `mergeLogsJson` / `runMergeSegmentJson` | §8.2 merge and the §8.4 `merge_snapshot` (question, action and decision registers) |
 
-## Conformance vector v001
-
-```
-title:   "Test Meeting Alpha"
-start:   "2040-01-15T14:00:00Z"
-quantum: 5
-host:    { id: "EARTH_HQ", name: "Earth HQ",   location: "earth", is_host: true  }
-remote:  { id: "MARS",     name: "Mars Base",   location: "mars",  is_host: false }
-template: TX/3, RX/1, TX/2, RX/1, BUFFER/2  →  totalMin = 45
-
-planId: "LTX-20400115-EARTH_HQ-MARS-v2-8f812845"
-```
-
 ## Plan ID format
 
 ```
-LTX-{YYYYMMDD}-{HOST_ID}-{REMOTE_ID}-v2-{HASH8}
+LTX-{YYYYMMDD}-{HOSTSTR}-{NODESTR}-v2-{HASH8}
 ```
 
-`HASH8` is the first 8 hex digits of a DJB polynomial hash over the canonical JSON (`h = h *% 31 +% c`, wrapping u32 arithmetic).
-
-## JSON key order
-
-`planToJson` always emits: `v`, `title`, `start`, `quantum`, `mode`, `nodes`, `segments`.
+`HOSTSTR` is the first node's name without whitespace, upper-cased, cut to 8
+UTF-16 units; `NODESTR` is every other node name the same way cut to 4,
+joined by `-` and cut to 16 (`RX` for a single-node plan). `HASH8` is
+`h = imul(31, h) + c` (wrapping u32) over the UTF-16 code units of the wire
+JSON, as 8 lowercase hex digits. Upper-casing covers ASCII and Latin-1.
