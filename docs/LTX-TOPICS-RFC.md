@@ -232,7 +232,8 @@ Topic entries use the spec §8.2 merge unchanged:
 
 - **Late.** A valid entry that arrives after later-sequenced entries from the
   same node MUST be merged, not dropped. The transport replay check
-  (`createSequenceTracker().recordSeq`, which rejects `seq <= last`) is a
+  (`createSequenceTracker().recordSeq`, which accepts late seqs only within a
+  bounded reorder window and rejects anything older) is a
   per-link freshness filter for live frames and MUST NOT be applied to register
   entries delivered by merge or batch. This is the distinction tracked as
   IP-L4.

@@ -172,7 +172,13 @@ late = topics.mergeTopicLogs([late, [tWater]], keyCache).entries;
 check('late lower-seq entry merged not dropped', late.some(e => e.entryId === tWater.entryId));
 const tracker = ltx.createSequenceTracker('topics-test');
 tracker.recordSeq(A.nodeId, 5);
-check('transport recordSeq would drop it (why merge must not use it)', tracker.recordSeq(A.nodeId, 1).accepted === false);
+// Since IP-L4 the transport tracker accepts a late seq inside its reorder
+// window but still rejects anything older than the window, so merge must not use it.
+const lateSeq = tracker.recordSeq(A.nodeId, 1);
+check('transport recordSeq flags in-window late seq', lateSeq.accepted === true && lateSeq.late === true);
+const strict = ltx.createSequenceTracker('topics-test-strict', undefined, { reorderWindow: 0 });
+strict.recordSeq(A.nodeId, 5);
+check('transport recordSeq with no window drops it (why merge must not use it)', strict.recordSeq(A.nodeId, 1).accepted === false);
 
 // Orphan: contribution before its topic.
 const orphanOnly = topics.reduceTopics([b2]);
