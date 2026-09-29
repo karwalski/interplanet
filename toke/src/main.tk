@@ -194,7 +194,7 @@ f=cmdltx(title:$str;nodeargs:@$str):i64{
     nodes=nodes.append(ltx.ltxcreatenode(nid;name;role;delay;location))
   };
 
-  let plan=ltx.ltxcreateplan(title;now as i64;3;"LTX";nodes);
+  let plan=ltx.ltxcreateplan(title;now as i64;5;"LTX";nodes);
   (log.info("LTX Session Plan:";@()));
   (log.info(str.concat("  Plan ID:   ";plan.planid);@()));
   (log.info(str.concat("  Title:     ";plan.title);@()));
