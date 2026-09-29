@@ -166,12 +166,30 @@ final class JsJson
         return array_values(unpack('v*', mb_convert_encoding($s, 'UTF-16LE', 'UTF-8')));
     }
 
-    /** $s.slice(0, $n) with JavaScript (UTF-16 code unit) semantics. */
+    /**
+     * $s.slice(0, $n) with JavaScript (UTF-16 code unit) semantics, as UTF-8.
+     * A cut that splits a surrogate pair leaves a lone surrogate, which UTF-8
+     * cannot hold: it becomes U+FFFD, as when JavaScript encodes the string
+     * to UTF-8 (spec/golden/plan-id-prefixes.json planIdUtf8).
+     * mb_convert_encoding would substitute '?' instead.
+     */
     public static function utf16Slice(string $s, int $n): string
     {
         $units = array_slice(self::utf16Units($s), 0, $n);
-        if (!$units) return '';
-        return mb_convert_encoding(pack('v*', ...$units), 'UTF-8', 'UTF-16LE');
+        $out = '';
+        $count = count($units);
+        for ($i = 0; $i < $count; $i++) {
+            $u = $units[$i];
+            if ($u >= 0xD800 && $u <= 0xDBFF && $i + 1 < $count
+                && $units[$i + 1] >= 0xDC00 && $units[$i + 1] <= 0xDFFF) {
+                $out .= mb_chr(0x10000 + (($u - 0xD800) << 10) + ($units[++$i] - 0xDC00), 'UTF-8');
+            } elseif ($u >= 0xD800 && $u <= 0xDFFF) {
+                $out .= "\u{FFFD}";
+            } else {
+                $out .= mb_chr($u, 'UTF-8');
+            }
+        }
+        return $out;
     }
 
     private static function compareUtf16(string $a, string $b): int
