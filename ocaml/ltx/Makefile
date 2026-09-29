@@ -4,11 +4,13 @@ OCAMLFIND  ?= ocamlfind
 OCAMLOPT   ?= ocamlopt
 PKGS_FULL   = unix,str
 SEC_SRCS    = lib/ed25519.ml lib/security.ml
-V11_SRCS    = $(SEC_SRCS) lib/validate.ml lib/v11.ml
+UPPER_SRC   = lib/upper.ml
+V11_ONLY    = lib/validate.ml lib/v11.ml
+V11_SRCS    = $(SEC_SRCS) $(UPPER_SRC) $(V11_ONLY)
 SEC_TEST    = test/security_test
 V11_TEST    = test/v11_test
 PARITY_TEST = test/parity_test
-UNIT_SRCS   = lib/constants.ml lib/models.ml lib/interplanet_ltx.ml
+UNIT_SRCS   = lib/constants.ml lib/models.ml $(UPPER_SRC) lib/interplanet_ltx.ml
 UNIT_TEST   = test/unit_test
 
 .PHONY: build test lint clean
@@ -32,7 +34,7 @@ $(V11_TEST): $(V11_SRCS) test/v11_test.ml
 	$(OCAMLFIND) $(OCAMLOPT) -linkpkg -I lib $(V11_SRCS) test/v11_test.ml -o $(V11_TEST)
 
 $(PARITY_TEST): $(V11_SRCS) $(UNIT_SRCS) test/parity_test.ml
-	$(OCAMLFIND) $(OCAMLOPT) -package $(PKGS_FULL) -linkpkg -I lib $(UNIT_SRCS) $(V11_SRCS) test/parity_test.ml -o $(PARITY_TEST)
+	$(OCAMLFIND) $(OCAMLOPT) -package $(PKGS_FULL) -linkpkg -I lib $(UNIT_SRCS) $(SEC_SRCS) $(V11_ONLY) test/parity_test.ml -o $(PARITY_TEST)
 
 lint:
 	$(OCAMLFIND) $(OCAMLOPT) -linkpkg -i -I lib $(V11_SRCS) > /dev/null

@@ -16,7 +16,7 @@ Requires OCaml 4.13+ and `ocamlfind`.
 make build
 ```
 
-Compiles `lib/constants.ml`, `lib/models.ml`, and `lib/interplanet_ltx.ml`
+Compiles `lib/constants.ml`, `lib/models.ml`, `lib/upper.ml` and `lib/interplanet_ltx.ml`
 into a native executable `interplanet_ltx`.
 
 ## Test
@@ -41,6 +41,7 @@ Type-checks the library sources without producing an executable.
 lib/
   constants.ml        — VERSION, DEFAULT_QUANTUM, DEFAULT_API_BASE, DEFAULT_SEGMENTS
   models.ml           — ltx_node, ltx_plan, ltx_timed_segment, ltx_node_url, delay_matrix_entry
+  upper.ml            -- planId name tokens: JS toUpperCase (generated table), JS \s, UTF-16 slices
   interplanet_ltx.ml  — full SDK implementation
   validate.ml         -- validate_plan, reserved streams/branching checks
   v11.ml              -- v1.1 subset over JSON plans (JObj keeps key order)
@@ -89,7 +90,7 @@ Note: `Interplanet_ltx` plans serialise nodes before segments, while JS
 
 ```ocaml
 (* Compile: ocamlfind ocamlopt -package unix -linkpkg
-            lib/constants.ml lib/models.ml lib/interplanet_ltx.ml main.ml -o main *)
+            lib/constants.ml lib/models.ml lib/upper.ml lib/interplanet_ltx.ml main.ml -o main *)
 
 let () =
   let plan = Interplanet_ltx.create_plan

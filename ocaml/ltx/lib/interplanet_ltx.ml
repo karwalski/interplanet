@@ -515,27 +515,6 @@ let fold_utf8 f acc s =
   in
   go acc 0
 
-(* name.replace(/\s+/g, '').toUpperCase() with ASCII case mapping *)
-let strip_js_space name =
-  let buf = Buffer.create (String.length name) in
-  fold_utf8 (fun () cp i len ->
-    if not (is_js_space cp) then
-      Buffer.add_string buf (String.uppercase_ascii (String.sub name i len))) () name;
-  Buffer.contents buf
-
-(* s.slice(0, n) in UTF-16 code units (a pair that does not fit is dropped) *)
-let utf16_take s n =
-  let units, stop =
-    fold_utf8 (fun (units, stop) cp i _ ->
-      match stop with
-      | Some _ -> (units, stop)
-      | None ->
-        let need = if cp >= 0x10000 then 2 else 1 in
-        if units + need > n then (units, Some i) else (units + need, None)) (0, None) s
-  in
-  ignore units;
-  match stop with Some i -> String.sub s 0 i | None -> s
-
 let make_plan_id (plan : ltx_plan) : string =
   let open Models in
   let date =
@@ -543,10 +522,11 @@ let make_plan_id (plan : ltx_plan) : string =
       (String.split_on_char '-' (String.sub plan.start 0 (min 10 (String.length plan.start))))
   in
   (* JS: name.replace(/\s+/g, '').toUpperCase().slice(0, n), with JS \s,
-     ASCII case mapping and slices counted in UTF-16 code units *)
+     the full Unicode case mapping of JS toUpperCase and slices counted in
+     UTF-16 code units (Upper, shared with V11.make_plan_id) *)
   let host_str =
     match plan.nodes with
-    | h :: _ when h.name <> "" -> utf16_take (strip_js_space h.name) 8
+    | h :: _ when h.name <> "" -> Upper.plan_id_token h.name 8
     | _ -> "HOST"
   in
   let node_str =
@@ -554,9 +534,9 @@ let make_plan_id (plan : ltx_plan) : string =
     | [] | [ _ ] -> "RX"
     | _ :: parts ->
       let joined = String.concat "-"
-        (List.map (fun (n : Models.ltx_node) -> utf16_take (strip_js_space n.name) 4) parts)
+        (List.map (fun (n : Models.ltx_node) -> Upper.plan_id_token n.name 4) parts)
       in
-      utf16_take joined 16
+      Upper.utf16_slice joined 16
   in
   let raw  = plan_to_json plan in
   let hash = djb_hash raw in

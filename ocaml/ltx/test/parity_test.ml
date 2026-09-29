@@ -302,5 +302,39 @@ let () =
   check "high surrogate then non-low kept apart"
     (json_stringify (parse_json "\"\\ud800\\u0041\"") = "\"\\ud800A\"");
 
+  (* ---- planId prefix vectors (spec/golden/plan-id-prefixes.json) ----
+     Unicode upper-casing and UTF-16 slicing of HOSTSTR / NODESTR (issue
+     #37). OCaml strings hold a lone surrogate as WTF-8 (as the JSON layers
+     do), so the expected id is the planIdWtf8Hex bytes. *)
+  let ppath =
+    match List.find_opt Sys.file_exists
+            [ "../../spec/golden/plan-id-prefixes.json"; "../../../spec/golden/plan-id-prefixes.json" ] with
+    | Some p -> p
+    | None -> failwith "spec/golden/plan-id-prefixes.json not found"
+  in
+  let pvectors = get_list (parse_json (read_file ppath)) "vectors" in
+  check "prefix vectors present" (List.length pvectors >= 18);
+  let of_hex h = String.init (String.length h / 2) (fun i -> Char.chr (int_of_string ("0x" ^ String.sub h (2 * i) 2))) in
+  let cut id = String.sub id 0 (String.length id - 12) in
+  List.iter
+    (fun gv ->
+      let name = get_str gv "name" in
+      let plan = get gv "plan" in
+      let want = of_hex (get_str gv "planIdWtf8Hex") in
+      let got = make_plan_id plan in
+      check (Printf.sprintf "prefix planId %s (got %s)" name got) (got = want);
+      check ("prefix planId from JSON text " ^ name) (make_plan_id (parse_json (json_stringify plan)) = want);
+      (match L.plan_of_json (json_stringify plan) with
+       | Some typed ->
+         let tid = L.make_plan_id typed in
+         check (Printf.sprintf "prefix typed planId %s (got %s)" name tid) (cut tid = cut want)
+       | None -> check ("prefix typed plan parsed " ^ name) false);
+      check ("prefix lone surrogate stringifies as \\udxxx " ^ name)
+        (contains (json_stringify (JStr got)) "\\ud8" = (get gv "loneSurrogate" = JBool true)))
+    pvectors;
+  check "js_uppercase full mapping"
+    (Upper.js_uppercase "stra\xc3\x9fe \xef\xac\x81 \xc5\x89 \xce\x90"
+     = "STRASSE FI \xca\xbcN \xce\x99\xcc\x88\xcc\x81");
+
   Printf.printf "\n%d passed, %d failed\n" !passed !failed;
   if !failed > 0 then exit 1
