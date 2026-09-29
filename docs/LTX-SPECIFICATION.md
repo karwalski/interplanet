@@ -212,7 +212,7 @@ pairDelay(a, b)    = delays["a|b"]            if present
                    = a.delay + b.delay        otherwise
 ```
 
-The sum fallback is a deliberate **conservative upper bound** (triangle inequality via the HOST vertex): scheduling with an over-estimated delay is safe (content has certainly arrived); an under-estimate is not.
+The sum fallback is a deliberate **conservative upper bound** (triangle inequality via the HOST vertex): scheduling with an over-estimated delay is safe (content has certainly arrived); an under-estimate is not. It is a sum, never the max of the two HOST-relative delays: a relayed signal travels both legs. Every derived view of pair delays MUST use this rule; in the reference SDKs `buildDelayMatrix(plan)` is exactly `pairDelay` over all ordered node pairs.
 
 ### 3.7.4 Delay bounds
 

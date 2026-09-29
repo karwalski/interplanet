@@ -422,12 +422,16 @@
   }
 
   /**
-   * Build a flat delay matrix for all node pairs in a plan.
-   * Earth-to-Earth delay = 0.
-   * Delay from/to non-host nodes uses that node's configured delay.
-   * Delay between two non-host nodes = sum of their individual delays.
+   * Build a flat delay matrix for all ordered node pairs in a plan.
+   * Every entry is pairDelay(plan, from, to) (LTX-SPECIFICATION.md §3.7.3):
+   * - a v3 pair matrix entry (plan.delays) is authoritative where present;
+   * - HOST to node: that node's declared (HOST-relative) delay;
+   * - node to node (neither is HOST): the SUM of both HOST-relative delays.
+   *   This is the conservative upper bound via the HOST vertex (a signal
+   *   relayed through HOST travels both legs), not the max of the two.
+   * The matrix is symmetric: from/to and to/from carry the same delay.
    *
-   * @param {object} plan  LTX plan config (v1 or v2)
+   * @param {object} plan  LTX plan config (v1, v2 or v3)
    * @returns {Array<{fromId:string, fromName:string, toId:string, toName:string, delaySeconds:number}>}
    */
   function buildDelayMatrix(plan) {
@@ -439,23 +443,12 @@
         if (i === j) continue;
         const from = nodes[i];
         const to   = nodes[j];
-        // Delay between two nodes: if one is host (delay=0), use the other's delay.
-        // If both are non-host, approximate as max of the two (both relay via host).
-        let delaySeconds;
-        if (from.delay === 0 || i === 0) {
-          delaySeconds = to.delay || 0;
-        } else if (to.delay === 0 || j === 0) {
-          delaySeconds = from.delay || 0;
-        } else {
-          // Non-host to non-host: signals route via host, so total = from.delay + to.delay
-          delaySeconds = (from.delay || 0) + (to.delay || 0);
-        }
         matrix.push({
           fromId:       from.id,
           fromName:     from.name,
           toId:         to.id,
           toName:       to.name,
-          delaySeconds,
+          delaySeconds: pairDelay(c, from.id, to.id),
         });
       }
     }

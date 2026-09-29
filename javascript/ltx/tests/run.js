@@ -742,6 +742,33 @@ const decSnap = ltx.runMergeSegment([dec1], [decRev], decCache, {
 });
 check('snapshot decisionRegister',         decSnap.snapshot.content.decisionRegister['DEC-N0-1'].version === 2);
 
+// ── buildDelayMatrix (§3.7): sum via HOST for non-HOST pairs ──────────────
+
+console.log('\n── buildDelayMatrix ─────────────────────────');
+const dmPlan = {
+  v: 2, title: 'Delay Matrix', start: '2026-06-01T12:00:00.000Z', quantum: 5, mode: 'LTX-ASYNC',
+  segments: [{ type: 'TX', q: 1 }],
+  nodes: [
+    { id: 'N0', name: 'Earth HQ',    role: 'HOST',        delay: 0,    location: 'earth'   },
+    { id: 'N1', name: 'Mars Hab-01', role: 'PARTICIPANT', delay: 1240, location: 'mars'    },
+    { id: 'N2', name: 'Jupiter Obs', role: 'PARTICIPANT', delay: 3240, location: 'jupiter' },
+    { id: 'N3', name: 'Earth Annex', role: 'PARTICIPANT', delay: 0,    location: 'earth'   },
+  ],
+};
+const dm = ltx.buildDelayMatrix(dmPlan);
+const dmGet = (m, a, b) => m.find(p => p.fromId === a && p.toId === b).delaySeconds;
+check('delay matrix n*(n-1) pairs',        dm.length === 12);
+check('delay matrix HOST to node',         dmGet(dm, 'N0', 'N1') === 1240 && dmGet(dm, 'N1', 'N0') === 1240);
+check('delay matrix non-HOST pair = sum',  dmGet(dm, 'N1', 'N2') === 1240 + 3240);
+check('delay matrix not max',              dmGet(dm, 'N1', 'N2') !== Math.max(1240, 3240));
+check('delay matrix symmetric',            dm.every(p => p.delaySeconds === dmGet(dm, p.toId, p.fromId)));
+check('delay matrix zero-delay non-HOST',  dmGet(dm, 'N3', 'N2') === 3240 && dmGet(dm, 'N3', 'N0') === 0);
+check('delay matrix equals pairDelay',     dm.every(p => p.delaySeconds === ltx.pairDelay(dmPlan, p.fromId, p.toId)));
+const dmV3 = ltx.upgradePlanToV3(dmPlan, { delays: { 'N1|N2': 2900 } });
+const dm3 = ltx.buildDelayMatrix(dmV3);
+check('delay matrix v3 entry authoritative', dmGet(dm3, 'N1', 'N2') === 2900 && dmGet(dm3, 'N2', 'N1') === 2900);
+check('delay matrix v3 fallback sum',      dmGet(dm3, 'N1', 'N3') === 1240);
+
 // ── Conformance: golden planId vectors (spec/golden/plan-ids.json) ─────────
 
 console.log('\n── Conformance: golden planId vectors ───────');
