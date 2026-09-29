@@ -388,7 +388,7 @@ fn yyyymmdd(ms: i64) -> String {
 /// (txName/rxName/delay) gain v:2 and nodes.
 fn upgrade_config_value(cfg: &JsonValue) -> JsonValue {
     let v = cfg.get("v").and_then(|x| x.as_f64()).unwrap_or(0.0);
-    if v >= 2.0 && cfg.get("nodes").and_then(|x| x.as_array()).map_or(false, |a| !a.is_empty()) {
+    if v >= 2.0 && cfg.get("nodes").and_then(|x| x.as_array()).is_some_and(|a| !a.is_empty()) {
         return cfg.clone();
     }
     let s = |k: &str, def: &str| cfg.get(k).and_then(|x| x.as_str()).filter(|x| !x.is_empty()).unwrap_or(def).to_string();
@@ -568,11 +568,11 @@ pub fn validate_plan(plan: &JsonValue) -> PlanValidation {
             errs.push(perr("invalid_field", "start", "start must be an ISO 8601 UTC timestamp"));
         }
     }
-    if plan.has("quantum") && !js_integer(plan.get("quantum")).map_or(false, |q| (1.0..=60.0).contains(&q)) {
+    if plan.has("quantum") && !js_integer(plan.get("quantum")).is_some_and(|q| (1.0..=60.0).contains(&q)) {
         errs.push(perr("invalid_quantum", "quantum", "quantum must be an integer 1..60 minutes (§3.2)"));
     }
     if let Some(m) = plan.get("mode") {
-        if !m.as_str().map_or(false, |s| PLAN_MODES.contains(&s)) {
+        if !m.as_str().is_some_and(|s| PLAN_MODES.contains(&s)) {
             errs.push(perr("invalid_mode", "mode", format!("mode must be one of {}", PLAN_MODES.join(", "))));
         }
     }
@@ -587,10 +587,10 @@ pub fn validate_plan(plan: &JsonValue) -> PlanValidation {
                     let role = n.get("role").and_then(|x| x.as_str());
                     let delay = n.get("delay").and_then(|x| x.as_f64());
                     let ok = matches!(n, JsonValue::Object(_))
-                        && id.map_or(false, |s| !s.is_empty() && !s.contains('|'))
+                        && id.is_some_and(|s| !s.is_empty() && !s.contains('|'))
                         && n.get("name").and_then(|x| x.as_str()).is_some()
-                        && role.map_or(false, |r| ["HOST", "PARTICIPANT", "OBSERVER"].contains(&r))
-                        && delay.map_or(false, |d| d >= 0.0);
+                        && role.is_some_and(|r| ["HOST", "PARTICIPANT", "OBSERVER"].contains(&r))
+                        && delay.is_some_and(|d| d >= 0.0);
                     if !ok {
                         errs.push(perr("invalid_nodes", format!("nodes[{}]", i), "node needs id (no \"|\"), name, role HOST|PARTICIPANT|OBSERVER, delay >= 0"));
                         continue;
@@ -620,14 +620,14 @@ pub fn validate_plan(plan: &JsonValue) -> PlanValidation {
             Some(segs) => {
                 for (i, s) in segs.iter().enumerate() {
                     let is_obj = matches!(s, JsonValue::Object(_) | JsonValue::Array(_));
-                    let type_ok = s.get("type").and_then(|x| x.as_str()).map_or(false, |t| PLAN_SEGMENT_TYPES.contains(&t));
-                    let q_ok = js_integer(s.get("q")).map_or(false, |q| q >= 1.0);
+                    let type_ok = s.get("type").and_then(|x| x.as_str()).is_some_and(|t| PLAN_SEGMENT_TYPES.contains(&t));
+                    let q_ok = js_integer(s.get("q")).is_some_and(|q| q >= 1.0);
                     if !is_obj || !type_ok || !q_ok {
                         errs.push(perr("invalid_segment", format!("segments[{}]", i), "segment needs a known type and integer q >= 1"));
                         continue;
                     }
                     if let Some(sp) = s.get("speaker") {
-                        if !sp.as_str().map_or(false, |x| ids.iter().any(|id| id == x)) {
+                        if !sp.as_str().is_some_and(|x| ids.iter().any(|id| id == x)) {
                             let shown = sp.as_str().map(|x| x.to_string()).unwrap_or_else(|| js_stringify(sp));
                             errs.push(perr("unknown_speaker", format!("segments[{}].speaker", i), format!("speaker {} is not a node id", shown)));
                         }
@@ -652,7 +652,7 @@ pub fn validate_plan(plan: &JsonValue) -> PlanValidation {
                         let ok = parts.len() == 2
                             && utf16_cmp(parts[0], parts[1]) == std::cmp::Ordering::Less
                             && (ids.is_empty() || (ids.iter().any(|x| x == parts[0]) && ids.iter().any(|x| x == parts[1])))
-                            && val.as_f64().map_or(false, |x| x >= 0.0);
+                            && val.as_f64().is_some_and(|x| x >= 0.0);
                         if !ok {
                             errs.push(perr("invalid_delays", format!("delays.{}", k), "key must be two known node ids joined by \"|\" in sorted order; value >= 0 (§3.7.2)"));
                         }
@@ -661,11 +661,11 @@ pub fn validate_plan(plan: &JsonValue) -> PlanValidation {
                 _ => errs.push(perr("invalid_delays", "delays", "delays must be an object")),
             }
         }
-        if plan.has("planVersion") && !js_integer(plan.get("planVersion")).map_or(false, |p| p >= 1.0) {
+        if plan.has("planVersion") && !js_integer(plan.get("planVersion")).is_some_and(|p| p >= 1.0) {
             errs.push(perr("invalid_field", "planVersion", "planVersion must be an integer >= 1"));
         }
         if let Some(ph) = plan.get("prevPlanHash") {
-            let ok = ph.as_str().map_or(false, |s| s.len() == 64 && s.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')));
+            let ok = ph.as_str().is_some_and(|s| s.len() == 64 && s.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')));
             if !ok { errs.push(perr("invalid_field", "prevPlanHash", "prevPlanHash must be 64 lowercase hex characters")); }
         }
         for f in ["questions", "actions"] {

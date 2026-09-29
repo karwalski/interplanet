@@ -41,7 +41,7 @@ pub const BODY_MOON: u8 = 8;
 
 pub const NBODIES: usize = 8; // Mercury..Neptune in tables
 pub const BODY_NAMES = [9][]const u8{
-    "Mercury", "Venus", "Earth", "Mars",
+    "Mercury", "Venus",  "Earth",  "Mars",
     "Jupiter", "Saturn", "Uranus", "Neptune",
     "Moon",
 };
@@ -63,7 +63,7 @@ const PlanetData = struct {
     work_hours_start: f64,
     work_hours_end: f64,
     epoch_ms: i64,
-    earth_clock_sched: bool = false,  // true for Mercury and Venus
+    earth_clock_sched: bool = false, // true for Mercury and Venus
 };
 
 const PDATA = [NBODIES]PlanetData{
@@ -499,7 +499,7 @@ pub fn getPlanetTime(body: u8, utc_ms: i64, tz_h: f64) ?PlanetTimeResult {
     const ZONE_PREFIXES = [9]?[]const u8{
         "MMT", // 0 Mercury
         "VMT", // 1 Venus
-        null,  // 2 Earth
+        null, // 2 Earth
         "AMT", // 3 Mars
         "JMT", // 4 Jupiter
         "SMT", // 5 Saturn

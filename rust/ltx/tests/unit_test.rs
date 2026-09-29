@@ -178,7 +178,7 @@ fn test_all() {
     check("submit_feedback http err", sf2.is_err(), &mut passed, &mut failed);
 
     // -- escape_ics_text (7 checks)
-    check("escape empty", escape_ics_text("") == "", &mut passed, &mut failed);
+    check("escape empty", escape_ics_text("").is_empty(), &mut passed, &mut failed);
     check("escape no special", escape_ics_text("hello") == "hello", &mut passed, &mut failed);
     check("escape semicolon", escape_ics_text("a;b") == "a\\;b", &mut passed, &mut failed);
     check("escape comma", escape_ics_text("a,b") == "a\\,b", &mut passed, &mut failed);

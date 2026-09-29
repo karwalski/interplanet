@@ -7,22 +7,22 @@ import (
 
 // PlanetTime holds the result of GetPlanetTime.
 type PlanetTime struct {
-	Hour           int
-	Minute         int
-	Second         int
-	LocalHour      float64
-	DayFraction    float64
-	DayNumber      int64
-	DayInYear      int64
-	YearNumber     int64
-	PeriodInWeek   int
-	IsWorkPeriod   bool
-	IsWorkHour     bool
-	TimeStr        string // "HH:MM"
-	TimeStrFull    string // "HH:MM:SS"
-	SolInYear      int64  // Mars only; -1 otherwise
-	SolsPerYear    int64  // Mars only; -1 otherwise
-	ZoneID         string // interplanetary zone ID e.g. "AMT+4"; "" for Earth
+	Hour         int
+	Minute       int
+	Second       int
+	LocalHour    float64
+	DayFraction  float64
+	DayNumber    int64
+	DayInYear    int64
+	YearNumber   int64
+	PeriodInWeek int
+	IsWorkPeriod bool
+	IsWorkHour   bool
+	TimeStr      string // "HH:MM"
+	TimeStrFull  string // "HH:MM:SS"
+	SolInYear    int64  // Mars only; -1 otherwise
+	SolsPerYear  int64  // Mars only; -1 otherwise
+	ZoneID       string // interplanetary zone ID e.g. "AMT+4"; "" for Earth
 }
 
 // MTC holds Mars Coordinated Time.
@@ -90,7 +90,7 @@ func GetPlanetTime(planet string, utcMs int64, tzOffsetH float64) PlanetTime {
 		// UTC day-of-week: ((floor(unix_ms / 86400000) % 7) + 3) % 7 → Mon=0..Sun=6
 		// Use math.Floor for correct signed floor division
 		utcDay := int64(math.Floor(float64(utcMs) / float64(EarthDayMs)))
-		piw = int(((utcDay%7)+7+3)%7)
+		piw = int(((utcDay % 7) + 7 + 3) % 7)
 		isWorkPeriod = piw < pd.WorkPeriodsPerWeek
 		msInDay := ((utcMs % int64(EarthDayMs)) + int64(EarthDayMs)) % int64(EarthDayMs)
 		utcHour := float64(msInDay) / 3_600_000.0

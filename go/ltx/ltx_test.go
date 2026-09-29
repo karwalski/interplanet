@@ -222,9 +222,9 @@ func TestAll(t *testing.T) {
 
 	// ── 13. DEGRADED state ────────────────────────────────────────────────────
 	check("DEGRADED constant", ltx.SessionStateDegraded == "DEGRADED")
-	check("SessionStates has INIT",     ltx.SessionStates[0] == "INIT")
-	check("SessionStates has LOCKED",   ltx.SessionStates[1] == "LOCKED")
-	check("SessionStates has RUNNING",  ltx.SessionStates[2] == "RUNNING")
+	check("SessionStates has INIT", ltx.SessionStates[0] == "INIT")
+	check("SessionStates has LOCKED", ltx.SessionStates[1] == "LOCKED")
+	check("SessionStates has RUNNING", ltx.SessionStates[2] == "RUNNING")
 	check("SessionStates has DEGRADED", ltx.SessionStates[3] == "DEGRADED")
 	check("SessionStates has COMPLETE", ltx.SessionStates[4] == "COMPLETE")
 	check("SessionStates len == 5", len(ltx.SessionStates) == 5)
@@ -262,14 +262,18 @@ func TestAll(t *testing.T) {
 	}
 }
 
-
 // ── Security tests (Epic 29) ──────────────────────────────────────────────
 
 func TestCanonicalJSON(t *testing.T) {
 	passed := 0
 	failed := 0
 	check := func(name string, cond bool) {
-		if cond { passed++ } else { failed++; fmt.Printf("FAIL: %s\n", name) }
+		if cond {
+			passed++
+		} else {
+			failed++
+			fmt.Printf("FAIL: %s\n", name)
+		}
 	}
 
 	a := ltx.CanonicalJSON(map[string]interface{}{"b": 2, "a": 1})
@@ -292,14 +296,21 @@ func TestCanonicalJSON(t *testing.T) {
 	check("string", ltx.CanonicalJSON("hello") == `"hello"`)
 
 	fmt.Printf("TestCanonicalJSON: %d passed %d failed\n", passed, failed)
-	if failed > 0 { t.FailNow() }
+	if failed > 0 {
+		t.FailNow()
+	}
 }
 
 func TestGenerateNIK(t *testing.T) {
 	passed := 0
 	failed := 0
 	check := func(name string, cond bool) {
-		if cond { passed++ } else { failed++; fmt.Printf("FAIL: %s\n", name) }
+		if cond {
+			passed++
+		} else {
+			failed++
+			fmt.Printf("FAIL: %s\n", name)
+		}
 	}
 
 	result, err := ltx.GenerateNIK(ltx.GenerateNIKOpts{ValidDays: 30, NodeLabel: "Test Node"})
@@ -319,14 +330,21 @@ func TestGenerateNIK(t *testing.T) {
 	check("not expired", !ltx.IsNIKExpired(result.NIK))
 
 	fmt.Printf("TestGenerateNIK: %d passed %d failed\n", passed, failed)
-	if failed > 0 { t.FailNow() }
+	if failed > 0 {
+		t.FailNow()
+	}
 }
 
 func TestIsNIKExpired(t *testing.T) {
 	passed := 0
 	failed := 0
 	check := func(name string, cond bool) {
-		if cond { passed++ } else { failed++; fmt.Printf("FAIL: %s\n", name) }
+		if cond {
+			passed++
+		} else {
+			failed++
+			fmt.Printf("FAIL: %s\n", name)
+		}
 	}
 
 	past := ltx.NIK{ValidUntil: "2020-01-01T00:00:00Z"}
@@ -336,14 +354,21 @@ func TestIsNIKExpired(t *testing.T) {
 	check("future not expired", !ltx.IsNIKExpired(future))
 
 	fmt.Printf("TestIsNIKExpired: %d passed %d failed\n", passed, failed)
-	if failed > 0 { t.FailNow() }
+	if failed > 0 {
+		t.FailNow()
+	}
 }
 
 func TestSignVerifyPlan(t *testing.T) {
 	passed := 0
 	failed := 0
 	check := func(name string, cond bool) {
-		if cond { passed++ } else { failed++; fmt.Printf("FAIL: %s\n", name) }
+		if cond {
+			passed++
+		} else {
+			failed++
+			fmt.Printf("FAIL: %s\n", name)
+		}
 	}
 
 	nikResult, err := ltx.GenerateNIK(ltx.GenerateNIKOpts{ValidDays: 365})
@@ -392,14 +417,21 @@ func TestSignVerifyPlan(t *testing.T) {
 	check("expired: reason", r4.Reason == "key_expired")
 
 	fmt.Printf("TestSignVerifyPlan: %d passed %d failed\n", passed, failed)
-	if failed > 0 { t.FailNow() }
+	if failed > 0 {
+		t.FailNow()
+	}
 }
 
 func TestSequenceTracker(t *testing.T) {
 	passed := 0
 	failed := 0
 	check := func(name string, cond bool) {
-		if cond { passed++ } else { failed++; fmt.Printf("FAIL: %s\n", name) }
+		if cond {
+			passed++
+		} else {
+			failed++
+			fmt.Printf("FAIL: %s\n", name)
+		}
 	}
 
 	tracker := ltx.CreateSequenceTracker("plan-001")
@@ -436,6 +468,7 @@ func TestSequenceTracker(t *testing.T) {
 	check("missing seq reason", missing.Reason == "missing_seq")
 
 	fmt.Printf("TestSequenceTracker: %d passed %d failed\n", passed, failed)
-	if failed > 0 { t.FailNow() }
+	if failed > 0 {
+		t.FailNow()
+	}
 }
-

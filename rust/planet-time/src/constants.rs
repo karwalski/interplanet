@@ -25,6 +25,8 @@ pub enum Planet {
 }
 
 impl Planet {
+    /// Parses a body name, case-insensitively. Returns None for unknown names.
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Planet> {
         match s.to_ascii_lowercase().as_str() {
             "mercury" => Some(Planet::Mercury),
@@ -149,23 +151,23 @@ pub struct OrbElems {
 /// These match the JS planet-time.js ORBITAL_ELEMENTS table exactly.
 pub const ORB_ELEMS: [OrbElems; 9] = [
     // Mercury
-    OrbElems { l0: 252.2507, dl: 149_474.0722, om:  77.4561, e0: 0.20564, a: 0.38710 },
+    OrbElems { l0: 252.2507, dl: 149474.0722, om:  77.4561, e0: 0.20564, a: 0.38710 },
     // Venus
-    OrbElems { l0: 181.9798, dl:  58_519.2130, om: 131.5637, e0: 0.00677, a: 0.72333 },
+    OrbElems { l0: 181.9798, dl:  58519.2130, om: 131.5637, e0: 0.00677, a: 0.72333 },
     // Earth
-    OrbElems { l0: 100.4664, dl:  36_000.7698, om: 102.9373, e0: 0.01671, a: 1.00000 },
+    OrbElems { l0: 100.4664, dl:  36000.7698, om: 102.9373, e0: 0.01671, a: 1.00000 },
     // Mars
-    OrbElems { l0: 355.4330, dl:  19_141.6964, om: 336.0600, e0: 0.09341, a: 1.52366 },
+    OrbElems { l0: 355.4330, dl:  19141.6964, om: 336.0600, e0: 0.09341, a: 1.52366 },
     // Jupiter
-    OrbElems { l0:  34.3515, dl:   3_036.3027, om:  14.3320, e0: 0.04849, a: 5.20336 },
+    OrbElems { l0:  34.3515, dl:   3036.3027, om:  14.3320, e0: 0.04849, a: 5.20336 },
     // Saturn
-    OrbElems { l0:  50.0775, dl:   1_223.5093, om:  93.0572, e0: 0.05551, a: 9.53707 },
+    OrbElems { l0:  50.0775, dl:   1223.5093, om:  93.0572, e0: 0.05551, a: 9.53707 },
     // Uranus
-    OrbElems { l0: 314.0550, dl:     429.8633, om: 173.0052, e0: 0.04630, a: 19.1912 },
+    OrbElems { l0: 314.0550, dl:    429.8633, om: 173.0052, e0: 0.04630, a: 19.1912 },
     // Neptune
-    OrbElems { l0: 304.3480, dl:     219.8997, om:  48.1234, e0: 0.00899, a: 30.0690 },
+    OrbElems { l0: 304.3480, dl:    219.8997, om:  48.1234, e0: 0.00899, a: 30.0690 },
     // Moon — not used for helio_pos (Moon→Earth substitution in orbital.rs); placeholder only
-    OrbElems { l0: 218.3165, dl: 481_267.8813, om: 125.0446, e0: 0.0549,  a: 0.00257 },
+    OrbElems { l0: 218.3165, dl: 481267.8813, om: 125.0446, e0: 0.0549,  a: 0.00257 },
 ];
 
 /// TAI − UTC leap-second table (UTC timestamps, seconds added).

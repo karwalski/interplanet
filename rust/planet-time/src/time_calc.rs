@@ -112,7 +112,7 @@ pub fn get_planet_time(planet: Planet, utc_ms: i64, tz_offset_h: f64) -> PlanetT
         // Mercury/Venus: solar day >> circadian rhythm — use UTC weekday + UTC hour.
         // UTC day-of-week formula: ((floor(unix_ms / 86400000) % 7) + 3) % 7 → Mon=0..Sun=6
         let utc_day = utc_ms.div_euclid(EARTH_DAY_MS); // proper floor division
-        period_in_week = ((utc_day % 7 + 7 + 3) % 7) as i64;
+        period_in_week = (utc_day % 7 + 7 + 3) % 7;
         is_work_period = period_in_week < key.work_periods_per_week();
         let ms_in_day = utc_ms.rem_euclid(EARTH_DAY_MS); // ms since midnight UTC
         let utc_hour = ms_in_day as f64 / 3_600_000.0;

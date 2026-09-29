@@ -296,7 +296,7 @@ pub fn decode_hash(hash: &str) -> Option<LtxPlan> {
 pub fn build_node_urls(plan: &LtxPlan, base_url: &str) -> Vec<LtxNodeUrl> {
     let hash = encode_hash(plan);
     let hash_part = hash.trim_start_matches('#');
-    let base = match base_url.find(|c: char| c == '?' || c == '#') {
+    let base = match base_url.find(['?', '#']) {
         Some(i) => &base_url[..i],
         None    => base_url,
     };
@@ -896,10 +896,10 @@ pub fn generate_nik(valid_days: Option<u32>, node_label: Option<&str>) -> Genera
     let signing_key = SigningKey::generate(&mut OsRng);
     let raw_pub: [u8; 32] = signing_key.verifying_key().to_bytes();
     let raw_seed: [u8; 32] = signing_key.to_bytes();
-    let hash = Sha256::digest(&raw_pub);
+    let hash = Sha256::digest(raw_pub);
     let node_id        = URL_SAFE_NO_PAD.encode(&hash[..16]);
-    let public_key     = URL_SAFE_NO_PAD.encode(&raw_pub);
-    let private_key_b64 = URL_SAFE_NO_PAD.encode(&raw_seed);
+    let public_key     = URL_SAFE_NO_PAD.encode(raw_pub);
+    let private_key_b64 = URL_SAFE_NO_PAD.encode(raw_seed);
     let now = nik_now_ms();
     GenerateNikResult {
         nik: Nik {
@@ -980,7 +980,7 @@ pub fn sign_plan(plan: CjsonVal, private_key_b64: &str) -> Result<SignedPlan, St
     let sig_b64 = URL_SAFE_NO_PAD.encode(sig.to_bytes());
 
     // kid = base64url of first 16 bytes of SHA-256(raw pub key)
-    let kid_hash = Sha256::digest(&raw_pub);
+    let kid_hash = Sha256::digest(raw_pub);
     let kid = URL_SAFE_NO_PAD.encode(&kid_hash[..16]);
     let mut unprotected = HashMap::new();
     unprotected.insert("kid".to_string(), kid);
@@ -1373,9 +1373,9 @@ impl<'a> CjsonParser<'a> {
                                 self.expect(b'u')?;
                                 let lo = self.parse_hex4()?;
                                 let c = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00);
-                                out.push(char::from_u32(c as u32).ok_or("cjson: bad surrogate")?);
+                                out.push(char::from_u32(c).ok_or("cjson: bad surrogate")?);
                             } else {
-                                out.push(char::from_u32(cp as u32).ok_or("cjson: bad codepoint")?);
+                                out.push(char::from_u32(cp).ok_or("cjson: bad codepoint")?);
                             }
                         }
                         _ => return Err(format!("cjson: bad escape at {}", self.pos)),

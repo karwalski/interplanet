@@ -1,8 +1,8 @@
 # Makefile — InterplanetLTX Java library
 # Story 33.2 · Requires: Java 16+  No Maven/Gradle needed.
 
-JAVAC    = javac
-JAVA     = java
+JAVAC    = javac -encoding UTF-8 -Xlint:all
+JAVA     = java -Dfile.encoding=UTF-8 -Dstdout.encoding=UTF-8
 SRC_DIR  = src
 TEST_DIR = tests
 OUT_DIR  = out/classes

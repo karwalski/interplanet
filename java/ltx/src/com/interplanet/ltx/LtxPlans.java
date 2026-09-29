@@ -42,8 +42,10 @@ public final class LtxPlans {
      * {@link #code} is the first error's code: reserved_streams or reserved_branching.
      */
     public static final class PlanException extends IllegalArgumentException {
+        private static final long serialVersionUID = 1L;
         public final String code;
-        public final List<PlanError> errors;
+        /** Not serialized (PlanError is not Serializable). */
+        public final transient List<PlanError> errors;
         public PlanException(String code, List<PlanError> errors, String message) {
             super(message);
             this.code = code;

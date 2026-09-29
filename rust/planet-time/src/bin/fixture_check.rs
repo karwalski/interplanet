@@ -19,8 +19,7 @@ fn str_field<'a>(line: &'a str, key: &str) -> Option<&'a str> {
     let needle = format!("\"{}\":", key);
     let start  = line.find(needle.as_str())? + needle.len();
     let rest   = line[start..].trim();
-    if rest.starts_with('"') {
-        let inner = &rest[1..];
+    if let Some(inner) = rest.strip_prefix('"') {
         let end   = inner.find('"')?;
         Some(&inner[..end])
     } else {
@@ -35,7 +34,7 @@ fn num_field(line: &str, key: &str) -> Option<f64> {
     let rest   = line[start..].trim();
     if rest.starts_with("null") { return None; }
     // strip trailing comma / brace
-    let end = rest.find(|c: char| c == ',' || c == '}' || c == '\n')
+    let end = rest.find([',', '}', '\n'])
                   .unwrap_or(rest.len());
     rest[..end].trim().parse::<f64>().ok()
 }

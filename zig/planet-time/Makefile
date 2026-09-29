@@ -14,7 +14,7 @@ fixture: test/fixture_runner.zig src/interplanet_time.zig
 		-- --fixture ../../c/planet-time/fixtures/reference.json 2>&1
 
 lint:
-	$(ZIG) fmt --check src/interplanet_time.zig test/unit_test.zig 2>&1
+	$(ZIG) fmt --check src test build.zig 2>&1
 
 clean:
 	rm -rf zig-out .zig-cache
