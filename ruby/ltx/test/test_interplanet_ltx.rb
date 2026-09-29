@@ -219,13 +219,13 @@ check 'JsJson.number matches JS',         [840.0, 0.1, 1e21, 1e-7, 1.5e-7, 1e16,
 
 # ── Conformance: planId prefix vectors (spec/golden/plan-id-prefixes.json) ─
 # Unicode upper-casing and UTF-16 slicing of HOSTSTR / NODESTR (issue #37).
-# Ruby strings here are UTF-8 and cannot hold a lone surrogate, so the
-# expected id is planIdUtf8 (a lone surrogate from the cut becomes U+FFFD).
+# A Ruby String holds a lone surrogate as WTF-8 (as JsJson does), so the
+# expected id is the planIdWtf8Hex bytes.
 section 'Conformance: planId prefix vectors'
 prefix_golden = JSON.parse(File.read(File.join(__dir__, '../../../spec/golden/plan-id-prefixes.json')))
 check 'prefix vectors present (>= 18)',   prefix_golden['vectors'].size >= 18
 prefix_golden['vectors'].each do |gv|
-  want = gv['planIdUtf8']
+  want = [gv['planIdWtf8Hex']].pack('H*').force_encoding('UTF-8')
   got = make_plan_id(gv['plan'])
   check "prefix #{gv['name']} planId (got #{got})", got == want
   from_text = make_plan_id(JSON.parse(JSON.generate(gv['plan'])))
@@ -237,7 +237,8 @@ prefix_golden['vectors'].each do |gv|
     segments: p['segments'].map { |s| LtxSegmentTemplate.new(type: s['type'], q: s['q']) },
   )
   typed_id = make_plan_id(typed)
-  check "prefix #{gv['name']} typed LtxPlan prefix (got #{typed_id})", typed_id[0...-12] == want[0...-12]
+  check "prefix #{gv['name']} typed LtxPlan prefix (got #{typed_id})", typed_id.b[0...-12] == want.b[0...-12]
+  check "prefix #{gv['name']} lone surrogate stringifies as \\udxxx", JsJson.string(got).include?('\\ud8') == gv['loneSurrogate']
 end
 
 # ── Plan validation: reserved streams / branching (§3.5, §7) ─────────────
