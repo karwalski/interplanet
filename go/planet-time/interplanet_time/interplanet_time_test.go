@@ -353,3 +353,9 @@ func TestFormatPlanetTimeISO(t *testing.T) {
 		t.Errorf("FormatPlanetTimeISO result = %q", s)
 	}
 }
+
+func TestVersion(t *testing.T) {
+	if ipt.VERSION != "1.0.0" {
+		t.Errorf("VERSION = %q, want 1.0.0", ipt.VERSION)
+	}
+}
