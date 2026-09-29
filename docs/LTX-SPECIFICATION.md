@@ -6,6 +6,7 @@
 **Companion documents:**
 - `spec/ltx-schema.json`: normative wire format, JSON Schema (draft 2020-12) for v2 and v3 LtxPlans (§4)
 - `spec/golden/plan-ids.json`: conformance golden vectors, plan JSON → v2 and v3 planIds (§4.3, §4.5)
+- `spec/golden/plan-id-prefixes.json`: conformance golden vectors for the planId prefix (HOSTSTR, NODESTR): Unicode upper-casing and UTF-16 slicing (§4.3)
 - `docs/RFC5545-EXTENSION.md`: iCalendar properties used by LTX calendar export (`LTX-DELAY`, `LTX-PLANID`, …)
 - `docs/LTX-SECURITY.md` v1.1 — security architecture (normative where it overlaps §13 / Appendix A)
 
@@ -286,6 +287,8 @@ for each UTF-16 code unit c of s:
 ```
 
 `HOSTSTR` is the HOST name with whitespace removed, upper-cased, truncated to 8 characters (`"HOST"` if absent). `NODESTR` is each non-HOST node name with whitespace removed, upper-cased and truncated to 4 characters, joined by `-` and truncated to 16 characters (`"RX"` for a single-node plan). This algorithm is **frozen byte-for-byte**: every shipped SDK, the demo, the relay server, and the conformance golden vectors (`spec/golden/plan-ids.json`) depend on it.
+
+The prefix rules are those of the JavaScript reference: "whitespace" is the ECMAScript `\s` set, "upper-cased" is `String.prototype.toUpperCase` (locale-independent, full Unicode case mapping including one-to-many special casing such as `ß` → `SS`, `ﬁ` → `FI`), and "characters" are UTF-16 code units, so a cut can split a surrogate pair and leave a lone high surrogate in the id. Implementations whose strings are UTF-8 and cannot hold a lone surrogate produce U+FFFD in its place, which is what a JavaScript host emits when it encodes such an id as UTF-8. The vectors in `spec/golden/plan-id-prefixes.json` give both forms (`planId`, `planIdUtf8`).
 
 Because `JSON.stringify` is insertion-order-sensitive, **adding any field to a v2 plan changes its planId**. Therefore:
 
