@@ -8,6 +8,7 @@
 
 const std = @import("std");
 const v11 = @import("ltx_v11.zig");
+const ltx = @import("interplanet_ltx.zig");
 const Ed25519 = std.crypto.sign.Ed25519;
 
 var passed: u32 = 0;
@@ -334,6 +335,57 @@ pub fn main() !void {
                 for (ab.entries, ba.entries) |x, y| same = same and std.mem.eql(u8, str(x, "entryId"), str(y, "entryId"));
             }
             check("mergeLogs symmetric and de-duplicated", same);
+        }
+    }
+
+    // ── planId prefix vectors (spec/golden/plan-id-prefixes.json) ───────
+    // Unicode upper-casing and UTF-16 slicing of HOSTSTR / NODESTR (issue
+    // #37). Zig strings are bytes and hold a lone surrogate as WTF-8, so the
+    // expected id is the planIdWtf8Hex bytes.
+    {
+        const ptext = std.fs.cwd().readFileAlloc(arena, "../../spec/golden/plan-id-prefixes.json", 1 << 20) catch |err| {
+            std.debug.print("cannot read ../../spec/golden/plan-id-prefixes.json: {}\n", .{err});
+            std.process.exit(1);
+        };
+        // std.json rejects a lone surrogate escape, which the exact JS planId
+        // fields carry (\ud83d): map those to \ufffd before parsing (the
+        // test uses planIdWtf8Hex).
+        const pfixed = try arena.dupe(u8, ptext);
+        var k: usize = 0;
+        while (std.mem.indexOfPos(u8, pfixed, k, "\\ud8")) |at| : (k = at + 6) {
+            const lone = at + 12 > pfixed.len or !std.mem.eql(u8, pfixed[at + 6 .. at + 9], "\\ud") or
+                !(pfixed[at + 9] == 'c' or pfixed[at + 9] == 'd' or pfixed[at + 9] == 'e' or pfixed[at + 9] == 'f');
+            if (lone) @memcpy(pfixed[at .. at + 6], "\\ufffd");
+        }
+        const pvectors = get(try parse(arena, pfixed), "vectors").array.items;
+        check("prefix vectors present", pvectors.len >= 18);
+        for (pvectors) |gv| {
+            const name = str(gv, "name");
+            const hex = str(gv, "planIdWtf8Hex");
+            const want = try arena.alloc(u8, hex.len / 2);
+            _ = try std.fmt.hexToBytes(want, hex);
+            const plan = get(gv, "plan");
+            const id = try v11.makePlanIdJson(alloc, plan);
+            defer alloc.free(id);
+            const label = try std.fmt.allocPrint(arena, "prefix planId {s} (got {s})", .{ name, id });
+            check(label, std.mem.eql(u8, id, want));
+            const text = try v11.stringifyValue(alloc, plan);
+            defer alloc.free(text);
+            const id2 = try v11.makePlanIdJson(alloc, try parse(arena, text));
+            defer alloc.free(id2);
+            check(try std.fmt.allocPrint(arena, "prefix planId from JSON text {s}", .{name}), std.mem.eql(u8, id2, want));
+            // Typed LtxPlan (v2 model): same prefix.
+            if (std.mem.eql(u8, str(plan, "mode"), "LTX") and get(plan, "v").integer == 2) {
+                const typed = try ltx.planFromJson(alloc, text);
+                defer ltx.deinitPlan(alloc, typed);
+                const tid = try ltx.makePlanId(alloc, typed);
+                defer alloc.free(tid);
+                const tl = try std.fmt.allocPrint(arena, "prefix typed makePlanId {s} (got {s})", .{ name, tid });
+                check(tl, tid.len == want.len and std.mem.eql(u8, tid[0 .. tid.len - 12], want[0 .. want.len - 12]));
+            }
+            const js = try v11.stringifyValue(alloc, .{ .string = id });
+            defer alloc.free(js);
+            check(try std.fmt.allocPrint(arena, "prefix lone surrogate stringifies as \\udxxx {s}", .{name}), (std.mem.indexOf(u8, js, "\\ud8") != null) == get(gv, "loneSurrogate").bool);
         }
     }
 

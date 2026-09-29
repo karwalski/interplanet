@@ -128,10 +128,10 @@ const FORMATS = {
     'const UpperRun = struct { first: u21, last: u21, stride: u21, delta: i32 };',
     'const UpperSpecial = struct { cp: u21, up: [3]u21, len: u2 };',
     'const upper_runs = [_]UpperRun{',
-    ...rows(runs, 2, r => `.{ .first = ${hex(r.first)}, .last = ${hex(r.last)}, .stride = ${r.stride}, .delta = ${r.delta} }`, '    ', ', ').map(l => l + ','),
+    ...rows(runs, 1, r => `.{ .first = ${hex(r.first)}, .last = ${hex(r.last)}, .stride = ${r.stride}, .delta = ${r.delta} }`, '    ', ', ').map(l => l + ','),
     '};',
     'const upper_special = [_]UpperSpecial{',
-    ...rows(special, 2, ([cp, u]) => `.{ .cp = ${hex(cp)}, .up = .{ ${pad3(u).map(hex).join(', ')} }, .len = ${u.length} }`, '    ', ', ').map(l => l + ','),
+    ...rows(special, 1, ([cp, u]) => `.{ .cp = ${hex(cp)}, .up = .{ ${pad3(u).map(hex).join(', ')} }, .len = ${u.length} }`, '    ', ', ').map(l => l + ','),
     '};',
   ],
   // Dart: String.toUpperCase has old 1:1 tables and no special casing.
@@ -162,7 +162,7 @@ const TARGETS = {
   ocaml: 'ocaml/ltx/lib/upper.ml',
   r: 'r/ltx/R/ltx.R',
   lua: 'lua/ltx/src/interplanet_ltx.lua',
-  zig: 'zig/ltx/src/upper.zig',
+  zig: ['zig/ltx/src/interplanet_ltx.zig', 'zig/ltx/src/ltx_v11.zig'],
   dart: 'dart/ltx/lib/src/upper.dart',
   julia: 'julia/ltx/src/upper.jl',
 };
@@ -183,7 +183,8 @@ if (li >= 0) {
   console.log(f().join('\n'));
 } else if (args.includes('--write') || args.includes('--check')) {
   let stale = 0;
-  for (const [lang, rel] of Object.entries(TARGETS)) {
+  const targets = Object.entries(TARGETS).flatMap(([lang, rel]) => [].concat(rel).map(r => [lang, r]));
+  for (const [lang, rel] of targets) {
     const file = path.join(ROOT, rel);
     if (!fs.existsSync(file)) { console.log(`skip ${rel} (missing)`); continue; }
     const old = fs.readFileSync(file, 'utf8');
