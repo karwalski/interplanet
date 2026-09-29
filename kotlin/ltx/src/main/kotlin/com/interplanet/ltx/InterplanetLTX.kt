@@ -137,7 +137,9 @@ object InterplanetLTX {
                             is Long -> q2.toInt()
                             is Number -> q2.toInt()
                             else -> 1
-                        }
+                        },
+                        speaker = s["speaker"] as? String,
+                        label = s["label"] as? String
                     )
                 } else null
             }
@@ -242,12 +244,13 @@ object InterplanetLTX {
     fun makePlanId(plan: LtxPlan): String {
         val date = plan.start.substring(0, 10).replace("-", "")
 
-        val hostStr = if (plan.nodes.isEmpty()) "HOST"
-        else plan.nodes[0].name.replace(Regex("\\s+"), "").uppercase().take(8)
+        // Whitespace is stripped as JS /\s+/g does: every Unicode space and
+        // line terminator (NBSP, U+2028, U+3000, BOM, ...), not only ASCII.
+        val hostStr = LtxPlans.stripSpaceUpper(plan.nodes.firstOrNull()?.name?.ifEmpty { null } ?: "HOST").take(8)
 
         val nodeStr = if (plan.nodes.size > 1) {
             plan.nodes.drop(1)
-                .joinToString("-") { n -> n.name.replace(Regex("\\s+"), "").uppercase().take(4) }
+                .joinToString("-") { n -> LtxPlans.stripSpaceUpper(n.name).take(4) }
                 .take(16)
         } else "RX"
 
@@ -263,7 +266,7 @@ object InterplanetLTX {
      */
     fun encodeHash(plan: LtxPlan): String {
         val json = planToJson(plan)
-        val encoded = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(json.toByteArray())
+        val encoded = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(json.toByteArray(Charsets.UTF_8))
         return "#l=$encoded"
     }
 
@@ -275,7 +278,7 @@ object InterplanetLTX {
     fun decodeHash(hash: String): LtxPlan? {
         return try {
             val payload = hash.removePrefix("#l=")
-            val json = String(java.util.Base64.getUrlDecoder().decode(payload))
+            val json = String(java.util.Base64.getUrlDecoder().decode(payload), Charsets.UTF_8)
             val plan = parsePlanJson(json)
             if (plan.start.isEmpty()) null else plan
         } catch (e: Exception) { null }
@@ -409,11 +412,21 @@ object InterplanetLTX {
         val nodes = plan.nodes.joinToString(",") { n ->
             """{"id":${q(n.id)},"name":${q(n.name)},"role":${q(n.role)},"delay":${n.delay},"location":${q(n.location)}}"""
         }
-        val segs = plan.segments.joinToString(",") { s -> """{"type":${q(s.type)},"q":${s.q}}""" }
+        // Attributed segments (section 3.4.1): speaker and label are written
+        // after type and q, only when present, as ltx-sdk.js writes them.
+        val segs = plan.segments.joinToString(",") { s ->
+            buildString {
+                append("""{"type":${q(s.type)},"q":${s.q}""")
+                s.speaker?.let { append(""","speaker":${q(it)}""") }
+                s.label?.let { append(""","label":${q(it)}""") }
+                append("}")
+            }
+        }
         return """{"v":${plan.v},"title":${q(plan.title)},"start":${q(plan.start)},"quantum":${plan.quantum},"mode":${q(plan.mode)},"nodes":[${nodes}],"segments":[${segs}]}"""
     }
 
-    private fun q(s: String) = "\"${s.replace("\\", "\\\\").replace("\"", "\\\"")}\""
+    /** Quote exactly as JSON.stringify does (control characters, lone surrogates). */
+    private fun q(s: String) = StringBuilder().also { LtxJson.quote(it, s) }.toString()
 
     private fun makePlanHashHex(plan: LtxPlan): String {
         // FROZEN v2 hash (§4.3): imul31 over the UTF-16 code units of the
@@ -427,138 +440,34 @@ object InterplanetLTX {
         return h.toString(16).padStart(8, '0')
     }
 
+    @Suppress("UNCHECKED_CAST")
     private fun parsePlanJson(json: String): LtxPlan {
-        fun strVal(key: String): String {
-            val r = Regex(""""$key"\s*:\s*"((?:[^"\\]|\\.)*)"""")
-            return r.find(json)?.groupValues?.get(1) ?: ""
-        }
-        fun intVal(key: String): Int {
-            val r = Regex(""""$key"\s*:\s*(\d+)""")
-            return r.find(json)?.groupValues?.get(1)?.toIntOrNull() ?: 0
-        }
+        val m = LtxJson.parse(json) as? Map<String, Any?> ?: throw IllegalArgumentException("plan JSON is not an object")
+        fun str(o: Map<String, Any?>, k: String): String = o[k] as? String ?: ""
+        fun int(o: Map<String, Any?>, k: String): Int = (o[k] as? Number)?.toInt() ?: 0
 
-        val v = intVal("v").let { if (it == 0) 2 else it }
-        val title = strVal("title")
-        val start = strVal("start")
-        val quantum = intVal("quantum").let { if (it == 0) DEFAULT_QUANTUM else it }
-        val mode = strVal("mode")
-
-        // Parse nodes array
-        val nodes = mutableListOf<LtxNode>()
-        val nodesStart = json.indexOf("\"nodes\"")
-        if (nodesStart >= 0) {
-            val arrStart = json.indexOf('[', nodesStart)
-            if (arrStart >= 0) {
-                val arrEnd = findMatchingBracket(json, arrStart, '[', ']')
-                if (arrEnd > arrStart) {
-                    val arrContent = json.substring(arrStart + 1, arrEnd)
-                    val nodeObjects = splitJsonObjects(arrContent)
-                    for (obj in nodeObjects) {
-                        if (obj.trim().isEmpty()) continue
-                        fun nodeStr(k: String): String {
-                            val r = Regex(""""$k"\s*:\s*"((?:[^"\\]|\\.)*)"""")
-                            return r.find(obj)?.groupValues?.get(1) ?: ""
-                        }
-                        fun nodeInt(k: String): Int {
-                            val r = Regex(""""$k"\s*:\s*(\d+)""")
-                            return r.find(obj)?.groupValues?.get(1)?.toIntOrNull() ?: 0
-                        }
-                        nodes.add(LtxNode(
-                            id = nodeStr("id"),
-                            name = nodeStr("name"),
-                            role = nodeStr("role"),
-                            delay = nodeInt("delay"),
-                            location = nodeStr("location")
-                        ))
-                    }
-                }
-            }
+        val nodes = (m["nodes"] as? List<*>).orEmpty().filterIsInstance<Map<String, Any?>>().map { n ->
+            LtxNode(id = str(n, "id"), name = str(n, "name"), role = str(n, "role"),
+                    delay = int(n, "delay"), location = str(n, "location"))
         }
-
-        // Parse segments array
-        val segments = mutableListOf<LtxSegmentTemplate>()
-        val segsStart = json.indexOf("\"segments\"")
-        if (segsStart >= 0) {
-            val arrStart = json.indexOf('[', segsStart)
-            if (arrStart >= 0) {
-                val arrEnd = findMatchingBracket(json, arrStart, '[', ']')
-                if (arrEnd > arrStart) {
-                    val arrContent = json.substring(arrStart + 1, arrEnd)
-                    val segObjects = splitJsonObjects(arrContent)
-                    for (obj in segObjects) {
-                        if (obj.trim().isEmpty()) continue
-                        fun segStr(k: String): String {
-                            val r = Regex(""""$k"\s*:\s*"((?:[^"\\]|\\.)*)"""")
-                            return r.find(obj)?.groupValues?.get(1) ?: ""
-                        }
-                        fun segInt(k: String): Int {
-                            val r = Regex(""""$k"\s*:\s*(\d+)""")
-                            return r.find(obj)?.groupValues?.get(1)?.toIntOrNull() ?: 0
-                        }
-                        segments.add(LtxSegmentTemplate(
-                            type = segStr("type"),
-                            q = segInt("q").let { if (it == 0) 1 else it }
-                        ))
-                    }
-                }
-            }
+        val segments = (m["segments"] as? List<*>).orEmpty().filterIsInstance<Map<String, Any?>>().map { s ->
+            LtxSegmentTemplate(
+                type = str(s, "type"),
+                q = int(s, "q").let { if (it == 0) 1 else it },
+                speaker = s["speaker"] as? String,
+                label = s["label"] as? String
+            )
         }
 
         return LtxPlan(
-            v = v,
-            title = title,
-            start = start,
-            quantum = quantum,
-            mode = mode,
+            v = int(m, "v").let { if (it == 0) 2 else it },
+            title = str(m, "title"),
+            start = str(m, "start"),
+            quantum = int(m, "quantum").let { if (it == 0) DEFAULT_QUANTUM else it },
+            mode = str(m, "mode"),
             nodes = nodes,
             segments = segments
         )
-    }
-
-    /** Find the matching closing bracket/brace given the opening position. */
-    private fun findMatchingBracket(s: String, start: Int, open: Char, close: Char): Int {
-        var depth = 0
-        var inStr = false
-        var escape = false
-        for (i in start until s.length) {
-            val c = s[i]
-            if (escape) { escape = false; continue }
-            if (c == '\\' && inStr) { escape = true; continue }
-            if (c == '"') { inStr = !inStr; continue }
-            if (inStr) continue
-            if (c == open) depth++
-            else if (c == close) {
-                depth--
-                if (depth == 0) return i
-            }
-        }
-        return -1
-    }
-
-    /** Split a JSON array content string into individual object strings. */
-    private fun splitJsonObjects(content: String): List<String> {
-        val result = mutableListOf<String>()
-        var depth = 0
-        var inStr = false
-        var escape = false
-        var start = 0
-        for (i in content.indices) {
-            val c = content[i]
-            if (escape) { escape = false; continue }
-            if (c == '\\' && inStr) { escape = true; continue }
-            if (c == '"') { inStr = !inStr; continue }
-            if (inStr) continue
-            if (c == '{') {
-                if (depth == 0) start = i
-                depth++
-            } else if (c == '}') {
-                depth--
-                if (depth == 0) {
-                    result.add(content.substring(start, i + 1))
-                }
-            }
-        }
-        return result
     }
 
     private fun urlEncode(s: String) = java.net.URLEncoder.encode(s, "UTF-8")

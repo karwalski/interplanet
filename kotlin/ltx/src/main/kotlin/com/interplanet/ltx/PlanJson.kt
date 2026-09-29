@@ -271,11 +271,11 @@ object LtxPlans {
     /** Array.prototype.includes / Set.prototype.has for an untyped value. */
     private fun anyIn(v: Any?, c: Collection<String>): Boolean = v is String && v in c
 
-    /** JS \s */
-    private fun isJsSpace(c: Char): Boolean =
+    /** JS \s (WhiteSpace and LineTerminator). */
+    internal fun isJsSpace(c: Char): Boolean =
         c in "\t\n\u000b\u000c\r       　﻿" || c in ' '..' '
 
-    private fun stripSpaceUpper(s: String): String =
+    internal fun stripSpaceUpper(s: String): String =
         s.filterNot { isJsSpace(it) }.uppercase(java.util.Locale.ROOT)
 
     /** Date.parse; null when JS would return NaN (subset: ISO 8601 forms). */
