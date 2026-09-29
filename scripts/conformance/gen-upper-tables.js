@@ -14,7 +14,8 @@
  *   RUNS     simple 1:1 mappings compressed as (first, last, stride, delta):
  *            cp in first..last with (cp - first) % stride == 0 maps to cp + delta
  *
- * Julia, whose Base.uppercase(::Char) has current 1:1 mappings but no
+ * toke, whose str.upper is ASCII only, takes both. Julia, whose
+ * Base.uppercase(::Char) has current 1:1 mappings but no
  * special casing, takes SPECIAL only; the others (C, OCaml, R, Lua, Zig,
  * Dart, whose String.toUpperCase tables predate Unicode 7, and C#, F# and
  * Go, whose upper-casing is 1:1 only) take both.
@@ -188,6 +189,19 @@ const FORMATS = {
     '}',
     '',
   ],
+  // toke: functions returning flat i64 arrays. toke has no negative literals,
+  // so each delta is stored plus 1000000.
+  toke: () => [
+    `(* ${HEADER} *)`,
+    '(* first, last, stride, delta + 1000000 (4 per run) *)',
+    'f=upperruns():@i64{<@(',
+    ...rows(runs, 3, r => `${r.first};${r.last};${r.stride};${r.delta + 1000000}`, '  ', ';').map((l, i, a) => l + (i < a.length - 1 ? ';' : '')),
+    ')};',
+    '(* code point, up to 3 code points (0 = none) *)',
+    'f=upperspecial():@i64{<@(',
+    ...rows(special, 3, ([cp, u]) => [cp, ...pad3(u)].join(';'), '  ', ';').map((l, i, a) => l + (i < a.length - 1 ? ';' : '')),
+    ')};',
+  ],
   // Julia: special casing only (Base.uppercase(::Char) does the 1:1 mappings).
   julia: () => [
     `# ${HEADER}`,
@@ -210,6 +224,7 @@ const TARGETS = {
   csharp: 'csharp/ltx/src/Upper.cs',
   fsharp: 'fsharp/ltx/src/Upper.fs',
   go: 'go/ltx/ltx_upper.go',
+  toke: 'toke/src/interplanet.tk',
 };
 
 function splice(text, block, file) {
