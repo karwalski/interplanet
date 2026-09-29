@@ -46,6 +46,8 @@ object Driver:
 
   def main(args: Array[String]): Unit =
     val Array(mode, inDir, outDir) = args
+    // UTF-8 stdout whatever the platform default (stdout.encoding).
+    System.setOut(new java.io.PrintStream(new java.io.FileOutputStream(java.io.FileDescriptor.out), true, UTF_8))
     def write(name: String, bytes: Array[Byte]): Unit = Files.write(Paths.get(outDir, name), bytes)
     if mode == "main" then
       val base = InterplanetLtx.createPlan(Map("title" -> Title, "start" -> Start, "quantum" -> 3, "mode" -> "LTX-ASYNC"))
@@ -85,6 +87,6 @@ object Driver:
       write("wire-v3.json", LtxJson.stringify(v3.toMap).getBytes(UTF_8))
       println("ID_V3 " + V11.makePlanId(v3))
       println("NOTE PlanV11: v2 wire via toJsonV2, v3 wire via LtxJson.stringify(toMap); v3 via copy()")
-    for v <- Seq("2", "3") do
+    for v <- Seq("2", "3", "P") do
       val json = new String(Files.readAllBytes(Paths.get(inDir, s"js-v$v.json")), UTF_8)
       println(s"JS_V$v " + LtxPlans.makePlanId(LtxJson.parse(json).asInstanceOf[Map[String, Any]]))

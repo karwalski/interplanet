@@ -182,16 +182,11 @@ object V11:
    */
   def makePlanId(p: PlanV11): String =
     val date = p.start.substring(0, 10).replace("-", "")
-    val hostStr =
-      val h = p.nodes.headOption.map(_.name.replaceAll("\\s+", "").toUpperCase).getOrElse("HOST")
-      if h.length > 8 then h.substring(0, 8) else h
+    // HOSTSTR / NODESTR (§4.3): JS \s stripped, JS toUpperCase, UTF-16 slices.
+    val hostStr = LtxPlans.stripSpaceUpper(
+      p.nodes.headOption.map(_.name).filter(n => n != null && n.nonEmpty).getOrElse("HOST")).take(8)
     val nodeStr =
-      if p.nodes.length > 1 then
-        val s = p.nodes.tail.map { n =>
-          val x = n.name.replaceAll("\\s+", "").toUpperCase
-          if x.length > 4 then x.substring(0, 4) else x
-        }.mkString("-")
-        if s.length > 16 then s.substring(0, 16) else s
+      if p.nodes.length > 1 then p.nodes.tail.map(n => LtxPlans.stripSpaceUpper(n.name).take(4)).mkString("-").take(16)
       else "RX"
     if p.v >= 3 then
       val digest = planHash(p)
