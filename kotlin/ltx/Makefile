@@ -6,7 +6,8 @@ SRCS = src/main/kotlin/com/interplanet/ltx/Models.kt \
        src/main/kotlin/com/interplanet/ltx/PlanJson.kt \
        src/test/kotlin/com/interplanet/ltx/InterplanetLTXTest.kt \
        src/test/kotlin/com/interplanet/ltx/V11Test.kt \
-       src/test/kotlin/com/interplanet/ltx/ParityTest.kt
+       src/test/kotlin/com/interplanet/ltx/ParityTest.kt \
+       src/test/kotlin/com/interplanet/ltx/PrefixTest.kt
 
 test:
 	@if command -v kotlinc >/dev/null 2>&1; then \

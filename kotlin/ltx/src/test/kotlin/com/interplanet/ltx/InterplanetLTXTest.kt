@@ -295,6 +295,7 @@ fun main() {
 
     runV11Tests()
     runParityTests()
+    runPrefixTests()
     runIssue36Tests()
 
     println("\n$passed passed  $failed failed")

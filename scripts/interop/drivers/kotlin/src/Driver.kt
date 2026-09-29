@@ -12,6 +12,8 @@ const val START = "2026-03-15T14:00:00.000Z"
 @Suppress("UNCHECKED_CAST")
 fun main(args: Array<String>) {
     val (mode, inDir, outDir) = args
+    // UTF-8 stdout whatever the platform default (stdout.encoding).
+    System.setOut(java.io.PrintStream(java.io.FileOutputStream(java.io.FileDescriptor.out), true, "UTF-8"))
     if (mode == "main") {
         val plan = InterplanetLTX.createPlan(
             title = TITLE, start = START, quantum = 3, mode = "LTX-ASYNC",
@@ -51,7 +53,7 @@ fun main(args: Array<String>) {
         println("ID_V3 " + LtxV11.makePlanId(v3))
         println("NOTE PlanV11: v2 wire via toJsonV2, v3 wire via LtxJson.stringify(toMap()); v3 via copy()")
     }
-    for (v in listOf("2", "3")) {
+    for (v in listOf("2", "3", "P")) {
         val parsed = LtxJson.parse(File(inDir, "js-v$v.json").readText(Charsets.UTF_8)) as Map<String, Any?>
         println("JS_V$v " + LtxPlans.makePlanId(parsed))
     }

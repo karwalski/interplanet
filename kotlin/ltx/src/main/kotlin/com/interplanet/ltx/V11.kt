@@ -317,16 +317,11 @@ object LtxV11 {
      */
     fun makePlanId(p: PlanV11): String {
         val date = p.start.substring(0, 10).replace("-", "")
-        var hostStr = if (p.nodes.isNotEmpty())
-            p.nodes[0].name.replace(Regex("\\s+"), "").uppercase() else "HOST"
-        if (hostStr.length > 8) hostStr = hostStr.substring(0, 8)
-        var nodeStr = if (p.nodes.size > 1) {
-            p.nodes.drop(1).joinToString("-") {
-                val s = it.name.replace(Regex("\\s+"), "").uppercase()
-                if (s.length > 4) s.substring(0, 4) else s
-            }
+        // HOSTSTR / NODESTR (§4.3): JS \s stripped, JS toUpperCase, UTF-16 slices.
+        val hostStr = LtxPlans.stripSpaceUpper(p.nodes.firstOrNull()?.name?.ifEmpty { null } ?: "HOST").take(8)
+        val nodeStr = if (p.nodes.size > 1) {
+            p.nodes.drop(1).joinToString("-") { LtxPlans.stripSpaceUpper(it.name).take(4) }.take(16)
         } else "RX"
-        if (nodeStr.length > 16) nodeStr = nodeStr.substring(0, 16)
 
         if (p.v >= 3) {
             val digest = planHash(p)
