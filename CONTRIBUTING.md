@@ -8,8 +8,8 @@ This is an unusual project at the intersection of astronomy, networking, and hum
 
 ## Where to Start
 
-- **Issues** — Bug reports, feature requests, and questions live in [GitHub Issues](../../issues). Check for existing issues before opening a new one.
-- **Discussions** — For open-ended ideas, design questions, or anything that isn't a clear bug or feature request, use [GitHub Discussions](../../discussions) once the maintainer enables it (it is currently disabled); until then, open an Issue.
+- **Issues** — Bug reports, feature requests, and questions live in [GitHub Issues](https://github.com/karwalski/interplanet/issues). Check for existing issues before opening a new one.
+- **Discussions** — For open-ended ideas, design questions, or anything that isn't a clear bug or feature request, use [GitHub Discussions](https://github.com/karwalski/interplanet/discussions) once the maintainer enables it (it is currently disabled); until then, open an Issue.
 - **Pull Requests** — All code changes go through PRs. Fork the repo, make your change on a branch, and open a PR against `main`.
 
 ---

@@ -587,24 +587,27 @@ versions, and backlog items for planet-time ports pending.
 
 ## REST API
 
-Hosted at `https://interplanet.live/api/`. All timestamps are Unix
-milliseconds (`int64`).
+Hosted at `https://interplanet.live/api/`. Timestamps are ISO 8601 UTC,
+distances AU, delays seconds or minutes as named.
 
 ### Planet time — `api/time.php`
 
 ```
-GET  /api/time.php?planet=mars&utc_ms=946728000000
-GET  /api/time.php?from=earth&to=mars&utc_ms=946728000000
-POST /api/time.php   { "planets": ["earth","mars"], "utc_ms": 946728000000 }
+GET  /api/time.php?action=planet&body=mars[&at=ISO][&tz_offset=N]
+GET  /api/time.php?action=distance&from=earth&to=mars[&at=ISO]
+POST /api/time.php?action=windows   {"locations":[{"type":"earth","tz":"America/New_York"},
+                                      {"type":"planet","planet":"mars"}],
+                                     "from_utc":"2026-09-29T00:00:00Z","horizon_days":14}
 ```
 
-**Response:**
+**Response** (`action=planet`):
 ```json
 {
-  "planet": "mars", "utc_ms": 946728000000,
-  "hour": 15, "minute": 45, "second": 34,
-  "time_str": "15:45", "is_work_hour": false,
-  "light_travel_s": 243.7
+  "body": "mars", "at_utc": "2026-09-29T12:00:00Z",
+  "local_time": "07:22", "sol": 26074,
+  "is_work_hour": false, "is_work_period": false,
+  "light_minutes": 13.94, "conjunction_in_days": 590.3,
+  "tz_offset_hours": 0
 }
 ```
 
@@ -646,6 +649,7 @@ interplanet --help
 | `los <from> <to>` | `interplanet los earth mars` | Line-of-sight status |
 | `windows <from> <to>` | `interplanet windows earth mars --days 7` | Meeting windows |
 | `planets` | `interplanet planets` | List all supported planets |
+| `ltx plan\|segments\|hash\|ics\|send <nodes...>` | `interplanet ltx ics "Earth HQ:host:earth" "Mars:participant:mars:1240" --mode async` | LTX plan JSON, segment times, `#l=` hash, ICS, or store via `api/ltx.php` (`--api URL`); flags `--title`, `--start`, `--quantum`, `--mode async\|sync\|relay` |
 
 Source: `cli/` · Node.js ≥ 18
 
