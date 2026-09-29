@@ -16,11 +16,15 @@ plan.nodes = [
   L::LtxNode.new(id: 'N1', name: 'Mars Hab-01', role: 'PARTICIPANT', delay: 840, location: 'mars'),
   L::LtxNode.new(id: 'N2', name: 'L-1 Gateway', role: 'PARTICIPANT', delay: 2, location: 'moon'),
 ]
-# LtxSegmentTemplate has no speaker/label members, so the typed plan cannot
-# carry attributed segments.
-plan.segments = [['PLAN_CONFIRM', 2], ['TX', 3], ['RX', 3], ['TX', 2], ['BUFFER', 1]]
-                .map { |t, q| L::LtxSegmentTemplate.new(type: t, q: q) }
-puts 'NOTE typed LtxSegmentTemplate has no speaker/label; no typed v3 upgrade'
+seg = L::LtxSegmentTemplate
+plan.segments = [
+  seg.new(type: 'PLAN_CONFIRM', q: 2),
+  seg.new(type: 'TX', q: 3, speaker: 'N0', label: 'Ouverture: état de la mission'),
+  seg.new(type: 'RX', q: 3),
+  seg.new(type: 'TX', q: 2, speaker: 'N1', label: 'Réponse 🔴'),
+  seg.new(type: 'BUFFER', q: 1),
+]
+puts 'NOTE no typed v3 upgrade'
 
 wire = L.send(:_b64url_decode, L.encode_hash(plan).sub('#l=', ''))
 File.write(File.join(out_dir, 'wire-v2.json'), wire)
