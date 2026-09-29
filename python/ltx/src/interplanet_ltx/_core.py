@@ -165,7 +165,9 @@ def create_plan(
         start=start,
         quantum=quantum,
         mode=mode,
-        segments=[LtxSegmentSpec(type=s['type'], q=s['q']) for s in seg_dicts],
+        segments=[LtxSegmentSpec(type=s['type'], q=s['q'],
+                                 speaker=s.get('speaker'), label=s.get('label'))
+                  for s in seg_dicts],
         nodes=[LtxNode(id=n['id'], name=n['name'], role=n['role'],
                        delay=n.get('delay', 0.0), location=n.get('location', 'earth'))
                for n in nodes],
