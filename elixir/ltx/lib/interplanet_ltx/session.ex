@@ -95,9 +95,12 @@ defmodule InterplanetLtx.Session do
   Create a session context in DRAFT state. `plan_id` is supplied by the
   caller (`Segments.make_plan_id/1`) so this module stays pure.
   Options: `quorum: :all | :majority | integer` (default `:all`).
+  Raises `InterplanetLtx.ReservedFieldError` (code "reserved_streams" or
+  "reserved_branching") if the plan uses reserved fields (§3.5, §7).
   """
   def create_session(plan, plan_id, opts \\ []) do
     plan = Segments.plan_map(plan)
+    InterplanetLtx.Validate.assert_no_reserved_fields!(plan, "createSession")
 
     %{
       state: "DRAFT",

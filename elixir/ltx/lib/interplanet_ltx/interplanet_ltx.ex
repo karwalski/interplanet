@@ -26,7 +26,7 @@ defmodule InterplanetLtx do
   Options:
     - title: Session title (default: "LTX Session")
     - start: ISO 8601 UTC start time (default: 5 min from now)
-    - quantum: Minutes per quantum (default: 3)
+    - quantum: Minutes per quantum (default: 5, Constants.default_quantum())
     - mode: Protocol mode (default: "LTX")
     - nodes: Explicit node list (overrides host_name/remote_name)
     - host_name: Host node name (default: "Earth HQ")
