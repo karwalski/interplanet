@@ -17,9 +17,12 @@ fun main() {
     check("VERSION is 1.1.0", InterplanetLTX.VERSION == "1.1.0")
     check("DEFAULT_QUANTUM is 5", InterplanetLTX.DEFAULT_QUANTUM == 5)
     check("DEFAULT_SEGMENTS not empty", InterplanetLTX.DEFAULT_SEGMENTS.isNotEmpty())
-    check("DEFAULT_SEGMENTS has SPEAK", InterplanetLTX.DEFAULT_SEGMENTS.any { it.type == "SPEAK" })
-    check("DEFAULT_SEGMENTS has RELAY", InterplanetLTX.DEFAULT_SEGMENTS.any { it.type == "RELAY" })
-    check("DEFAULT_SEGMENTS has REST", InterplanetLTX.DEFAULT_SEGMENTS.any { it.type == "REST" })
+    // Must match DEFAULT_SEGMENTS in javascript/ltx/ltx-sdk.js.
+    check("DEFAULT_SEGMENTS matches JS reference",
+        InterplanetLTX.DEFAULT_SEGMENTS.map { it.type to it.q } == listOf(
+            "PLAN_CONFIRM" to 2, "TX" to 2, "RX" to 2, "CAUCUS" to 2, "TX" to 2, "RX" to 2, "BUFFER" to 1))
+    check("DEFAULT_SEGMENTS has no SPEAK/RELAY/REST",
+        InterplanetLTX.DEFAULT_SEGMENTS.none { it.type in setOf("SPEAK", "RELAY", "REST") })
     check("DEFAULT_API_BASE starts https", InterplanetLTX.DEFAULT_API_BASE.startsWith("https://"))
     check("DEFAULT_API_BASE contains interplanet", InterplanetLTX.DEFAULT_API_BASE.contains("interplanet"))
 
@@ -36,7 +39,8 @@ fun main() {
     check("plan.start not empty", plan.start.isNotEmpty())
     check("plan.start contains T", plan.start.contains("T"))
     check("plan.segments not empty", plan.segments.isNotEmpty())
-    check("plan.segments has SPEAK", plan.segments.any { it.type == "SPEAK" })
+    check("plan.segments default to DEFAULT_SEGMENTS", plan.segments == InterplanetLTX.DEFAULT_SEGMENTS)
+    check("plan.segments has TX", plan.segments.any { it.type == "TX" })
 
     println("── UpgradeConfig ────────────────────────────")
     val oldMap = mapOf("v" to 1, "title" to "Old Meeting", "start" to "2040-01-15T14:00:00Z",
@@ -64,7 +68,8 @@ fun main() {
     check("seg endMs = startMs + durationMs", segs.all { it.endMs == it.startMs + it.durationMs })
     check("segments have nodeId", segs.all { it.nodeId.isNotEmpty() })
     check("segment count matches template count", segs.size == plan.segments.size)
-    check("SPEAK seg has host nodeId", segs.first { it.segType == "SPEAK" }.nodeId.isNotEmpty())
+    check("TX seg has host nodeId", segs.first { it.segType == "TX" }.nodeId == "N0")
+    check("default plan totalMin is 13 quanta", InterplanetLTX.totalMin(plan) == 13 * plan.quantum)
 
     println("── TotalMin ─────────────────────────────────")
     val tm = InterplanetLTX.totalMin(plan)

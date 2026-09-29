@@ -31,24 +31,16 @@ object InterplanetLTX {
     const val DELAY_VIOLATION_DEGRADED_S = 300
     val SESSION_STATES: List<String> = listOf("INIT", "LOCKED", "RUNNING", "DEGRADED", "COMPLETE")
 
+    /** Default segment template, identical to DEFAULT_SEGMENTS in
+     *  javascript/ltx/ltx-sdk.js (and the other ports): 13 quanta. */
     val DEFAULT_SEGMENTS: List<LtxSegmentTemplate> = listOf(
-        LtxSegmentTemplate("SPEAK",  3),
-        LtxSegmentTemplate("SPEAK",  3),
-        LtxSegmentTemplate("SPEAK",  3),
-        LtxSegmentTemplate("RELAY",  2),
-        LtxSegmentTemplate("SPEAK",  3),
-        LtxSegmentTemplate("SPEAK",  3),
-        LtxSegmentTemplate("RELAY",  2),
-        LtxSegmentTemplate("SPEAK",  3),
-        LtxSegmentTemplate("SPEAK",  3),
-        LtxSegmentTemplate("RELAY",  2),
-        LtxSegmentTemplate("REST",   2),
-        LtxSegmentTemplate("REST",   2),
-        LtxSegmentTemplate("BUFFER", 1),
-        LtxSegmentTemplate("SPEAK",  3),
-        LtxSegmentTemplate("RELAY",  2),
-        LtxSegmentTemplate("OPEN",   3),
-        LtxSegmentTemplate("OPEN",   3)
+        LtxSegmentTemplate("PLAN_CONFIRM", 2),
+        LtxSegmentTemplate("TX",           2),
+        LtxSegmentTemplate("RX",           2),
+        LtxSegmentTemplate("CAUCUS",       2),
+        LtxSegmentTemplate("TX",           2),
+        LtxSegmentTemplate("RX",           2),
+        LtxSegmentTemplate("BUFFER",       1)
     )
 
     // ── Plan creation ──────────────────────────────────────────────────────
@@ -197,7 +189,7 @@ object InterplanetLTX {
 
     /**
      * Compute the timed segment array for a plan.
-     * Segments cycle through all nodes for SPEAK/RELAY types.
+     * Segments cycle through all nodes for TX/RX (and legacy SPEAK/RELAY) types.
      * Each segment has absolute start/end times (UTC ms) and durationMs.
      */
     fun computeSegments(plan: LtxPlan): List<LtxSegment> {
