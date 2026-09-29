@@ -188,6 +188,106 @@ void itx_format_hms(int seconds, char *buf);
  */
 void itx_format_utc(long long epoch_ms, char *buf);
 
+/* ── Wire-format plans (src/itx_plan_json.c) ─────────────────────────────── */
+/*
+ * These mirror javascript/ltx/ltx-sdk.js on plans as received (JSON text or a
+ * parsed tree that keeps key insertion order, which the frozen v2 planId hash
+ * depends on). Checked against spec/golden/plan-ids.json.
+ */
+
+/** JSON value kinds. */
+typedef enum {
+    ITX_JSON_NULL, ITX_JSON_BOOL, ITX_JSON_NUMBER, ITX_JSON_STRING, ITX_JSON_ARRAY, ITX_JSON_OBJECT
+} itx_json_kind_t;
+
+/** Parsed JSON value (opaque). Objects keep key insertion order. */
+typedef struct itx_json itx_json_t;
+
+/** JSON.parse. Returns NULL on a syntax error. Free with itx_json_free. */
+itx_json_t *itx_json_parse(const char *text);
+void itx_json_free(itx_json_t *v);
+itx_json_kind_t itx_json_kind(const itx_json_t *v);
+/** Object member by key (NULL if absent or v is not an object). */
+const itx_json_t *itx_json_get(const itx_json_t *obj, const char *key);
+/** Number of array elements or object members. */
+size_t itx_json_len(const itx_json_t *v);
+/** i-th array element or object member (NULL if out of range). */
+const itx_json_t *itx_json_at(const itx_json_t *v, size_t i);
+/** Key of an object member returned by itx_json_at. */
+const char *itx_json_key(const itx_json_t *member);
+/** String value (UTF-8), or NULL if v is not a string. */
+const char *itx_json_str(const itx_json_t *v);
+/** Number value into *out; returns 1 if v is a number, else 0. */
+int itx_json_num(const itx_json_t *v, double *out);
+/** JSON.stringify (insertion order). malloc'd; caller frees. */
+char *itx_json_stringify(const itx_json_t *v);
+/** ltx-sdk.js canonicalJSON: keys sorted by UTF-16 code units at every
+ *  level (RFC 8785 order), JS number form. malloc'd; caller frees. */
+char *itx_json_canonical(const itx_json_t *v);
+/** Canonical JSON of JSON text. malloc'd; NULL on a parse error. */
+char *itx_canonical_json(const char *json);
+
+/** SHA-256 (FIPS 180-4). */
+void itx_sha256(const void *data, size_t len, unsigned char out[32]);
+/** Frozen v2 hash: h = imul(31, h) + charCodeAt(i) over UTF-16 code units. */
+unsigned int itx_imul31_utf16(const char *utf8);
+
+/**
+ * makePlanId over a v2/v3 plan as received: v2 hashes the insertion-order
+ * JSON (UTF-16 code units), v3 is SHA-256 of the canonical JSON (first 8 hex
+ * digits). Unlike itx_make_plan_id (fixed key order, v2 fields only) this
+ * reproduces every golden vector. buf needs ITX_PLAN_ID_LEN bytes.
+ * Returns 0, or -1 on invalid JSON / start / a v1 config (upgrade it first).
+ */
+int itx_make_plan_id_json(const char *plan_json, char *buf);
+int itx_make_plan_id_value(const itx_json_t *plan, char *buf);
+
+/** planHash: SHA-256 hex of the canonical JSON (prevPlanHash, §6.4).
+ *  hex needs 65 bytes. Returns 0, or -1 on invalid JSON. */
+int itx_plan_hash_json(const char *plan_json, char hex[65]);
+int itx_plan_hash_value(const itx_json_t *plan, char hex[65]);
+
+#define ITX_MAX_PLAN_ERRORS 64
+
+/** One validatePlan finding. */
+typedef struct {
+    char code[24];     /**< e.g. "reserved_streams" */
+    char path[96];     /**< e.g. "segments[0].branch" */
+    char message[192];
+} itx_plan_error_t;
+
+/** validatePlan result. */
+typedef struct {
+    int              valid;        /**< 1 when there are no errors */
+    int              error_count;
+    int              truncated;    /**< 1 if more than ITX_MAX_PLAN_ERRORS */
+    itx_plan_error_t errors[ITX_MAX_PLAN_ERRORS];
+} itx_plan_validation_t;
+
+/**
+ * validatePlan (LTX-SPECIFICATION.md §3.5, §4, §7): wire-format checks of
+ * spec/ltx-schema.json plus the reserved-field rules. Error codes:
+ * not_an_object, invalid_version, missing_field, invalid_field,
+ * invalid_quantum, invalid_mode, invalid_nodes, invalid_host,
+ * duplicate_node_id, invalid_segment, unknown_speaker, v3_field_in_v2,
+ * invalid_delays, reserved_streams (non-empty or non-array streams, segment
+ * stream), reserved_branching (branches, branching, segment branch).
+ * Returns out->valid. Invalid JSON reports not_an_object.
+ */
+int itx_validate_plan_json(const char *plan_json, itx_plan_validation_t *out);
+int itx_validate_plan_value(const itx_json_t *plan, itx_plan_validation_t *out);
+/** 1 if any error in r carries code. */
+int itx_validation_has_code(const itx_plan_validation_t *r, const char *code);
+
+/**
+ * First reserved-field violation ("reserved_streams" or
+ * "reserved_branching"), or NULL. The C port constructs no v3 plans,
+ * amendments or sessions, so callers that do must refuse plans for which
+ * this is non-NULL, as the reference SDKs do.
+ */
+const char *itx_reserved_field_code(const char *plan_json);
+const char *itx_reserved_field_code_value(const itx_json_t *plan);
+
 #ifdef __cplusplus
 }
 #endif
