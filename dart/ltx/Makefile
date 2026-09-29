@@ -19,7 +19,6 @@ clean:
 
 .PHONY: test lint publish-check clean
 
-# Validates the package for pub.dev without uploading (a missing CHANGELOG.md
-# is reported as a warning only).
+# Validates the package for pub.dev without uploading.
 publish-check:
 	dart pub publish --dry-run
