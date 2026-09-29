@@ -71,11 +71,10 @@ sweep_add checks upper-tables-current . node 'node scripts/conformance/gen-upper
 . "$SWEEP_DIR/ports.sh"
 sweep_add checks planet-time-accuracy . node 'scripts/sweep/accuracy/run.sh'
 sweep_add checks interop . node 'node scripts/interop/run.js'
-# Sections owned by other sweeps: sourced when present.
-for extra in web services; do
-  # shellcheck disable=SC1090
-  [ -f "$SWEEP_DIR/$extra.sh" ] && . "$SWEEP_DIR/$extra.sh"
-done
+# Web (Playwright) and services (CLI, API, relays, MCP, replication kit)
+# are standalone scripts that exit non-zero on failure; run each as one entry.
+[ -f "$SWEEP_DIR/web.sh" ] && sweep_add web web-suite . node 'bash scripts/sweep/web.sh'
+[ -f "$SWEEP_DIR/services.sh" ] && sweep_add services services-suite . node 'bash scripts/sweep/services.sh'
 
 matches() {  # matches "a,b" section name
   local list=$1 section=$2 name=$3 pat

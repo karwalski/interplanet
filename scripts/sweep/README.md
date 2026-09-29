@@ -21,7 +21,7 @@ prints its last 25 lines. The note column is the entry's last "N passed" line.
 |---|---|
 | `run-all.sh` | The runner: PATH setup, the entry registry (`sweep_add`), the repository checks, the table. |
 | `ports.sh` | One entry per port and library (sourced by `run-all.sh`). |
-| `web.sh`, `services.sh` | Web and services sections (web, api, node, cli, research). Sourced when present; they call `sweep_add` the same way. |
+| `web.sh`, `services.sh` | Web (Playwright) and services (CLI, API, relays, MCP, replication kit). Standalone scripts; `run-all.sh` runs each as one entry, and each can also be run on its own. |
 | `npm-consumer-check.sh` | Packs an npm package, installs the tarball in a scratch project and checks `require`, `import` (with Node's pre-22.7 ESM rules) and the TypeScript declarations (node16 and bundler resolution). |
 | `bindings/itx-dotnet/` | Runtime smoke test of the C# binding of `c/ltx` against `libitx.so`. |
 | `accuracy/` | Planet-time accuracy sweep, see below. |
