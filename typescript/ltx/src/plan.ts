@@ -3,6 +3,7 @@
  */
 
 import { DEFAULT_QUANTUM, DEFAULT_SEGMENTS } from './constants.js';
+import { assertNoReservedFields } from './validate.js';
 import type { CreatePlanOptions, LtxNode, LtxPlan, LtxPlanV1, LtxPlanV3 } from './types.js';
 
 /**
@@ -37,18 +38,22 @@ export function upgradeConfig(cfg: LtxPlan | LtxPlanV1): LtxPlan {
  * NEVER automatic: v3 fields must not be injected into a v2 plan, because the
  * frozen v2 planId hash is insertion-order-sensitive — the upgraded plan is a
  * NEW plan with a new (v3) planId. The input is not mutated.
+ * Throws a ReservedFieldError (code 'reserved_streams' | 'reserved_branching')
+ * if the result would carry reserved fields (§3.5, §7).
  */
 export function upgradePlanToV3(
   cfg: LtxPlan | LtxPlanV1,
   extras: Partial<Omit<LtxPlanV3, 'v'>> = {},
 ): LtxPlanV3 {
   const c = upgradeConfig(cfg);
-  return {
+  const plan: LtxPlanV3 = {
     ...c,
     ...extras,
     v: 3,
     planVersion: extras.planVersion ?? 1,
   };
+  assertNoReservedFields(plan, 'upgradePlanToV3');
+  return plan;
 }
 
 /**

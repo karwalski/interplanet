@@ -132,6 +132,8 @@ A Session may contain multiple streams:
 
 The v3 plan field `streams[]` (§4.4) is reserved for this feature and MUST be absent or empty in current plans.
 
+Reserved stream identifiers in the plan: the plan field `streams[]` and the per-segment field `stream`. Implementations MUST reject a plan in which `streams` is present and not an empty array, or in which any segment carries `stream`. The reference SDKs report this as error code `reserved_streams` from `validatePlan()`, and refuse to construct such a plan (`upgradePlanToV3`, `createAmendment`) or open a session on it (`createSession`), throwing an error whose `code` is `reserved_streams`.
+
 ## 3.6 Session Modes
 
 All LTX sessions declare a `mode` field in the SessionPlan. Three modes are defined.
@@ -324,6 +326,8 @@ Normative sources of truth, in precedence order:
 
 A release MUST NOT ship with these three disagreeing on the plan schema.
 
+The reference SDKs expose `validatePlan(plan) → { valid, errors: [{ code, path, message }] }`, which checks a v2 or v3 plan against `spec/ltx-schema.json` plus the rules the schema cannot express (sorted `delays` keys naming known nodes, `speaker` naming a known node, unique node ids).
+
 ---
 
 # 5. Plan Lock Protocol
@@ -440,6 +444,8 @@ Segments already executed are never amended; an amendment whose changes touch el
 # 7. Branching Model **(SPECIFIED — NOT YET IMPLEMENTED)**
 
 > No shipped implementation supports branching. This section is retained as reserved design, with conformance identifiers reserved (`LTX-BRANCH-*`), so a future revision can implement it without a spec break. Conference Mode (§14) covers the current multi-party needs with attributed segments.
+
+Reserved branching identifiers in the plan: the plan fields `branches` and `branching`, and the per-segment field `branch`. They MUST be absent from current plans (v2 and v3); implementations MUST reject a plan that carries any of them. The reference SDKs report this as error code `reserved_branching` (`validatePlan()`, and the throwing paths listed in §3.5).
 
 ## 7.1 Local Breakout Mode
 Nodes branch locally. Each branch produces artefacts. Summaries transmitted in next TX window. Merge occurs in Plenary.

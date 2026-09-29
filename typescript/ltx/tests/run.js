@@ -1383,6 +1383,35 @@ for (const gv of golden.vectors) {
     check(`golden planHash ${gv.name}`, ltx.planHash(gv.plan) === gv.planHash);
   }
 }
+const gvByName = Object.fromEntries(golden.vectors.map(gv => [gv.name, gv]));
+
+// ── Plan validation: reserved streams / branching (§3.5, §7) ──────────────
+
+console.log('\n── validatePlan / reserved fields ───────────');
+const codesOf = (r) => r.errors.map(e => e.code);
+for (const gv of golden.vectors) {
+  check(`validatePlan accepts golden ${gv.name}`, ltx.validatePlan(gv.plan).valid === true);
+}
+const vpBase = gvByName['v3-upgrade-delays'].plan;
+const vpV2 = gvByName['v2-freeze-check'].plan;
+check('validatePlan v3 empty streams ok',  ltx.validatePlan({ ...vpBase, streams: [] }).valid === true);
+const vpStreams = ltx.validatePlan({ ...vpBase, streams: [{ id: 'S1' }] });
+check('validatePlan non-empty streams',    vpStreams.valid === false && codesOf(vpStreams).includes('reserved_streams'));
+check('validatePlan segment stream',       codesOf(ltx.validatePlan({ ...vpBase, segments: [{ type: 'TX', q: 1, stream: 'S1' }] })).includes('reserved_streams'));
+check('validatePlan branches',             codesOf(ltx.validatePlan({ ...vpBase, branches: [] })).includes('reserved_branching'));
+check('validatePlan segment branch',       codesOf(ltx.validatePlan({ ...vpBase, segments: [{ type: 'CAUCUS', q: 1, branch: 'B1' }] })).includes('reserved_branching'));
+check('validatePlan v2 streams is v3 field', codesOf(ltx.validatePlan({ ...vpV2, streams: [] })).includes('v3_field_in_v2'));
+check('validatePlan host not first',       codesOf(ltx.validatePlan({ ...vpV2, nodes: vpV2.nodes.slice().reverse() })).includes('invalid_host'));
+check('validatePlan unsorted delays key',  codesOf(ltx.validatePlan({ ...vpBase, delays: { 'N1|N0': 860 } })).includes('invalid_delays'));
+check('validatePlan unknown speaker',      codesOf(ltx.validatePlan({ ...vpV2, segments: [{ type: 'TX', q: 1, speaker: 'N9' }] })).includes('unknown_speaker'));
+const throwsCode = (fn) => { try { fn(); return null; } catch (e) { return e.code; } };
+check('upgradePlanToV3 rejects streams',   throwsCode(() => ltx.upgradePlanToV3(vpV2, { streams: [{ id: 'S1' }] })) === 'reserved_streams');
+check('upgradePlanToV3 allows empty',      throwsCode(() => ltx.upgradePlanToV3(vpV2, { streams: [] })) === null);
+check('createSession rejects branching',   throwsCode(() => ltx.createSession({ ...vpBase, branching: {} }, 'id')) === 'reserved_branching');
+const vpNik = ltx.generateNIK({ nodeLabel: 'Earth HQ' });
+const vpSigned = ltx.signPlan(vpBase, vpNik.privateKeyB64);
+check('createAmendment rejects streams',   throwsCode(() => ltx.createAmendment(vpSigned, { streams: [1] }, vpNik.privateKeyB64)) === 'reserved_streams');
+check('createAmendment ok without',        throwsCode(() => ltx.createAmendment(vpSigned, { title: 'x' }, vpNik.privateKeyB64)) === null);
 
 // ── Summary ────────────────────────────────────────────────────────────────
 

@@ -13,6 +13,7 @@ import * as nodeCrypto from 'node:crypto';
 import { canonicalJSON, signPlan, verifyPlan } from './security.js';
 import type { NIK, SignedPlan, VerifyResult } from './security.js';
 import type { AnyLtxPlan, LtxPlan, LtxPlanV3, SegmentTemplate } from './types.js';
+import { assertNoReservedFields } from './validate.js';
 
 /** SHA-256 hex of the RFC 8785 canonical JSON of a plan. */
 export function planHash(plan: AnyLtxPlan): string {
@@ -25,7 +26,8 @@ export function planHash(plan: AnyLtxPlan): string {
  * Create a signed amendment of `signedPlan` with `changes` applied.
  * The successor is always a v3 plan (LTX-SPECIFICATION.md §4.4); the original
  * plan object is not mutated. Fields managed here (`v`, `planVersion`,
- * `prevPlanHash`) cannot be overridden via `changes`.
+ * `prevPlanHash`) cannot be overridden via `changes`. Throws a ReservedFieldError
+ * if the successor would carry reserved fields (§3.5, §7).
  */
 export function createAmendment(
   signedPlan: SignedPlan,
@@ -41,6 +43,7 @@ export function createAmendment(
     planVersion: prevVersion + 1,
     prevPlanHash: planHash(prev),
   };
+  assertNoReservedFields(successor, 'createAmendment');
   return signPlan(successor, privateKeyB64);
 }
 

@@ -41,7 +41,9 @@
         "type":    { "enum": ["PLAN_CONFIRM", "TX", "RX", "CAUCUS", "BUFFER", "MERGE", "SPEAK", "REST", "PAD", "OPEN", "RELAY"] },
         "q":       { "type": "integer", "minimum": 1, "description": "Duration in quanta." },
         "speaker": { "$ref": "#/$defs/nodeId", "description": "Presenting node id for an attributed TX/SPEAK segment (section 3.4.1)." },
-        "label":   { "type": "string", "description": "Agenda title (section 3.4.1)." }
+        "label":   { "type": "string", "description": "Agenda title (section 3.4.1)." },
+        "stream":  false,
+        "branch":  false
       }
     },
     "relay": {
@@ -75,7 +77,9 @@
           "type": "array",
           "items": { "$ref": "#/$defs/segment" }
         },
-        "relay":     { "$ref": "#/$defs/relay" }
+        "relay":     { "$ref": "#/$defs/relay" },
+        "branches":  false,
+        "branching": false
       }
     },
     "planV2": {

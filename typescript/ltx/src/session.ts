@@ -15,6 +15,7 @@ import {
   LOCK_TIMEOUT_FACTOR,
 } from './constants.js';
 import type { AnyLtxPlan, LtxNode } from './types.js';
+import { assertNoReservedFields } from './validate.js';
 
 // ── States and events ────────────────────────────────────────────────────────
 
@@ -157,12 +158,14 @@ function declaredDelayS(plan: AnyLtxPlan, nodeId: string): number | null {
 /**
  * Create a session context in DRAFT state.
  * `planId` is supplied by the caller (makePlanId) so this module stays pure.
+ * Throws a ReservedFieldError if the plan carries reserved fields (§3.5, §7).
  */
 export function createSession(
   plan: AnyLtxPlan,
   planId: string,
   options: SessionOptions = {},
 ): SessionContext {
+  assertNoReservedFields(plan, 'createSession');
   const v3 = plan as { planVersion?: number };
   return {
     state: 'DRAFT',

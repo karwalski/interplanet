@@ -662,6 +662,48 @@ check('golden v3 order-insensitive',       gvByName['v3-upgrade-delays'].planId 
 check('golden v3 amendment chain hash',    gvByName['v3-amendment'].plan.prevPlanHash === gvByName['v3-upgrade-delays'].planHash);
 check('createPlan default quantum is 5',   ltx.createPlan({}).quantum === 5 && ltx.DEFAULT_QUANTUM === 5);
 
+// ── Plan validation: reserved streams / branching (§3.5, §7) ──────────────
+
+console.log('\n── Plan validation: reserved fields ─────────');
+const codesOf = (r) => r.errors.map(e => e.code);
+for (const gv of golden.vectors) {
+  check(`validatePlan accepts golden ${gv.name}`, ltx.validatePlan(gv.plan).valid === true);
+}
+const vpBase = gvByName['v3-upgrade-delays'].plan;
+check('validatePlan v3 empty streams ok',  ltx.validatePlan({ ...vpBase, streams: [] }).valid === true);
+const vpStreams = ltx.validatePlan({ ...vpBase, streams: [{ id: 'S1' }] });
+check('validatePlan non-empty streams',    vpStreams.valid === false && codesOf(vpStreams).includes('reserved_streams'));
+check('validatePlan streams error path',   vpStreams.errors.find(e => e.code === 'reserved_streams').path === 'streams');
+check('validatePlan streams non-array',    codesOf(ltx.validatePlan({ ...vpBase, streams: 'S1' })).includes('reserved_streams'));
+const vpSegStream = ltx.validatePlan({ ...vpBase, segments: [{ type: 'TX', q: 1, stream: 'S1' }] });
+check('validatePlan segment stream',       codesOf(vpSegStream).includes('reserved_streams'));
+check('validatePlan branches',             codesOf(ltx.validatePlan({ ...vpBase, branches: [] })).includes('reserved_branching'));
+check('validatePlan branching',            codesOf(ltx.validatePlan({ ...vpBase, branching: { mode: 'local' } })).includes('reserved_branching'));
+const vpSegBranch = ltx.validatePlan({ ...vpBase, segments: [{ type: 'CAUCUS', q: 1, branch: 'B1' }] });
+check('validatePlan segment branch',       codesOf(vpSegBranch).includes('reserved_branching') &&
+                                           vpSegBranch.errors[0].path === 'segments[0].branch');
+const vpV2 = gvByName['v2-freeze-check'].plan;
+check('validatePlan v2 streams is v3 field', codesOf(ltx.validatePlan({ ...vpV2, streams: [] })).includes('v3_field_in_v2'));
+check('validatePlan v2 branching',         codesOf(ltx.validatePlan({ ...vpV2, branching: true })).includes('reserved_branching'));
+// Structural checks mirror spec/ltx-schema.json
+check('validatePlan non-object',           codesOf(ltx.validatePlan(null)).includes('not_an_object'));
+check('validatePlan bad version',          codesOf(ltx.validatePlan({ ...vpV2, v: 7 })).includes('invalid_version'));
+check('validatePlan host not first',       codesOf(ltx.validatePlan({ ...vpV2, nodes: vpV2.nodes.slice().reverse() })).includes('invalid_host'));
+check('validatePlan unsorted delays key',  codesOf(ltx.validatePlan({ ...vpBase, delays: { 'N1|N0': 860 } })).includes('invalid_delays'));
+check('validatePlan unknown speaker',      codesOf(ltx.validatePlan({ ...vpV2, segments: [{ type: 'TX', q: 1, speaker: 'N9' }] })).includes('unknown_speaker'));
+check('validatePlan quantum out of range', codesOf(ltx.validatePlan({ ...vpV2, quantum: 0 })).includes('invalid_quantum'));
+// Enforcement paths throw with a code
+const throwsCode = (fn) => { try { fn(); return null; } catch (e) { return e.code; } };
+check('upgradePlanToV3 rejects streams',   throwsCode(() => ltx.upgradePlanToV3(vpV2, { streams: [{ id: 'S1' }] })) === 'reserved_streams');
+check('upgradePlanToV3 allows empty',      throwsCode(() => ltx.upgradePlanToV3(vpV2, { streams: [] })) === null);
+check('upgradePlanToV3 rejects branches',  throwsCode(() => ltx.upgradePlanToV3(vpV2, { branches: [] })) === 'reserved_branching');
+check('createSession rejects streams',     throwsCode(() => ltx.createSession({ ...vpBase, streams: [1] }, 'id')) === 'reserved_streams');
+check('createSession accepts golden',      throwsCode(() => ltx.createSession(vpBase, 'id')) === null);
+const vpNik = ltx.generateNIK({ nodeLabel: 'Earth HQ' });
+const vpSigned = ltx.signPlan(vpBase, vpNik.privateKeyB64);
+check('createAmendment rejects branching', throwsCode(() => ltx.createAmendment(vpSigned, { branching: {} }, vpNik.privateKeyB64)) === 'reserved_branching');
+check('createAmendment ok without',        throwsCode(() => ltx.createAmendment(vpSigned, { title: 'x' }, vpNik.privateKeyB64)) === null);
+
 // ── Security Suite (§22.1 — Story 28.10) ──────────────────────────────────
 
 const secSuite = require('./security_suite');

@@ -124,16 +124,19 @@
    * @param {object} [extras.delays]   Pair delay matrix { 'A|B': seconds } (sorted-id keys)
    * @param {number} [extras.planVersion]  Plan version counter (default 1)
    * @returns {object} New v3 plan config
+   * @throws {Error} err.code 'reserved_streams' | 'reserved_branching' (§3.5, §7)
    */
   function upgradePlanToV3(cfg, extras) {
     extras = extras || {};
     const c = upgradeConfig(cfg);
-    return {
+    const plan = {
       ...c,
       ...extras,
       v: 3,
       planVersion: extras.planVersion !== undefined ? extras.planVersion : 1,
     };
+    _assertNoReservedFields(plan, 'upgradePlanToV3');
+    return plan;
   }
 
   /**
@@ -173,6 +176,177 @@
       segments: opts.segments ? opts.segments.slice() : DEFAULT_SEGMENTS.slice(),
       nodes,
     };
+  }
+
+  // ── Plan validation (LTX-SPECIFICATION.md §3.5, §4, §7) ────────────────────
+
+  /** Every segment type the reference SDKs handle (core §3.4 + auxiliary). */
+  const PLAN_SEGMENT_TYPES = SEG_TYPES.concat(['SPEAK', 'REST', 'PAD', 'OPEN', 'RELAY']);
+  const PLAN_MODES = ['LTX', 'LTX-LIVE', 'LTX-RELAY', 'LTX-ASYNC'];
+  /** Fields that exist only in v3 plans (§4.4); MUST NOT appear in v2 (§4.3). */
+  const V3_ONLY_FIELDS = ['delays', 'planVersion', 'prevPlanHash', 'questions', 'actions', 'streams'];
+  /** Reserved branching identifiers (§7): MUST be absent from plans and segments. */
+  const RESERVED_BRANCH_PLAN_FIELDS = ['branches', 'branching'];
+  const RESERVED_BRANCH_SEGMENT_FIELDS = ['branch'];
+  /** Reserved streams identifiers (§3.5): plan streams[] empty, no segment stream. */
+  const RESERVED_STREAM_SEGMENT_FIELDS = ['stream'];
+
+  function _has(obj, key) {
+    return Object.prototype.hasOwnProperty.call(obj, key);
+  }
+
+  /** Reserved-field violations only (§3.5 streams, §7 branching). */
+  function _reservedFieldErrors(plan) {
+    const errors = [];
+    if (!plan || typeof plan !== 'object') return errors;
+    if (_has(plan, 'streams') && !(Array.isArray(plan.streams) && plan.streams.length === 0)) {
+      errors.push({ code: 'reserved_streams', path: 'streams',
+        message: 'streams[] is reserved (§3.5) and MUST be absent or empty' });
+    }
+    for (const f of RESERVED_BRANCH_PLAN_FIELDS) {
+      if (_has(plan, f)) {
+        errors.push({ code: 'reserved_branching', path: f,
+          message: `${f} is reserved for branching (§7, not yet implemented) and MUST be absent` });
+      }
+    }
+    (Array.isArray(plan.segments) ? plan.segments : []).forEach((s, i) => {
+      if (!s || typeof s !== 'object') return;
+      for (const f of RESERVED_STREAM_SEGMENT_FIELDS) {
+        if (_has(s, f)) {
+          errors.push({ code: 'reserved_streams', path: `segments[${i}].${f}`,
+            message: `segment ${f} is reserved (§3.5) and MUST be absent` });
+        }
+      }
+      for (const f of RESERVED_BRANCH_SEGMENT_FIELDS) {
+        if (_has(s, f)) {
+          errors.push({ code: 'reserved_branching', path: `segments[${i}].${f}`,
+            message: `segment ${f} is reserved for branching (§7) and MUST be absent` });
+        }
+      }
+    });
+    return errors;
+  }
+
+  /** Throw if a plan uses reserved stream/branch fields. err.code is the first error code. */
+  function _assertNoReservedFields(plan, fnName) {
+    const errors = _reservedFieldErrors(plan);
+    if (errors.length === 0) return;
+    const err = new Error(`${fnName}: ${errors[0].message}`);
+    err.code = errors[0].code;
+    err.errors = errors;
+    throw err;
+  }
+
+  /**
+   * Validate a v2 or v3 plan against the wire format (spec/ltx-schema.json,
+   * LTX-SPECIFICATION.md §4) and the reserved-field rules (§3.5 streams,
+   * §7 branching). v1 configs must be upgraded (upgradeConfig) first.
+   * Pure; never throws.
+   *
+   * Error codes: not_an_object, invalid_version, missing_field, invalid_field,
+   * invalid_quantum, invalid_mode, invalid_nodes, invalid_host, duplicate_node_id,
+   * invalid_segment, unknown_speaker, v3_field_in_v2, invalid_delays,
+   * reserved_streams, reserved_branching.
+   *
+   * @param {object} plan
+   * @returns {{ valid: boolean, errors: Array<{code:string, path:string, message:string}> }}
+   */
+  function validatePlan(plan) {
+    const errors = [];
+    const err = (code, path, message) => errors.push({ code, path, message });
+    if (!plan || typeof plan !== 'object' || Array.isArray(plan)) {
+      err('not_an_object', '', 'plan must be an object');
+      return { valid: false, errors };
+    }
+    if (plan.v !== 2 && plan.v !== 3) err('invalid_version', 'v', 'v must be 2 or 3');
+    for (const f of ['title', 'start', 'quantum', 'mode', 'nodes', 'segments']) {
+      if (!_has(plan, f)) err('missing_field', f, `${f} is required`);
+    }
+    if (_has(plan, 'title') && typeof plan.title !== 'string') err('invalid_field', 'title', 'title must be a string');
+    if (_has(plan, 'start') && (typeof plan.start !== 'string' || !Number.isFinite(Date.parse(plan.start)))) {
+      err('invalid_field', 'start', 'start must be an ISO 8601 UTC timestamp');
+    }
+    if (_has(plan, 'quantum') && !(Number.isInteger(plan.quantum) && plan.quantum >= 1 && plan.quantum <= 60)) {
+      err('invalid_quantum', 'quantum', 'quantum must be an integer 1..60 minutes (§3.2)');
+    }
+    if (_has(plan, 'mode') && !PLAN_MODES.includes(plan.mode)) {
+      err('invalid_mode', 'mode', `mode must be one of ${PLAN_MODES.join(', ')}`);
+    }
+
+    const ids = new Set();
+    if (_has(plan, 'nodes')) {
+      if (!Array.isArray(plan.nodes) || plan.nodes.length === 0) {
+        err('invalid_nodes', 'nodes', 'nodes must be a non-empty array');
+      } else {
+        let hosts = 0;
+        plan.nodes.forEach((n, i) => {
+          if (!n || typeof n !== 'object' || typeof n.id !== 'string' || !n.id || n.id.includes('|') ||
+              typeof n.name !== 'string' || !['HOST', 'PARTICIPANT', 'OBSERVER'].includes(n.role) ||
+              typeof n.delay !== 'number' || !(n.delay >= 0)) {
+            err('invalid_nodes', `nodes[${i}]`, 'node needs id (no "|"), name, role HOST|PARTICIPANT|OBSERVER, delay >= 0');
+            return;
+          }
+          if (ids.has(n.id)) err('duplicate_node_id', `nodes[${i}].id`, `duplicate node id ${n.id}`);
+          ids.add(n.id);
+          if (n.role === 'HOST') hosts++;
+        });
+        const h = plan.nodes[0];
+        if (hosts !== 1 || !h || h.role !== 'HOST' || h.delay !== 0) {
+          err('invalid_host', 'nodes[0]', 'exactly one HOST, first in nodes[], with delay 0 (§3.1)');
+        }
+      }
+    }
+
+    if (_has(plan, 'segments')) {
+      if (!Array.isArray(plan.segments)) {
+        err('invalid_segment', 'segments', 'segments must be an array');
+      } else {
+        plan.segments.forEach((s, i) => {
+          if (!s || typeof s !== 'object' || !PLAN_SEGMENT_TYPES.includes(s.type) ||
+              !(Number.isInteger(s.q) && s.q >= 1)) {
+            err('invalid_segment', `segments[${i}]`, 'segment needs a known type and integer q >= 1');
+            return;
+          }
+          if (s.speaker !== undefined && !ids.has(s.speaker)) {
+            err('unknown_speaker', `segments[${i}].speaker`, `speaker ${s.speaker} is not a node id`);
+          }
+        });
+      }
+    }
+
+    if (plan.v === 2) {
+      for (const f of V3_ONLY_FIELDS) {
+        if (_has(plan, f)) err('v3_field_in_v2', f, `${f} is a v3 field and MUST NOT appear in a v2 plan (§4.3)`);
+      }
+    } else if (plan.v === 3) {
+      if (_has(plan, 'delays')) {
+        const d = plan.delays;
+        if (!d || typeof d !== 'object' || Array.isArray(d)) {
+          err('invalid_delays', 'delays', 'delays must be an object');
+        } else {
+          for (const k of Object.keys(d)) {
+            const parts = k.split('|');
+            if (parts.length !== 2 || !(parts[0] < parts[1]) ||
+                (ids.size && (!ids.has(parts[0]) || !ids.has(parts[1]))) ||
+                typeof d[k] !== 'number' || !(d[k] >= 0)) {
+              err('invalid_delays', `delays.${k}`, 'key must be two known node ids joined by "|" in sorted order; value >= 0 (§3.7.2)');
+            }
+          }
+        }
+      }
+      if (_has(plan, 'planVersion') && !(Number.isInteger(plan.planVersion) && plan.planVersion >= 1)) {
+        err('invalid_field', 'planVersion', 'planVersion must be an integer >= 1');
+      }
+      if (_has(plan, 'prevPlanHash') && !(typeof plan.prevPlanHash === 'string' && /^[0-9a-f]{64}$/.test(plan.prevPlanHash))) {
+        err('invalid_field', 'prevPlanHash', 'prevPlanHash must be 64 lowercase hex characters');
+      }
+      for (const f of ['questions', 'actions']) {
+        if (_has(plan, f) && !Array.isArray(plan[f])) err('invalid_field', f, `${f} must be an array`);
+      }
+    }
+
+    for (const e of _reservedFieldErrors(plan)) errors.push(e);
+    return { valid: errors.length === 0, errors };
   }
 
   // ── Segment computation ────────────────────────────────────────────────────
@@ -2313,8 +2487,10 @@
    * @param {object} plan     v2/v3 plan config
    * @param {string} planId   makePlanId(plan) — supplied so this stays pure
    * @param {object} [options]  { quorum: 'all' | 'majority' | number }
+   * @throws {Error} err.code 'reserved_streams' | 'reserved_branching' (§3.5, §7)
    */
   function createSession(plan, planId, options = {}) {
+    _assertNoReservedFields(plan, 'createSession');
     return {
       state: 'DRAFT',
       plan,
@@ -2566,6 +2742,8 @@
    * Create a signed amendment of signedPlan with `changes` applied.
    * Successor is always v3: planVersion+1, prevPlanHash = SHA-256(canonicalJSON
    * of predecessor) — never the legacy v2 polynomial hash (LTX-SECURITY §7.6).
+   * Throws (err.code 'reserved_streams' | 'reserved_branching') if the successor
+   * would carry reserved fields (§3.5, §7).
    */
   function createAmendment(signedPlan, changes, privateKeyB64) {
     const prev = signedPlan.plan;
@@ -2575,6 +2753,7 @@
       planVersion: prevVersion + 1,
       prevPlanHash: planHash(prev),
     });
+    _assertNoReservedFields(successor, 'createAmendment');
     return signPlan(successor, privateKeyB64);
   }
 
@@ -3275,6 +3454,7 @@
     createPlan,
     upgradeConfig,
     upgradePlanToV3,
+    validatePlan,
     // Computation
     computeSegments,
     computeSegmentsMulti,

@@ -94,6 +94,10 @@ export type {
 } from './merge.js';
 
 export { createPlan, upgradeConfig, upgradePlanToV3 } from './plan.js';
+export { validatePlan } from './validate.js';
+export type {
+  PlanValidationCode, PlanValidationError, PlanValidationResult, ReservedFieldError,
+} from './validate.js';
 export {
   computeSegments, computeSegmentsFor, pairDelay, totalMin, makePlanId,
 } from './segments.js';
