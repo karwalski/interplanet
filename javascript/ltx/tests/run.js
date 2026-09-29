@@ -171,6 +171,51 @@ check('checkSeq missing reason',        noSeq.reason === 'missing_seq');
 check('lastSeenSeq correct',            tracker.lastSeenSeq('N0') === 6);
 check('currentSeq correct',             tracker.currentSeq('N0') === 2);
 
+// Late arrival vs replay (LTX-SECURITY §11.2): seqs 3,4 were skipped by the gap
+check('missingSeqs lists gap',          JSON.stringify(tracker.missingSeqs('N0')) === '[3,4]');
+const late4 = tracker.recordSeq('N0', 4);
+check('late seq accepted',              late4.accepted === true && late4.late === true);
+check('late seq no gap, no reason',     late4.gap === false && late4.gapSize === 0 && late4.reason === undefined);
+check('late seq keeps high-water mark', tracker.lastSeenSeq('N0') === 6);
+const dup4 = tracker.recordSeq('N0', 4);
+check('late seq duplicate is replay',   dup4.accepted === false && dup4.reason === 'replay' && dup4.late === false);
+check('in-order result late=false',     tracker.recordSeq('N0', 7).late === false);
+check('duplicate of in-order is replay', tracker.recordSeq('N0', 6).reason === 'replay');
+check('missingSeqs after late',         JSON.stringify(tracker.missingSeqs('N0')) === '[3]');
+check('invalid seq rejected',           tracker.recordSeq('N0', 1.5).reason === 'invalid_seq' &&
+                                        tracker.recordSeq('N0', NaN).accepted === false);
+check('default reorder window',         ltx.SEQ_REORDER_WINDOW === 64);
+
+// Reorder window: seqs that slide below it are rejected (cannot prove not a replay)
+const trackerW = ltx.createSequenceTracker('plan-window', undefined, { reorderWindow: 4 });
+trackerW.recordSeq('N1', 1);
+const bigGap = trackerW.recordSeq('N1', 10);             // skips 2..9; only 7,8,9 fit the window
+check('window gap reported in full',    bigGap.gap === true && bigGap.gapSize === 8);
+check('window bounds missing markers',  JSON.stringify(trackerW.missingSeqs('N1')) === '[7,8,9]');
+check('below window rejected',          trackerW.recordSeq('N1', 5).reason === 'replay');
+check('inside window accepted late',    trackerW.recordSeq('N1', 8).late === true);
+trackerW.recordSeq('N1', 12);                           // window slides to (8,12]: 7 falls out
+check('slid-out marker rejected',       trackerW.recordSeq('N1', 7).accepted === false);
+check('slid-in gap accepted late',      trackerW.recordSeq('N1', 11).late === true);
+check('window 0 = strict monotonic',    (() => {
+  const t0 = ltx.createSequenceTracker('plan-strict', undefined, { reorderWindow: 0 });
+  t0.recordSeq('N0', 1); t0.recordSeq('N0', 3);
+  return t0.recordSeq('N0', 2).reason === 'replay';
+})());
+let badWindowThrew = false;
+try { ltx.createSequenceTracker('p', undefined, { reorderWindow: Infinity }); } catch (_) { badWindowThrew = true; }
+check('non-integer window throws',      badWindowThrew);
+
+// Persistent adapter without delete(): markers survive a restart
+const persisted = new Map();
+const adapter = { get: (k) => persisted.get(k), set: (k, v) => persisted.set(k, v) };
+const tA = ltx.createSequenceTracker('plan-persist', adapter);
+tA.recordSeq('N2', 1); tA.recordSeq('N2', 4);
+const tB = ltx.createSequenceTracker('plan-persist', adapter);   // "restart"
+check('persisted late accepted',        tB.recordSeq('N2', 3).late === true);
+check('persisted late not replayable',  tB.recordSeq('N2', 3).reason === 'replay');
+check('persisted replay rejected',      tB.recordSeq('N2', 4).reason === 'replay');
+
 // ── Security: Merkle Audit Log ────────────────────────────────────────────
 
 console.log('\n── Security: Merkle Audit Log ────────────────────────────────');
@@ -641,6 +686,150 @@ check('generateSessionKey_length',         ltx.generateSessionKey().length === 3
 const bcbEnc1 = ltx.encryptWindow({ x: 1 }, bcbKey);
 const bcbEnc2 = ltx.encryptWindow({ x: 1 }, bcbKey);
 check('nonce_uniqueness',                  bcbEnc1.nonce !== bcbEnc2.nonce);
+
+// ── Decision register (§10.3): same §8.2 conflict rules as questions/actions ──
+
+console.log('\n── Registers: reduceDecisions ───────────────');
+const decHost = ltx.generateNIK({ nodeLabel: 'HOST' });
+const decMars = ltx.generateNIK({ nodeLabel: 'MARS' });
+const decCache = { N0: decHost.nik, N1: decMars.nik };
+const mkDec = (type, content, nodeId, seq, ts, priv) => ltx.createRegisterEntry(type, content, {
+  sessionId: 'LTX-DEC-TEST', nodeId, seq, timestamp: ts, privateKeyB64: priv,
+});
+const dec1 = mkDec('decision', { text: 'Proceed with EVA-3', rationale: 'Weather window', originWindow: 'W2' },
+  'N0', 1, '2026-08-01T12:00:00.000Z', decHost.privateKeyB64);
+check('decision id prefix DEC',            dec1.entryId === 'DEC-N0-1');
+check('decision entry verifies',           ltx.verifyRegisterEntry(dec1, decCache).valid === true);
+const decReg1 = ltx.reduceDecisions([dec1]);
+check('decision RECORDED',                 decReg1.byId['DEC-N0-1'].status === 'RECORDED' && decReg1.byId['DEC-N0-1'].version === 1);
+check('decision fields',                   decReg1.byId['DEC-N0-1'].text === 'Proceed with EVA-3' &&
+                                           decReg1.byId['DEC-N0-1'].recordedBy === 'N0' &&
+                                           decReg1.byId['DEC-N0-1'].rationale === 'Weather window');
+const decRev = mkDec('decision_update', { did: 'DEC-N0-1', text: 'Proceed with EVA-3 at 14:00', version: 2 },
+  'N1', 1, '2026-08-01T12:10:00.000Z', decMars.privateKeyB64);
+const decRes = mkDec('decision_update', { did: 'DEC-N0-1', status: 'RESCINDED', version: 3 },
+  'N0', 2, '2026-08-01T12:20:00.000Z', decHost.privateKeyB64);
+const decReg2 = ltx.reduceDecisions([decRes, dec1, decRev]);
+check('decision update applied',           decReg2.byId['DEC-N0-1'].text === 'Proceed with EVA-3 at 14:00');
+check('decision RESCINDED v3',             decReg2.byId['DEC-N0-1'].status === 'RESCINDED' && decReg2.byId['DEC-N0-1'].version === 3);
+check('decision editor recorded',          decReg2.byId['DEC-N0-1'].editor === 'N0');
+check('decision older update superseded',  decReg2.superseded.includes(decRev.entryId));
+// conflict: equal version, different editors → lowest nodeId wins; loser superseded
+const decA = mkDec('decision_update', { did: 'DEC-N0-1', text: 'From N0', version: 5 }, 'N0', 7, '2026-08-01T13:00:00.000Z', decHost.privateKeyB64);
+const decB = mkDec('decision_update', { did: 'DEC-N0-1', text: 'From N1', version: 5 }, 'N1', 7, '2026-08-01T13:00:00.000Z', decMars.privateKeyB64);
+const decConf1 = ltx.reduceDecisions([dec1, decB, decA]);
+const decConf2 = ltx.reduceDecisions([decA, dec1, decB]);
+check('decision tie lowest nodeId wins',   decConf1.byId['DEC-N0-1'].text === 'From N0');
+check('decision tie loser superseded',     decConf1.superseded.includes(decB.entryId) && !decConf1.superseded.includes(decA.entryId));
+check('decision reduce order-independent', JSON.stringify(decConf1) === JSON.stringify(decConf2));
+// higher version beats lower nodeId
+const decHi = mkDec('decision_update', { did: 'DEC-N0-1', text: 'N1 v6', version: 6 }, 'N1', 8, '2026-08-01T12:30:00.000Z', decMars.privateKeyB64);
+check('decision higher version wins',      ltx.reduceDecisions([dec1, decA, decHi]).byId['DEC-N0-1'].text === 'N1 v6');
+// duplicate create and orphan update are superseded, never dropped silently
+const decOrphan = mkDec('decision_update', { did: 'DEC-NOPE-1', version: 2 }, 'N1', 9, '2026-08-01T12:40:00.000Z', decMars.privateKeyB64);
+const decDup = ltx.createRegisterEntry('decision', { text: 'dup' }, {
+  sessionId: 'LTX-DEC-TEST', nodeId: 'N1', seq: 10, timestamp: '2026-08-01T12:50:00.000Z',
+  privateKeyB64: decMars.privateKeyB64, entryId: 'DEC-N0-1',
+});
+const decReg3 = ltx.reduceDecisions([dec1, decOrphan, decDup]);
+check('decision orphan update superseded', decReg3.superseded.includes('DEC-N1-9'));
+check('decision duplicate create ignored', decReg3.byId['DEC-N0-1'].text === 'Proceed with EVA-3' && decReg3.byId['DEC-N0-1'].recordedBy === 'N0');
+check('decision reducer ignores others',   Object.keys(ltx.reduceDecisions([dec1, decRev]).byId).length === 1 &&
+                                           Object.keys(ltx.reduceActions([dec1]).byId).length === 0);
+// merge_snapshot carries the decision register
+const decSnap = ltx.runMergeSegment([dec1], [decRev], decCache, {
+  sessionId: 'LTX-DEC-TEST', nodeId: 'N0', seq: 99, timestamp: '2026-08-01T15:00:00.000Z', privateKeyB64: decHost.privateKeyB64,
+});
+check('snapshot decisionRegister',         decSnap.snapshot.content.decisionRegister['DEC-N0-1'].version === 2);
+
+// ── buildDelayMatrix (§3.7): sum via HOST for non-HOST pairs ──────────────
+
+console.log('\n── buildDelayMatrix ─────────────────────────');
+const dmPlan = {
+  v: 2, title: 'Delay Matrix', start: '2026-06-01T12:00:00.000Z', quantum: 5, mode: 'LTX-ASYNC',
+  segments: [{ type: 'TX', q: 1 }],
+  nodes: [
+    { id: 'N0', name: 'Earth HQ',    role: 'HOST',        delay: 0,    location: 'earth'   },
+    { id: 'N1', name: 'Mars Hab-01', role: 'PARTICIPANT', delay: 1240, location: 'mars'    },
+    { id: 'N2', name: 'Jupiter Obs', role: 'PARTICIPANT', delay: 3240, location: 'jupiter' },
+    { id: 'N3', name: 'Earth Annex', role: 'PARTICIPANT', delay: 0,    location: 'earth'   },
+  ],
+};
+const dm = ltx.buildDelayMatrix(dmPlan);
+const dmGet = (m, a, b) => m.find(p => p.fromId === a && p.toId === b).delaySeconds;
+check('delay matrix n*(n-1) pairs',        dm.length === 12);
+check('delay matrix HOST to node',         dmGet(dm, 'N0', 'N1') === 1240 && dmGet(dm, 'N1', 'N0') === 1240);
+check('delay matrix non-HOST pair = sum',  dmGet(dm, 'N1', 'N2') === 1240 + 3240);
+check('delay matrix not max',              dmGet(dm, 'N1', 'N2') !== Math.max(1240, 3240));
+check('delay matrix symmetric',            dm.every(p => p.delaySeconds === dmGet(dm, p.toId, p.fromId)));
+check('delay matrix zero-delay non-HOST',  dmGet(dm, 'N3', 'N2') === 3240 && dmGet(dm, 'N3', 'N0') === 0);
+check('delay matrix equals pairDelay',     dm.every(p => p.delaySeconds === ltx.pairDelay(dmPlan, p.fromId, p.toId)));
+const dmV3 = ltx.upgradePlanToV3(dmPlan, { delays: { 'N1|N2': 2900 } });
+const dm3 = ltx.buildDelayMatrix(dmV3);
+check('delay matrix v3 entry authoritative', dmGet(dm3, 'N1', 'N2') === 2900 && dmGet(dm3, 'N2', 'N1') === 2900);
+check('delay matrix v3 fallback sum',      dmGet(dm3, 'N1', 'N3') === 1240);
+
+// ── Conformance: golden planId vectors (spec/golden/plan-ids.json) ─────────
+
+console.log('\n── Conformance: golden planId vectors ───────');
+const golden = require('../../../spec/golden/plan-ids.json');
+check('golden vectors present',            golden.vectors.length >= 9);
+for (const gv of golden.vectors) {
+  check(`golden planId ${gv.name}`,        ltx.makePlanId(gv.plan) === gv.planId);
+  if (gv.planHash !== undefined) {
+    check(`golden planHash ${gv.name}`,    ltx.planHash(gv.plan) === gv.planHash);
+  }
+}
+// Hard-coded anchors: regenerating the vector file must never move these.
+const gvByName = Object.fromEntries(golden.vectors.map(gv => [gv.name, gv]));
+check('golden v2 freeze anchor',           gvByName['v2-freeze-check'].planId === 'LTX-20260801-EARTHHQ-MARS-v2-d132e85d');
+check('golden v2 unicode anchor',          gvByName['v2-unicode-title'].planId === 'LTX-20261231-EARTHHQ-MARS-v2-7bc93af8');
+check('golden v2 order-sensitive',         gvByName['v2-createPlan-default'].planId !== gvByName['v2-key-order-sensitive'].planId);
+check('golden v3 order-insensitive',       gvByName['v3-upgrade-delays'].planId === gvByName['v3-key-order-insensitive'].planId);
+check('golden v3 amendment chain hash',    gvByName['v3-amendment'].plan.prevPlanHash === gvByName['v3-upgrade-delays'].planHash);
+check('createPlan default quantum is 5',   ltx.createPlan({}).quantum === 5 && ltx.DEFAULT_QUANTUM === 5);
+
+// ── Plan validation: reserved streams / branching (§3.5, §7) ──────────────
+
+console.log('\n── Plan validation: reserved fields ─────────');
+const codesOf = (r) => r.errors.map(e => e.code);
+for (const gv of golden.vectors) {
+  check(`validatePlan accepts golden ${gv.name}`, ltx.validatePlan(gv.plan).valid === true);
+}
+const vpBase = gvByName['v3-upgrade-delays'].plan;
+check('validatePlan v3 empty streams ok',  ltx.validatePlan({ ...vpBase, streams: [] }).valid === true);
+const vpStreams = ltx.validatePlan({ ...vpBase, streams: [{ id: 'S1' }] });
+check('validatePlan non-empty streams',    vpStreams.valid === false && codesOf(vpStreams).includes('reserved_streams'));
+check('validatePlan streams error path',   vpStreams.errors.find(e => e.code === 'reserved_streams').path === 'streams');
+check('validatePlan streams non-array',    codesOf(ltx.validatePlan({ ...vpBase, streams: 'S1' })).includes('reserved_streams'));
+const vpSegStream = ltx.validatePlan({ ...vpBase, segments: [{ type: 'TX', q: 1, stream: 'S1' }] });
+check('validatePlan segment stream',       codesOf(vpSegStream).includes('reserved_streams'));
+check('validatePlan branches',             codesOf(ltx.validatePlan({ ...vpBase, branches: [] })).includes('reserved_branching'));
+check('validatePlan branching',            codesOf(ltx.validatePlan({ ...vpBase, branching: { mode: 'local' } })).includes('reserved_branching'));
+const vpSegBranch = ltx.validatePlan({ ...vpBase, segments: [{ type: 'CAUCUS', q: 1, branch: 'B1' }] });
+check('validatePlan segment branch',       codesOf(vpSegBranch).includes('reserved_branching') &&
+                                           vpSegBranch.errors[0].path === 'segments[0].branch');
+const vpV2 = gvByName['v2-freeze-check'].plan;
+check('validatePlan v2 streams is v3 field', codesOf(ltx.validatePlan({ ...vpV2, streams: [] })).includes('v3_field_in_v2'));
+check('validatePlan v2 branching',         codesOf(ltx.validatePlan({ ...vpV2, branching: true })).includes('reserved_branching'));
+// Structural checks mirror spec/ltx-schema.json
+check('validatePlan non-object',           codesOf(ltx.validatePlan(null)).includes('not_an_object'));
+check('validatePlan bad version',          codesOf(ltx.validatePlan({ ...vpV2, v: 7 })).includes('invalid_version'));
+check('validatePlan host not first',       codesOf(ltx.validatePlan({ ...vpV2, nodes: vpV2.nodes.slice().reverse() })).includes('invalid_host'));
+check('validatePlan unsorted delays key',  codesOf(ltx.validatePlan({ ...vpBase, delays: { 'N1|N0': 860 } })).includes('invalid_delays'));
+check('validatePlan unknown speaker',      codesOf(ltx.validatePlan({ ...vpV2, segments: [{ type: 'TX', q: 1, speaker: 'N9' }] })).includes('unknown_speaker'));
+check('validatePlan quantum out of range', codesOf(ltx.validatePlan({ ...vpV2, quantum: 0 })).includes('invalid_quantum'));
+// Enforcement paths throw with a code
+const throwsCode = (fn) => { try { fn(); return null; } catch (e) { return e.code; } };
+check('upgradePlanToV3 rejects streams',   throwsCode(() => ltx.upgradePlanToV3(vpV2, { streams: [{ id: 'S1' }] })) === 'reserved_streams');
+check('upgradePlanToV3 allows empty',      throwsCode(() => ltx.upgradePlanToV3(vpV2, { streams: [] })) === null);
+check('upgradePlanToV3 rejects branches',  throwsCode(() => ltx.upgradePlanToV3(vpV2, { branches: [] })) === 'reserved_branching');
+check('createSession rejects streams',     throwsCode(() => ltx.createSession({ ...vpBase, streams: [1] }, 'id')) === 'reserved_streams');
+check('createSession accepts golden',      throwsCode(() => ltx.createSession(vpBase, 'id')) === null);
+const vpNik = ltx.generateNIK({ nodeLabel: 'Earth HQ' });
+const vpSigned = ltx.signPlan(vpBase, vpNik.privateKeyB64);
+check('createAmendment rejects branching', throwsCode(() => ltx.createAmendment(vpSigned, { branching: {} }, vpNik.privateKeyB64)) === 'reserved_branching');
+check('createAmendment ok without',        throwsCode(() => ltx.createAmendment(vpSigned, { title: 'x' }, vpNik.privateKeyB64)) === null);
 
 // ── Security Suite (§22.1 — Story 28.10) ──────────────────────────────────
 

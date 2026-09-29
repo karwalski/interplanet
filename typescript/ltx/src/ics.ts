@@ -90,7 +90,7 @@ export function generateICS(
   ].join('\r\n');
 }
 
-/** v3 pair-delay properties (LTX-SPECIFICATION.md §3.7.2, spec/ltx-spec.md §8.3). */
+/** v3 pair-delay properties (LTX-SPECIFICATION.md §3.7.2 / §3.7.4, docs/RFC5545-EXTENSION.md §5.4). */
 function _pairDelayLines(c: LtxPlan): string[] {
   const delays = (c as { delays?: Record<string, number> }).delays;
   if (!delays) return [];

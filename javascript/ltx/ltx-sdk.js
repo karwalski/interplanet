@@ -124,16 +124,19 @@
    * @param {object} [extras.delays]   Pair delay matrix { 'A|B': seconds } (sorted-id keys)
    * @param {number} [extras.planVersion]  Plan version counter (default 1)
    * @returns {object} New v3 plan config
+   * @throws {Error} err.code 'reserved_streams' | 'reserved_branching' (§3.5, §7)
    */
   function upgradePlanToV3(cfg, extras) {
     extras = extras || {};
     const c = upgradeConfig(cfg);
-    return {
+    const plan = {
       ...c,
       ...extras,
       v: 3,
       planVersion: extras.planVersion !== undefined ? extras.planVersion : 1,
     };
+    _assertNoReservedFields(plan, 'upgradePlanToV3');
+    return plan;
   }
 
   /**
@@ -142,7 +145,7 @@
    * @param {object} opts
    * @param {string}   [opts.title]            Session title
    * @param {string}   [opts.start]            ISO 8601 UTC start time (default: 5 min from now)
-   * @param {number}   [opts.quantum]          Minutes per quantum (default: 3)
+   * @param {number}   [opts.quantum]          Minutes per quantum (default: DEFAULT_QUANTUM = 5)
    * @param {string}   [opts.mode]             Protocol mode (default: 'LTX')
    * @param {object[]} [opts.nodes]            Explicit node list (overrides hostName/remoteName)
    * @param {string}   [opts.hostName]         Host node name (default: 'Earth HQ')
@@ -173,6 +176,177 @@
       segments: opts.segments ? opts.segments.slice() : DEFAULT_SEGMENTS.slice(),
       nodes,
     };
+  }
+
+  // ── Plan validation (LTX-SPECIFICATION.md §3.5, §4, §7) ────────────────────
+
+  /** Every segment type the reference SDKs handle (core §3.4 + auxiliary). */
+  const PLAN_SEGMENT_TYPES = SEG_TYPES.concat(['SPEAK', 'REST', 'PAD', 'OPEN', 'RELAY']);
+  const PLAN_MODES = ['LTX', 'LTX-LIVE', 'LTX-RELAY', 'LTX-ASYNC'];
+  /** Fields that exist only in v3 plans (§4.4); MUST NOT appear in v2 (§4.3). */
+  const V3_ONLY_FIELDS = ['delays', 'planVersion', 'prevPlanHash', 'questions', 'actions', 'streams'];
+  /** Reserved branching identifiers (§7): MUST be absent from plans and segments. */
+  const RESERVED_BRANCH_PLAN_FIELDS = ['branches', 'branching'];
+  const RESERVED_BRANCH_SEGMENT_FIELDS = ['branch'];
+  /** Reserved streams identifiers (§3.5): plan streams[] empty, no segment stream. */
+  const RESERVED_STREAM_SEGMENT_FIELDS = ['stream'];
+
+  function _has(obj, key) {
+    return Object.prototype.hasOwnProperty.call(obj, key);
+  }
+
+  /** Reserved-field violations only (§3.5 streams, §7 branching). */
+  function _reservedFieldErrors(plan) {
+    const errors = [];
+    if (!plan || typeof plan !== 'object') return errors;
+    if (_has(plan, 'streams') && !(Array.isArray(plan.streams) && plan.streams.length === 0)) {
+      errors.push({ code: 'reserved_streams', path: 'streams',
+        message: 'streams[] is reserved (§3.5) and MUST be absent or empty' });
+    }
+    for (const f of RESERVED_BRANCH_PLAN_FIELDS) {
+      if (_has(plan, f)) {
+        errors.push({ code: 'reserved_branching', path: f,
+          message: `${f} is reserved for branching (§7, not yet implemented) and MUST be absent` });
+      }
+    }
+    (Array.isArray(plan.segments) ? plan.segments : []).forEach((s, i) => {
+      if (!s || typeof s !== 'object') return;
+      for (const f of RESERVED_STREAM_SEGMENT_FIELDS) {
+        if (_has(s, f)) {
+          errors.push({ code: 'reserved_streams', path: `segments[${i}].${f}`,
+            message: `segment ${f} is reserved (§3.5) and MUST be absent` });
+        }
+      }
+      for (const f of RESERVED_BRANCH_SEGMENT_FIELDS) {
+        if (_has(s, f)) {
+          errors.push({ code: 'reserved_branching', path: `segments[${i}].${f}`,
+            message: `segment ${f} is reserved for branching (§7) and MUST be absent` });
+        }
+      }
+    });
+    return errors;
+  }
+
+  /** Throw if a plan uses reserved stream/branch fields. err.code is the first error code. */
+  function _assertNoReservedFields(plan, fnName) {
+    const errors = _reservedFieldErrors(plan);
+    if (errors.length === 0) return;
+    const err = new Error(`${fnName}: ${errors[0].message}`);
+    err.code = errors[0].code;
+    err.errors = errors;
+    throw err;
+  }
+
+  /**
+   * Validate a v2 or v3 plan against the wire format (spec/ltx-schema.json,
+   * LTX-SPECIFICATION.md §4) and the reserved-field rules (§3.5 streams,
+   * §7 branching). v1 configs must be upgraded (upgradeConfig) first.
+   * Pure; never throws.
+   *
+   * Error codes: not_an_object, invalid_version, missing_field, invalid_field,
+   * invalid_quantum, invalid_mode, invalid_nodes, invalid_host, duplicate_node_id,
+   * invalid_segment, unknown_speaker, v3_field_in_v2, invalid_delays,
+   * reserved_streams, reserved_branching.
+   *
+   * @param {object} plan
+   * @returns {{ valid: boolean, errors: Array<{code:string, path:string, message:string}> }}
+   */
+  function validatePlan(plan) {
+    const errors = [];
+    const err = (code, path, message) => errors.push({ code, path, message });
+    if (!plan || typeof plan !== 'object' || Array.isArray(plan)) {
+      err('not_an_object', '', 'plan must be an object');
+      return { valid: false, errors };
+    }
+    if (plan.v !== 2 && plan.v !== 3) err('invalid_version', 'v', 'v must be 2 or 3');
+    for (const f of ['title', 'start', 'quantum', 'mode', 'nodes', 'segments']) {
+      if (!_has(plan, f)) err('missing_field', f, `${f} is required`);
+    }
+    if (_has(plan, 'title') && typeof plan.title !== 'string') err('invalid_field', 'title', 'title must be a string');
+    if (_has(plan, 'start') && (typeof plan.start !== 'string' || !Number.isFinite(Date.parse(plan.start)))) {
+      err('invalid_field', 'start', 'start must be an ISO 8601 UTC timestamp');
+    }
+    if (_has(plan, 'quantum') && !(Number.isInteger(plan.quantum) && plan.quantum >= 1 && plan.quantum <= 60)) {
+      err('invalid_quantum', 'quantum', 'quantum must be an integer 1..60 minutes (§3.2)');
+    }
+    if (_has(plan, 'mode') && !PLAN_MODES.includes(plan.mode)) {
+      err('invalid_mode', 'mode', `mode must be one of ${PLAN_MODES.join(', ')}`);
+    }
+
+    const ids = new Set();
+    if (_has(plan, 'nodes')) {
+      if (!Array.isArray(plan.nodes) || plan.nodes.length === 0) {
+        err('invalid_nodes', 'nodes', 'nodes must be a non-empty array');
+      } else {
+        let hosts = 0;
+        plan.nodes.forEach((n, i) => {
+          if (!n || typeof n !== 'object' || typeof n.id !== 'string' || !n.id || n.id.includes('|') ||
+              typeof n.name !== 'string' || !['HOST', 'PARTICIPANT', 'OBSERVER'].includes(n.role) ||
+              typeof n.delay !== 'number' || !(n.delay >= 0)) {
+            err('invalid_nodes', `nodes[${i}]`, 'node needs id (no "|"), name, role HOST|PARTICIPANT|OBSERVER, delay >= 0');
+            return;
+          }
+          if (ids.has(n.id)) err('duplicate_node_id', `nodes[${i}].id`, `duplicate node id ${n.id}`);
+          ids.add(n.id);
+          if (n.role === 'HOST') hosts++;
+        });
+        const h = plan.nodes[0];
+        if (hosts !== 1 || !h || h.role !== 'HOST' || h.delay !== 0) {
+          err('invalid_host', 'nodes[0]', 'exactly one HOST, first in nodes[], with delay 0 (§3.1)');
+        }
+      }
+    }
+
+    if (_has(plan, 'segments')) {
+      if (!Array.isArray(plan.segments)) {
+        err('invalid_segment', 'segments', 'segments must be an array');
+      } else {
+        plan.segments.forEach((s, i) => {
+          if (!s || typeof s !== 'object' || !PLAN_SEGMENT_TYPES.includes(s.type) ||
+              !(Number.isInteger(s.q) && s.q >= 1)) {
+            err('invalid_segment', `segments[${i}]`, 'segment needs a known type and integer q >= 1');
+            return;
+          }
+          if (s.speaker !== undefined && !ids.has(s.speaker)) {
+            err('unknown_speaker', `segments[${i}].speaker`, `speaker ${s.speaker} is not a node id`);
+          }
+        });
+      }
+    }
+
+    if (plan.v === 2) {
+      for (const f of V3_ONLY_FIELDS) {
+        if (_has(plan, f)) err('v3_field_in_v2', f, `${f} is a v3 field and MUST NOT appear in a v2 plan (§4.3)`);
+      }
+    } else if (plan.v === 3) {
+      if (_has(plan, 'delays')) {
+        const d = plan.delays;
+        if (!d || typeof d !== 'object' || Array.isArray(d)) {
+          err('invalid_delays', 'delays', 'delays must be an object');
+        } else {
+          for (const k of Object.keys(d)) {
+            const parts = k.split('|');
+            if (parts.length !== 2 || !(parts[0] < parts[1]) ||
+                (ids.size && (!ids.has(parts[0]) || !ids.has(parts[1]))) ||
+                typeof d[k] !== 'number' || !(d[k] >= 0)) {
+              err('invalid_delays', `delays.${k}`, 'key must be two known node ids joined by "|" in sorted order; value >= 0 (§3.7.2)');
+            }
+          }
+        }
+      }
+      if (_has(plan, 'planVersion') && !(Number.isInteger(plan.planVersion) && plan.planVersion >= 1)) {
+        err('invalid_field', 'planVersion', 'planVersion must be an integer >= 1');
+      }
+      if (_has(plan, 'prevPlanHash') && !(typeof plan.prevPlanHash === 'string' && /^[0-9a-f]{64}$/.test(plan.prevPlanHash))) {
+        err('invalid_field', 'prevPlanHash', 'prevPlanHash must be 64 lowercase hex characters');
+      }
+      for (const f of ['questions', 'actions']) {
+        if (_has(plan, f) && !Array.isArray(plan[f])) err('invalid_field', f, `${f} must be an array`);
+      }
+    }
+
+    for (const e of _reservedFieldErrors(plan)) errors.push(e);
+    return { valid: errors.length === 0, errors };
   }
 
   // ── Segment computation ────────────────────────────────────────────────────
@@ -248,12 +422,16 @@
   }
 
   /**
-   * Build a flat delay matrix for all node pairs in a plan.
-   * Earth-to-Earth delay = 0.
-   * Delay from/to non-host nodes uses that node's configured delay.
-   * Delay between two non-host nodes = sum of their individual delays.
+   * Build a flat delay matrix for all ordered node pairs in a plan.
+   * Every entry is pairDelay(plan, from, to) (LTX-SPECIFICATION.md §3.7.3):
+   * - a v3 pair matrix entry (plan.delays) is authoritative where present;
+   * - HOST to node: that node's declared (HOST-relative) delay;
+   * - node to node (neither is HOST): the SUM of both HOST-relative delays.
+   *   This is the conservative upper bound via the HOST vertex (a signal
+   *   relayed through HOST travels both legs), not the max of the two.
+   * The matrix is symmetric: from/to and to/from carry the same delay.
    *
-   * @param {object} plan  LTX plan config (v1 or v2)
+   * @param {object} plan  LTX plan config (v1, v2 or v3)
    * @returns {Array<{fromId:string, fromName:string, toId:string, toName:string, delaySeconds:number}>}
    */
   function buildDelayMatrix(plan) {
@@ -265,23 +443,12 @@
         if (i === j) continue;
         const from = nodes[i];
         const to   = nodes[j];
-        // Delay between two nodes: if one is host (delay=0), use the other's delay.
-        // If both are non-host, approximate as max of the two (both relay via host).
-        let delaySeconds;
-        if (from.delay === 0 || i === 0) {
-          delaySeconds = to.delay || 0;
-        } else if (to.delay === 0 || j === 0) {
-          delaySeconds = from.delay || 0;
-        } else {
-          // Non-host to non-host: signals route via host, so total = from.delay + to.delay
-          delaySeconds = (from.delay || 0) + (to.delay || 0);
-        }
         matrix.push({
           fromId:       from.id,
           fromName:     from.name,
           toId:         to.id,
           toName:       to.name,
-          delaySeconds,
+          delaySeconds: pairDelay(c, from.id, to.id),
         });
       }
     }
@@ -1483,24 +1650,51 @@
   // ── Sequence Tracking ─────────────────────────────────────────────────────
 
   /**
+   * Default reorder window for inbound seqs (LTX-SECURITY.md §11.2): a seq up to
+   * this far below the highest seen, never seen before, is accepted as 'late'.
+   */
+  const SEQ_REORDER_WINDOW = 64;
+
+  /**
    * Create a sequence tracker for a given plan.
    * Tracks both outbound (nextSeq) and inbound (recordSeq) sequence numbers
    * per nodeId, enabling monotonic-increment enforcement and replay rejection.
    *
+   * Inbound seqs are checked against a sliding reorder window below the
+   * highest seq seen (the high-water mark). Seqs skipped by a gap are
+   * remembered while they remain inside the window, so a delayed but genuine
+   * bundle that arrives after a higher seq is accepted and flagged late,
+   * while an exact duplicate of an already-accepted (nodeId, seq) is rejected
+   * as a replay. Seqs below the window are rejected as replays (they cannot be
+   * distinguished from one). Missing-seq markers live in the storage adapter,
+   * so the window survives restarts when the adapter is persistent.
+   *
    * @param {string} planId   Plan identifier used to namespace storage keys
    * @param {object} [storage] Optional storage adapter with get(key)/set(key,val)
+   *                           and optional delete(key)
+   * @param {object} [options]
+   * @param {number} [options.reorderWindow=SEQ_REORDER_WINDOW]  0 disables late acceptance
    * @returns {object} Sequence tracker instance
    */
-  function createSequenceTracker(planId, storage) {
+  function createSequenceTracker(planId, storage, options) {
     // storage: optional object with get(key)/set(key,val) interface
     // Default: in-memory Map (for browser/test); in production, pass a storage adapter
     const mem = new Map();
     const store = storage || {
       get: (k) => mem.get(k),
       set: (k, v) => mem.set(k, v),
+      delete: (k) => mem.delete(k),
     };
+    const reorderWindow = options && options.reorderWindow !== undefined
+      ? options.reorderWindow : SEQ_REORDER_WINDOW;
+    if (!Number.isSafeInteger(reorderWindow) || reorderWindow < 0) {
+      throw new Error('createSequenceTracker: reorderWindow must be a non-negative integer');
+    }
 
     const prefix = `ltx_seq_${planId}_`;
+    const rxKey = (nodeId) => prefix + nodeId + '_rx';
+    const missKey = (nodeId, seq) => `${rxKey(nodeId)}_miss_${seq}`;
+    const clear = (k) => { if (store.delete) store.delete(k); else store.set(k, 0); };
 
     return {
       // Get the next sequence number for this node (increments internal counter)
@@ -1513,19 +1707,49 @@
       },
 
       // Record an incoming sequence number from a remote node.
-      // Returns: { accepted: bool, gap: bool, gapSize: number }
+      // Returns: { accepted: bool, gap: bool, gapSize: number, late: bool, reason?: string }
+      //   late: true   seq below the high-water mark, never seen, inside the window
+      //   reason 'replay'       exact duplicate, or below the reorder window
+      //   reason 'invalid_seq'  seq is not a safe integer
       recordSeq(nodeId, seq) {
-        const key = prefix + nodeId + '_rx';
+        if (!Number.isSafeInteger(seq)) {
+          return { accepted: false, gap: false, gapSize: 0, late: false, reason: 'invalid_seq' };
+        }
+        const key = rxKey(nodeId);
         const last = store.get(key) || 0;
 
         if (seq <= last) {
-          return { accepted: false, gap: false, gapSize: 0, reason: 'replay' };
+          const mk = missKey(nodeId, seq);
+          if (seq > last - reorderWindow && store.get(mk) === 1) {
+            clear(mk);
+            return { accepted: true, gap: false, gapSize: 0, late: true };
+          }
+          return { accepted: false, gap: false, gapSize: 0, late: false, reason: 'replay' };
         }
 
         const gap = seq > last + 1;
         const gapSize = gap ? seq - last - 1 : 0;
+        // Remember skipped seqs that stay inside the new window (seq - W, seq].
+        for (let s = Math.max(last + 1, seq - reorderWindow + 1); s < seq; s++) {
+          store.set(missKey(nodeId, s), 1);
+        }
+        // Forget markers that slide out of the window.
+        for (let s = Math.max(1, last - reorderWindow + 1); s <= Math.min(last, seq - reorderWindow); s++) {
+          if (store.get(missKey(nodeId, s)) === 1) clear(missKey(nodeId, s));
+        }
         store.set(key, seq);
-        return { accepted: true, gap, gapSize };
+        return { accepted: true, gap, gapSize, late: false };
+      },
+
+      // Seqs below the high-water mark still missing inside the reorder window,
+      // ascending (candidates for a retransmission request, LTX-SECURITY §11.3)
+      missingSeqs(nodeId) {
+        const last = store.get(rxKey(nodeId)) || 0;
+        const out = [];
+        for (let s = Math.max(1, last - reorderWindow + 1); s < last; s++) {
+          if (store.get(missKey(nodeId, s)) === 1) out.push(s);
+        }
+        return out;
       },
 
       // Get current last-seen seq for a node (for checkpoints)
@@ -1565,7 +1789,7 @@
    * @param {object} bundle         Incoming bundle (must have .seq)
    * @param {object} tracker        Sequence tracker (from createSequenceTracker)
    * @param {string} senderNodeId   Node ID of the sender
-   * @returns {{ accepted: boolean, gap: boolean, gapSize: number, reason?: string }}
+   * @returns {{ accepted: boolean, gap: boolean, gapSize: number, late?: boolean, reason?: string }}
    */
   function checkSeq(bundle, tracker, senderNodeId) {
     if (typeof bundle.seq !== 'number') {
@@ -2313,8 +2537,10 @@
    * @param {object} plan     v2/v3 plan config
    * @param {string} planId   makePlanId(plan) — supplied so this stays pure
    * @param {object} [options]  { quorum: 'all' | 'majority' | number }
+   * @throws {Error} err.code 'reserved_streams' | 'reserved_branching' (§3.5, §7)
    */
   function createSession(plan, planId, options = {}) {
+    _assertNoReservedFields(plan, 'createSession');
     return {
       state: 'DRAFT',
       plan,
@@ -2566,6 +2792,8 @@
    * Create a signed amendment of signedPlan with `changes` applied.
    * Successor is always v3: planVersion+1, prevPlanHash = SHA-256(canonicalJSON
    * of predecessor) — never the legacy v2 polynomial hash (LTX-SECURITY §7.6).
+   * Throws (err.code 'reserved_streams' | 'reserved_branching') if the successor
+   * would carry reserved fields (§3.5, §7).
    */
   function createAmendment(signedPlan, changes, privateKeyB64) {
     const prev = signedPlan.plan;
@@ -2575,6 +2803,7 @@
       planVersion: prevVersion + 1,
       prevPlanHash: planHash(prev),
     });
+    _assertNoReservedFields(successor, 'createAmendment');
     return signPlan(successor, privateKeyB64);
   }
 
@@ -2632,7 +2861,7 @@
     question: 'QST', question_response: 'QST',
     action: 'ACT', action_update: 'ACT',
     amendment: 'AMD', state_transition: 'STA',
-    merge_snapshot: 'MRG', decision: 'DEC',
+    merge_snapshot: 'MRG', decision: 'DEC', decision_update: 'DEC',
   };
 
   function _regSign(dataStr, privateKeyB64) {
@@ -2782,6 +3011,50 @@
     return { byId, superseded };
   }
 
+  const _DECISION_STATUSES = ['RECORDED', 'RESCINDED'];
+
+  /**
+   * Reduce decision register state (LTX-SPECIFICATION.md §10.3). Pure.
+   * `decision` entries record a decision (did = entryId, version 1);
+   * `decision_update` entries reference content.did and revise text/rationale
+   * or rescind it. Conflicts follow §8.2 exactly as for questions and actions:
+   * higher object version wins, then the lowest editor nodeId; losers are
+   * returned in `superseded`.
+   */
+  function reduceDecisions(entries) {
+    const byId = {}, winners = {}, superseded = [];
+    for (const e of orderEntries(entries)) {
+      if (e.type === 'decision') {
+        const did = e.entryId;
+        if (byId[did]) { superseded.push(e.entryId); continue; }
+        winners[did] = { version: 1, editor: e.nodeId, entryId: e.entryId };
+        byId[did] = Object.assign(
+          { did, text: String(e.content.text ?? ''), recordedBy: e.nodeId },
+          e.content.rationale !== undefined ? { rationale: String(e.content.rationale) } : {},
+          e.content.originWindow !== undefined ? { originWindow: String(e.content.originWindow) } : {},
+          { status: 'RECORDED', version: 1 },
+        );
+      } else if (e.type === 'decision_update') {
+        const did = String(e.content.did ?? '');
+        const d = byId[did];
+        if (!d) { superseded.push(e.entryId); continue; }
+        const version = Number(e.content.version ?? d.version + 1);
+        const incoming = { version, editor: e.nodeId, entryId: e.entryId };
+        const current = winners[did];
+        if (current && !_conflictWins(incoming, current)) { superseded.push(e.entryId); continue; }
+        if (current && current.entryId !== d.did) superseded.push(current.entryId);
+        winners[did] = incoming;
+        byId[did] = Object.assign({}, d,
+          { status: _DECISION_STATUSES.includes(e.content.status) ? e.content.status : d.status },
+          e.content.text !== undefined ? { text: String(e.content.text) } : {},
+          e.content.rationale !== undefined ? { rationale: String(e.content.rationale) } : {},
+          { editor: e.nodeId, version },
+        );
+      }
+    }
+    return { byId, superseded };
+  }
+
   /** Re-emit v3 plan question seeds as signed log entries at lock (§9.2). */
   function emitQuestionSeeds(seeds, opts) {
     let seq = opts.startSeq !== undefined ? opts.startSeq : opts.seq;
@@ -2821,13 +3094,15 @@
     const merged = mergeLogs(localEntries, remoteEntries, keyCache);
     const questions = reduceQuestions(merged.entries);
     const actions = reduceActions(merged.entries);
+    const decisions = reduceDecisions(merged.entries);
     const snapshot = createRegisterEntry('merge_snapshot', {
       mergedRoot: entriesRoot(merged.entries),
       entryCount: merged.entries.length,
       rejectedCount: merged.rejected.length,
       questionRegister: questions.byId,
       actionRegister: actions.byId,
-      superseded: questions.superseded.concat(actions.superseded),
+      decisionRegister: decisions.byId,
+      superseded: questions.superseded.concat(actions.superseded, decisions.superseded),
     }, opts);
     return { merged, snapshot };
   }
@@ -3275,6 +3550,7 @@
     createPlan,
     upgradeConfig,
     upgradePlanToV3,
+    validatePlan,
     // Computation
     computeSegments,
     computeSegmentsMulti,
@@ -3314,6 +3590,7 @@
     applyRevocation,
     // Sequence tracking
     createSequenceTracker,
+    SEQ_REORDER_WINDOW,
     addSeq,
     checkSeq,
     // Global freshness scope (Story 70.4)
@@ -3372,6 +3649,7 @@
     orderEntries,
     reduceQuestions,
     reduceActions,
+    reduceDecisions,
     emitQuestionSeeds,
     // Merge + partition recovery (Epic 69.2)
     mergeLogs,

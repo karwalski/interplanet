@@ -16,6 +16,7 @@ import {
   orderEntries,
   reduceQuestions,
   reduceActions,
+  reduceDecisions,
 } from './registers.js';
 import type { CreateEntryOptions, RegisterEntry } from './registers.js';
 import { canonicalJSON } from './security.js';
@@ -69,13 +70,15 @@ export function runMergeSegment(
   const merged = mergeLogs(localEntries, remoteEntries, keyCache);
   const questions = reduceQuestions(merged.entries);
   const actions = reduceActions(merged.entries);
+  const decisions = reduceDecisions(merged.entries);
   const snapshot = createRegisterEntry('merge_snapshot', {
     mergedRoot: entriesRoot(merged.entries),
     entryCount: merged.entries.length,
     rejectedCount: merged.rejected.length,
     questionRegister: questions.byId,
     actionRegister: actions.byId,
-    superseded: [...questions.superseded, ...actions.superseded],
+    decisionRegister: decisions.byId,
+    superseded: [...questions.superseded, ...actions.superseded, ...decisions.superseded],
   }, opts);
   return { merged, snapshot };
 }

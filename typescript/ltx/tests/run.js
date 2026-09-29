@@ -383,6 +383,51 @@ check('checkSeq missing reason',        noSeq.reason === 'missing_seq');
 check('lastSeenSeq correct',            tracker.lastSeenSeq('N0') === 6);
 check('currentSeq correct',             tracker.currentSeq('N0') === 2);
 
+// Late arrival vs replay (LTX-SECURITY §11.2): seqs 3,4 were skipped by the gap
+check('missingSeqs lists gap',          JSON.stringify(tracker.missingSeqs('N0')) === '[3,4]');
+const late4 = tracker.recordSeq('N0', 4);
+check('late seq accepted',              late4.accepted === true && late4.late === true);
+check('late seq no gap, no reason',     late4.gap === false && late4.gapSize === 0 && late4.reason === undefined);
+check('late seq keeps high-water mark', tracker.lastSeenSeq('N0') === 6);
+const dup4 = tracker.recordSeq('N0', 4);
+check('late seq duplicate is replay',   dup4.accepted === false && dup4.reason === 'replay' && dup4.late === false);
+check('in-order result late=false',     tracker.recordSeq('N0', 7).late === false);
+check('duplicate of in-order is replay', tracker.recordSeq('N0', 6).reason === 'replay');
+check('missingSeqs after late',         JSON.stringify(tracker.missingSeqs('N0')) === '[3]');
+check('invalid seq rejected',           tracker.recordSeq('N0', 1.5).reason === 'invalid_seq' &&
+                                        tracker.recordSeq('N0', NaN).accepted === false);
+check('default reorder window',         ltx.SEQ_REORDER_WINDOW === 64);
+
+// Reorder window: seqs that slide below it are rejected (cannot prove not a replay)
+const trackerW = ltx.createSequenceTracker('plan-window', undefined, { reorderWindow: 4 });
+trackerW.recordSeq('N1', 1);
+const bigGap = trackerW.recordSeq('N1', 10);             // skips 2..9; only 7,8,9 fit the window
+check('window gap reported in full',    bigGap.gap === true && bigGap.gapSize === 8);
+check('window bounds missing markers',  JSON.stringify(trackerW.missingSeqs('N1')) === '[7,8,9]');
+check('below window rejected',          trackerW.recordSeq('N1', 5).reason === 'replay');
+check('inside window accepted late',    trackerW.recordSeq('N1', 8).late === true);
+trackerW.recordSeq('N1', 12);                           // window slides to (8,12]: 7 falls out
+check('slid-out marker rejected',       trackerW.recordSeq('N1', 7).accepted === false);
+check('slid-in gap accepted late',      trackerW.recordSeq('N1', 11).late === true);
+check('window 0 = strict monotonic',    (() => {
+  const t0 = ltx.createSequenceTracker('plan-strict', undefined, { reorderWindow: 0 });
+  t0.recordSeq('N0', 1); t0.recordSeq('N0', 3);
+  return t0.recordSeq('N0', 2).reason === 'replay';
+})());
+let badWindowThrew = false;
+try { ltx.createSequenceTracker('p', undefined, { reorderWindow: Infinity }); } catch (_) { badWindowThrew = true; }
+check('non-integer window throws',      badWindowThrew);
+
+// Persistent adapter without delete(): markers survive a restart
+const persisted = new Map();
+const adapter = { get: (k) => persisted.get(k), set: (k, v) => persisted.set(k, v) };
+const tA = ltx.createSequenceTracker('plan-persist', adapter);
+tA.recordSeq('N2', 1); tA.recordSeq('N2', 4);
+const tB = ltx.createSequenceTracker('plan-persist', adapter);   // "restart"
+check('persisted late accepted',        tB.recordSeq('N2', 3).late === true);
+check('persisted late not replayable',  tB.recordSeq('N2', 3).reason === 'replay');
+check('persisted replay rejected',      tB.recordSeq('N2', 4).reason === 'replay');
+
 // ── Security: Merkle Audit Log ────────────────────────────────────────────
 
 console.log('\n── Security: Merkle Audit Log ────────────────────────────────');
@@ -1052,6 +1097,61 @@ check('question WITHDRAWN',            ltx.reduceQuestions([q1, qWith]).byId['QS
 const orphan = mkEntry('question_response', { qid: 'QST-NOPE-1', version: 2 }, 'N0', 8, '2026-08-01T13:30:00.000Z', regHost.privateKeyB64);
 check('orphan response superseded',    ltx.reduceQuestions([orphan]).superseded.includes(orphan.entryId));
 
+// ── Decision register (§10.3): same §8.2 conflict rules as questions/actions ──
+
+console.log('\n── Registers: reduceDecisions ───────────────');
+const decHost = ltx.generateNIK({ nodeLabel: 'HOST' });
+const decMars = ltx.generateNIK({ nodeLabel: 'MARS' });
+const decCache = { N0: decHost.nik, N1: decMars.nik };
+const mkDec = (type, content, nodeId, seq, ts, priv) => ltx.createRegisterEntry(type, content, {
+  sessionId: 'LTX-DEC-TEST', nodeId, seq, timestamp: ts, privateKeyB64: priv,
+});
+const dec1 = mkDec('decision', { text: 'Proceed with EVA-3', rationale: 'Weather window', originWindow: 'W2' },
+  'N0', 1, '2026-08-01T12:00:00.000Z', decHost.privateKeyB64);
+check('decision id prefix DEC',            dec1.entryId === 'DEC-N0-1');
+check('decision entry verifies',           ltx.verifyRegisterEntry(dec1, decCache).valid === true);
+const decReg1 = ltx.reduceDecisions([dec1]);
+check('decision RECORDED',                 decReg1.byId['DEC-N0-1'].status === 'RECORDED' && decReg1.byId['DEC-N0-1'].version === 1);
+check('decision fields',                   decReg1.byId['DEC-N0-1'].text === 'Proceed with EVA-3' &&
+                                           decReg1.byId['DEC-N0-1'].recordedBy === 'N0' &&
+                                           decReg1.byId['DEC-N0-1'].rationale === 'Weather window');
+const decRev = mkDec('decision_update', { did: 'DEC-N0-1', text: 'Proceed with EVA-3 at 14:00', version: 2 },
+  'N1', 1, '2026-08-01T12:10:00.000Z', decMars.privateKeyB64);
+const decRes = mkDec('decision_update', { did: 'DEC-N0-1', status: 'RESCINDED', version: 3 },
+  'N0', 2, '2026-08-01T12:20:00.000Z', decHost.privateKeyB64);
+const decReg2 = ltx.reduceDecisions([decRes, dec1, decRev]);
+check('decision update applied',           decReg2.byId['DEC-N0-1'].text === 'Proceed with EVA-3 at 14:00');
+check('decision RESCINDED v3',             decReg2.byId['DEC-N0-1'].status === 'RESCINDED' && decReg2.byId['DEC-N0-1'].version === 3);
+check('decision editor recorded',          decReg2.byId['DEC-N0-1'].editor === 'N0');
+check('decision older update superseded',  decReg2.superseded.includes(decRev.entryId));
+// conflict: equal version, different editors → lowest nodeId wins; loser superseded
+const decA = mkDec('decision_update', { did: 'DEC-N0-1', text: 'From N0', version: 5 }, 'N0', 7, '2026-08-01T13:00:00.000Z', decHost.privateKeyB64);
+const decB = mkDec('decision_update', { did: 'DEC-N0-1', text: 'From N1', version: 5 }, 'N1', 7, '2026-08-01T13:00:00.000Z', decMars.privateKeyB64);
+const decConf1 = ltx.reduceDecisions([dec1, decB, decA]);
+const decConf2 = ltx.reduceDecisions([decA, dec1, decB]);
+check('decision tie lowest nodeId wins',   decConf1.byId['DEC-N0-1'].text === 'From N0');
+check('decision tie loser superseded',     decConf1.superseded.includes(decB.entryId) && !decConf1.superseded.includes(decA.entryId));
+check('decision reduce order-independent', JSON.stringify(decConf1) === JSON.stringify(decConf2));
+// higher version beats lower nodeId
+const decHi = mkDec('decision_update', { did: 'DEC-N0-1', text: 'N1 v6', version: 6 }, 'N1', 8, '2026-08-01T12:30:00.000Z', decMars.privateKeyB64);
+check('decision higher version wins',      ltx.reduceDecisions([dec1, decA, decHi]).byId['DEC-N0-1'].text === 'N1 v6');
+// duplicate create and orphan update are superseded, never dropped silently
+const decOrphan = mkDec('decision_update', { did: 'DEC-NOPE-1', version: 2 }, 'N1', 9, '2026-08-01T12:40:00.000Z', decMars.privateKeyB64);
+const decDup = ltx.createRegisterEntry('decision', { text: 'dup' }, {
+  sessionId: 'LTX-DEC-TEST', nodeId: 'N1', seq: 10, timestamp: '2026-08-01T12:50:00.000Z',
+  privateKeyB64: decMars.privateKeyB64, entryId: 'DEC-N0-1',
+});
+const decReg3 = ltx.reduceDecisions([dec1, decOrphan, decDup]);
+check('decision orphan update superseded', decReg3.superseded.includes('DEC-N1-9'));
+check('decision duplicate create ignored', decReg3.byId['DEC-N0-1'].text === 'Proceed with EVA-3' && decReg3.byId['DEC-N0-1'].recordedBy === 'N0');
+check('decision reducer ignores others',   Object.keys(ltx.reduceDecisions([dec1, decRev]).byId).length === 1 &&
+                                           Object.keys(ltx.reduceActions([dec1]).byId).length === 0);
+// merge_snapshot carries the decision register
+const decSnap = ltx.runMergeSegment([dec1], [decRev], decCache, {
+  sessionId: 'LTX-DEC-TEST', nodeId: 'N0', seq: 99, timestamp: '2026-08-01T15:00:00.000Z', privateKeyB64: decHost.privateKeyB64,
+});
+check('snapshot decisionRegister',         decSnap.snapshot.content.decisionRegister['DEC-N0-1'].version === 2);
+
 // seeds
 const seeds = ltx.emitQuestionSeeds(
   [{ text: 'Q one' }, { text: 'Q two' }],
@@ -1371,6 +1471,47 @@ const icsShift = icsMars.match(/DTSTART:(\d{8}T\d{6}Z)/g) || [];
 check('viewer ICS has DTSTARTs',       icsShift.length === confPlan.segments.length);
 const icsV3 = ltx.generateICS(confV3, { viewerNodeId: 'N1' });
 check('viewer ICS pair lines',         icsV3.includes('LTX-DELAY;PAIR=N1|N3:ONEWAY-ASSUMED=700'));
+
+// ── Conformance: golden planId vectors (spec/golden/plan-ids.json) ─────────
+
+console.log('\n── golden planId vectors ────────────────────');
+const golden = require('../../../spec/golden/plan-ids.json');
+check('golden vectors present',        golden.vectors.length >= 9);
+for (const gv of golden.vectors) {
+  check(`golden planId ${gv.name}`,    ltx.makePlanId(gv.plan) === gv.planId);
+  if (gv.planHash !== undefined) {
+    check(`golden planHash ${gv.name}`, ltx.planHash(gv.plan) === gv.planHash);
+  }
+}
+const gvByName = Object.fromEntries(golden.vectors.map(gv => [gv.name, gv]));
+
+// ── Plan validation: reserved streams / branching (§3.5, §7) ──────────────
+
+console.log('\n── validatePlan / reserved fields ───────────');
+const codesOf = (r) => r.errors.map(e => e.code);
+for (const gv of golden.vectors) {
+  check(`validatePlan accepts golden ${gv.name}`, ltx.validatePlan(gv.plan).valid === true);
+}
+const vpBase = gvByName['v3-upgrade-delays'].plan;
+const vpV2 = gvByName['v2-freeze-check'].plan;
+check('validatePlan v3 empty streams ok',  ltx.validatePlan({ ...vpBase, streams: [] }).valid === true);
+const vpStreams = ltx.validatePlan({ ...vpBase, streams: [{ id: 'S1' }] });
+check('validatePlan non-empty streams',    vpStreams.valid === false && codesOf(vpStreams).includes('reserved_streams'));
+check('validatePlan segment stream',       codesOf(ltx.validatePlan({ ...vpBase, segments: [{ type: 'TX', q: 1, stream: 'S1' }] })).includes('reserved_streams'));
+check('validatePlan branches',             codesOf(ltx.validatePlan({ ...vpBase, branches: [] })).includes('reserved_branching'));
+check('validatePlan segment branch',       codesOf(ltx.validatePlan({ ...vpBase, segments: [{ type: 'CAUCUS', q: 1, branch: 'B1' }] })).includes('reserved_branching'));
+check('validatePlan v2 streams is v3 field', codesOf(ltx.validatePlan({ ...vpV2, streams: [] })).includes('v3_field_in_v2'));
+check('validatePlan host not first',       codesOf(ltx.validatePlan({ ...vpV2, nodes: vpV2.nodes.slice().reverse() })).includes('invalid_host'));
+check('validatePlan unsorted delays key',  codesOf(ltx.validatePlan({ ...vpBase, delays: { 'N1|N0': 860 } })).includes('invalid_delays'));
+check('validatePlan unknown speaker',      codesOf(ltx.validatePlan({ ...vpV2, segments: [{ type: 'TX', q: 1, speaker: 'N9' }] })).includes('unknown_speaker'));
+const throwsCode = (fn) => { try { fn(); return null; } catch (e) { return e.code; } };
+check('upgradePlanToV3 rejects streams',   throwsCode(() => ltx.upgradePlanToV3(vpV2, { streams: [{ id: 'S1' }] })) === 'reserved_streams');
+check('upgradePlanToV3 allows empty',      throwsCode(() => ltx.upgradePlanToV3(vpV2, { streams: [] })) === null);
+check('createSession rejects branching',   throwsCode(() => ltx.createSession({ ...vpBase, branching: {} }, 'id')) === 'reserved_branching');
+const vpNik = ltx.generateNIK({ nodeLabel: 'Earth HQ' });
+const vpSigned = ltx.signPlan(vpBase, vpNik.privateKeyB64);
+check('createAmendment rejects streams',   throwsCode(() => ltx.createAmendment(vpSigned, { streams: [1] }, vpNik.privateKeyB64)) === 'reserved_streams');
+check('createAmendment ok without',        throwsCode(() => ltx.createAmendment(vpSigned, { title: 'x' }, vpNik.privateKeyB64)) === null);
 
 // ── Summary ────────────────────────────────────────────────────────────────
 

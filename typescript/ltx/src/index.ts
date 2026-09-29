@@ -70,6 +70,7 @@ export {
   orderEntries,
   reduceQuestions,
   reduceActions,
+  reduceDecisions,
   emitQuestionSeeds,
 } from './registers.js';
 export type {
@@ -79,6 +80,7 @@ export type {
   EntryVerifyResult,
   QuestionState,
   ActionState,
+  DecisionState,
   RegisterReduction,
 } from './registers.js';
 
@@ -94,6 +96,10 @@ export type {
 } from './merge.js';
 
 export { createPlan, upgradeConfig, upgradePlanToV3 } from './plan.js';
+export { validatePlan } from './validate.js';
+export type {
+  PlanValidationCode, PlanValidationError, PlanValidationResult, ReservedFieldError,
+} from './validate.js';
 export {
   computeSegments, computeSegmentsFor, pairDelay, totalMin, makePlanId,
 } from './segments.js';
@@ -131,6 +137,7 @@ export type {
 
 export {
   createSequenceTracker,
+  SEQ_REORDER_WINDOW,
   createGlobalSequenceTracker,
   checkIssuedAt,
   ISSUED_AT_MAX_AGE_DAYS,
@@ -140,6 +147,7 @@ export {
 export type {
   SeqCheckResult,
   SequenceTrackerStorage,
+  SequenceTrackerOptions,
   SequenceTracker,
   GlobalSequenceTracker,
 } from './sequence.js';

@@ -18,6 +18,12 @@ export interface SeqCheckResult {
   accepted: boolean;
   gap: boolean;
   gapSize: number;
+  /**
+   * Session-scope trackers only: true when seq is below the high-water mark,
+   * inside the reorder window and never seen before (accepted late arrival).
+   */
+  late?: boolean;
+  /** 'replay' | 'invalid_seq' | 'missing_seq' when not accepted. */
   reason?: string;
 }
 
@@ -25,14 +31,30 @@ export interface SeqCheckResult {
 export interface SequenceTrackerStorage {
   get(key: string): number | undefined;
   set(key: string, value: number): void;
+  /** Optional; when absent, cleared entries are overwritten with 0. */
+  delete?(key: string): void;
 }
+
+/** Options for createSequenceTracker(). */
+export interface SequenceTrackerOptions {
+  /** Reorder window size (default SEQ_REORDER_WINDOW); 0 disables late acceptance. */
+  reorderWindow?: number;
+}
+
+/**
+ * Default reorder window for inbound seqs (LTX-SECURITY.md §11.2): a seq up to
+ * this far below the highest seen, never seen before, is accepted as late.
+ */
+export const SEQ_REORDER_WINDOW = 64;
 
 /** Sequence tracker instance returned by createSequenceTracker(). */
 export interface SequenceTracker {
   /** Increment and return the next outbound sequence number for this node. */
   nextSeq(nodeId: string): number;
-  /** Record an inbound seq; returns acceptance result. */
+  /** Record an inbound seq; returns acceptance result (late / replay / gap). */
   recordSeq(nodeId: string, seq: number): SeqCheckResult;
+  /** Seqs below the high-water mark still missing inside the reorder window, ascending. */
+  missingSeqs(nodeId: string): number[];
   /** Last accepted inbound seq for nodeId (0 if none seen). */
   lastSeenSeq(nodeId: string): number;
   /** Current outbound seq counter for nodeId (0 if none sent). */
@@ -48,21 +70,41 @@ export interface SequenceTracker {
  * Tracks both outbound (nextSeq) and inbound (recordSeq) sequence numbers
  * per nodeId, enabling monotonic-increment enforcement and replay rejection.
  *
+ * Inbound seqs are checked against a sliding reorder window below the
+ * highest seq seen (the high-water mark). Seqs skipped by a gap are
+ * remembered while they remain inside the window, so a delayed but genuine
+ * bundle that arrives after a higher seq is accepted and flagged late, while
+ * an exact duplicate of an already-accepted (nodeId, seq) is rejected as a
+ * replay. Seqs below the window are rejected as replays. Missing-seq markers
+ * live in the storage adapter, so the window survives restarts.
+ *
  * @param planId   Plan identifier used to namespace storage keys
- * @param storage  Optional storage adapter with get(key)/set(key,val)
+ * @param storage  Optional storage adapter with get(key)/set(key,val)[/delete(key)]
+ * @param options  { reorderWindow } (default SEQ_REORDER_WINDOW)
  * @returns        Sequence tracker instance
  */
 export function createSequenceTracker(
   planId: string,
   storage?: SequenceTrackerStorage,
+  options: SequenceTrackerOptions = {},
 ): SequenceTracker {
   const mem = new Map<string, number>();
   const store: SequenceTrackerStorage = storage ?? {
     get: (k: string) => mem.get(k),
     set: (k: string, v: number) => { mem.set(k, v); },
+    delete: (k: string) => { mem.delete(k); },
   };
+  const reorderWindow = options.reorderWindow ?? SEQ_REORDER_WINDOW;
+  if (!Number.isSafeInteger(reorderWindow) || reorderWindow < 0) {
+    throw new Error('createSequenceTracker: reorderWindow must be a non-negative integer');
+  }
 
   const prefix = `ltx_seq_${planId}_`;
+  const rxKey = (nodeId: string) => prefix + nodeId + '_rx';
+  const missKey = (nodeId: string, seq: number) => `${rxKey(nodeId)}_miss_${seq}`;
+  const clear = (k: string) => {
+    if (store.delete) store.delete(k); else store.set(k, 0);
+  };
 
   return {
     nextSeq(nodeId: string): number {
@@ -74,17 +116,42 @@ export function createSequenceTracker(
     },
 
     recordSeq(nodeId: string, seq: number): SeqCheckResult {
-      const key = prefix + nodeId + '_rx';
+      if (!Number.isSafeInteger(seq)) {
+        return { accepted: false, gap: false, gapSize: 0, late: false, reason: 'invalid_seq' };
+      }
+      const key = rxKey(nodeId);
       const last = store.get(key) ?? 0;
 
       if (seq <= last) {
-        return { accepted: false, gap: false, gapSize: 0, reason: 'replay' };
+        const mk = missKey(nodeId, seq);
+        if (seq > last - reorderWindow && store.get(mk) === 1) {
+          clear(mk);
+          return { accepted: true, gap: false, gapSize: 0, late: true };
+        }
+        return { accepted: false, gap: false, gapSize: 0, late: false, reason: 'replay' };
       }
 
       const gap = seq > last + 1;
       const gapSize = gap ? seq - last - 1 : 0;
+      // Remember skipped seqs that stay inside the new window (seq - W, seq].
+      for (let s = Math.max(last + 1, seq - reorderWindow + 1); s < seq; s++) {
+        store.set(missKey(nodeId, s), 1);
+      }
+      // Forget markers that slide out of the window.
+      for (let s = Math.max(1, last - reorderWindow + 1); s <= Math.min(last, seq - reorderWindow); s++) {
+        if (store.get(missKey(nodeId, s)) === 1) clear(missKey(nodeId, s));
+      }
       store.set(key, seq);
-      return { accepted: true, gap, gapSize };
+      return { accepted: true, gap, gapSize, late: false };
+    },
+
+    missingSeqs(nodeId: string): number[] {
+      const last = store.get(rxKey(nodeId)) ?? 0;
+      const out: number[] = [];
+      for (let s = Math.max(1, last - reorderWindow + 1); s < last; s++) {
+        if (store.get(missKey(nodeId, s)) === 1) out.push(s);
+      }
+      return out;
     },
 
     lastSeenSeq(nodeId: string): number {

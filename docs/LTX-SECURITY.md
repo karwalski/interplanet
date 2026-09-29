@@ -850,9 +850,10 @@ dropped.
 | `amendment` | `AMD-` | Each accepting node | new planId, planVersion, prevPlanHash (§7.6) |
 | `state_transition` | `STA-` | Local session engine | from-state, to-state, triggering event (LTX-SPECIFICATION §5.2) |
 | `merge_snapshot` | `MRG-` | HOST | merged tree head, resolved register states (LTX-SPECIFICATION §8.4) |
-| `decision` | `DEC-` | HOST or steward | recorded decision text |
+| `decision` | `DEC-` | HOST or steward | recorded decision text, rationale, originWindow (LTX-SPECIFICATION §10.3) |
+| `decision_update` | `DEC-` (references did) | HOST or steward | revised text/rationale or `status: RESCINDED`, incremented object version |
 
-Register state (questions, actions) is always a deterministic reduction over the
+Register state (questions, actions, decisions) is always a deterministic reduction over the
 ordered, verified log — LTX-SPECIFICATION §8.2. Signatures make each register entry
 individually attributable; the Merkle tree makes the register history tamper-evident
 as a whole. Entries losing a §8.2 conflict resolution remain in the log flagged
@@ -945,8 +946,15 @@ replayed before a later one. Global-scope bundles carry:
 
 Receiving nodes MUST maintain a freshness window per scope key (`(sessionRootPlanId,
 nodeId)` or `(senderNodeId, msgType)`):
-- Track the highest sequence number seen
-- Reject (and log) any bundle whose sequence number is not greater than the highest seen
+- Track the highest sequence number seen (the high-water mark) and, for session
+  scope, which sequence numbers inside a reorder window of W below it
+  (RECOMMENDED W = 64) have not yet been seen
+- Reject (and log) any bundle whose sequence number was already accepted
+  (exact duplicate), or is at or below the high-water mark minus W
+- Accept a session-scope bundle whose sequence number is below the high-water
+  mark, inside the window and never seen, and flag it `late`
+  (LTX-SPECIFICATION.md §A.5, §8.5)
+- Global-scope bundles keep strict monotonic acceptance (W = 0)
 - For global-scope bundles, additionally reject (and log) any bundle whose
   `issuedAt` exceeds the max-age window
 - The freshness window MUST be persisted across restarts
@@ -955,7 +963,10 @@ nodeId)` or `(senderNodeId, msgType)`):
 
 Gaps (seq jumped forward) indicate potentially missing bundles; request retransmission
 in LTX-Live mode, flag in the session log in LTX-Relay/Async mode. Gaps are
-distinguished from replays (duplicate or backward seq = replay attempt).
+distinguished from replays (duplicate seq, or seq below the reorder window =
+replay attempt) and from late arrivals (a skipped seq that arrives later,
+inside the window, is accepted and closes the gap). The reference tracker's
+`missingSeqs(nodeId)` lists the gap seqs still outstanding in the window.
 
 ---
 
