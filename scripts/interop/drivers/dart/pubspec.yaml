@@ -1,0 +1,8 @@
+name: ltx_interop_driver
+description: Interop driver for dart/ltx (scripts/interop/run.js).
+publish_to: none
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+dependencies:
+  interplanet_ltx:
+    path: ../../../../dart/ltx

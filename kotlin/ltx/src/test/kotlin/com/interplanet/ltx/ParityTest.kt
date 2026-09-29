@@ -62,6 +62,17 @@ fun runParityTests() {
         mode = "LTX", start = "2026-03-15T14:00:00.000Z")
     check("typed createPlan defaults match golden (nodes-first)",
         InterplanetLTX.makePlanId(typedDefault) == byName["v2-key-order-sensitive"]!!["planId"])
+    // Typed LtxPlan v2 planId hashes UTF-16 code units (issue #32): a
+    // non-ASCII title must match JS makePlanId on the encodeHash wire JSON.
+    val uni = InterplanetLTX.createPlan(
+        title = "Réunion Mars 🚀", start = "2026-03-15T14:00:00Z",
+        nodes = listOf(LtxNode("N0", "Earth HQ", "HOST", 0, "earth"), LtxNode("N1", "Mars Hab-01", "PARTICIPANT", 840, "mars")),
+        segments = listOf(LtxSegmentTemplate("TX", 2), LtxSegmentTemplate("RX", 2)),
+        mode = "async")  // pinned: the expected id below was computed by the JS SDK for this wire JSON
+    val uniWire = String(java.util.Base64.getUrlDecoder().decode(InterplanetLTX.encodeHash(uni).removePrefix("#l=")), Charsets.UTF_8)
+    check("typed LtxPlan non-ASCII planId matches JS", InterplanetLTX.makePlanId(uni) == "LTX-20260315-EARTHHQ-MARS-v2-91f00396")
+    check("typed LtxPlan planId equals planId of its wire JSON",
+        InterplanetLTX.makePlanId(uni) == LtxPlans.makePlanId(asMap(LtxJson.parse(uniWire))))
     // JSON.stringify escaping and number formatting
     check("stringify escapes control chars", LtxJson.stringify("a\u0001\n\"") == "\"a\\u0001\\n\\\"\"")
     check("stringify lone surrogate escaped", LtxJson.stringify("\ud83d") == "\"\\ud83d\"")

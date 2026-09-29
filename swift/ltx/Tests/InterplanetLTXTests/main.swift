@@ -902,6 +902,28 @@ check("mergeLogs rejects unverifiable entries",
       decMergeRej.entries.count == 1 && decMergeRej.rejected.count == 1
           && decMergeRej.rejected[0].reason == "key_not_in_cache")
 
+// ── encodeHash wire JSON of a v3 plan carries its v3 fields (issue #32) ────
+
+var wv3 = InterplanetLTX.createPlan(title: "Réunion Mars 🚀", start: "2026-03-15T14:00:00.000Z", delayS: 840)
+wv3.v = 3
+wv3.planVersion = 1
+wv3.delays = ["N0|N1": 842]
+func hashJSON(_ h: String) -> String {
+    var s = String(h.dropFirst(3)).replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+    while s.count % 4 != 0 { s += "=" }
+    return String(data: Data(base64Encoded: s)!, encoding: .utf8)!
+}
+let wv3JSON = hashJSON(InterplanetLTX.encodeHash(wv3))
+check("v3 wire JSON carries delays and planVersion",
+      wv3JSON.contains("\"delays\":{\"N0|N1\":842}") && wv3JSON.contains("\"planVersion\":1"))
+// JS makePlanId(JSON.parse(wire)) for this plan.
+check("v3 typed planId matches JS", InterplanetLTX.makePlanID(wv3) == "LTX-20260315-EARTHHQ-MARS-v3-4192925c")
+check("v3 planId of wire JSON matches typed planId",
+      InterplanetLTX.makePlanID(json: wv3JSON) == InterplanetLTX.makePlanID(wv3))
+wv3.v = 2; wv3.planVersion = nil; wv3.delays = nil
+let wv2JSON = hashJSON(InterplanetLTX.encodeHash(wv3))
+check("v2 wire JSON has no v3 keys", !wv2JSON.contains("delays") && !wv2JSON.contains("planVersion"))
+
 // ── Summary ────────────────────────────────────────────────────────────────
 
 print("\n\(passed) passed  \(failed) failed")

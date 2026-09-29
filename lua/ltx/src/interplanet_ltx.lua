@@ -556,11 +556,25 @@ end
 
 -- ── Hash encoding ────────────────────────────────────────────────────────────
 
+--- The JSON a plan travels as, in the key order make_plan_id hashes: an
+-- insertion-ordered plan (src/json.lua) as JSON.stringify emits it, a plain
+-- v2 table in the schema order of plan_schema_json, and a v3 table with
+-- sorted keys (its planId hashes canonical JSON, so order does not matter).
+-- Serialising a plain v2 table with sorted keys would transmit a different
+-- key order than the frozen v2 hash covers (issue #32).
+function M.wire_json(cfg)
+  local json = require("src.json")
+  if json.key_order(cfg) ~= nil then return json.stringify(cfg) end
+  local c = M.upgrade_config(cfg)
+  if (c.v or 2) >= 3 then return json_encode(c) end
+  return M.plan_schema_json(c)
+end
+
 --- Encode a plan config to a URL hash fragment (#l=…).
 -- @param cfg table
 -- @return string  e.g. "#l=eyJ2IjoyLC4uLn0"
 function M.encode_hash(cfg)
-  return "#l=" .. b64encode(json_encode(cfg))
+  return "#l=" .. b64encode(M.wire_json(cfg))
 end
 
 --- Decode a plan config from a URL hash fragment.
@@ -581,7 +595,7 @@ end
 -- @return table  Array of { node_id, name, role, url }
 function M.build_node_urls(cfg, base_url)
   local c    = M.upgrade_config(cfg)
-  local hash = "#l=" .. b64encode(json_encode(c))
+  local hash = M.encode_hash(c)
   local base = (base_url or ""):gsub("#.*$", ""):gsub("%?.*$", "")
   local result = {}
   for _, node in ipairs(c.nodes or {}) do

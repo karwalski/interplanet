@@ -126,5 +126,16 @@ dm3 <- build_delay_matrix(upgrade_plan_to_v3(dm_plan, list(delays = list(`N1|N2`
 check(dm_get(dm3, "N1", "N2") == 2900 && dm_get(dm3, "N2", "N1") == 2900, "delay matrix v3 entry authoritative")
 check(dm_get(dm3, "N1", "N3") == 1240, "delay matrix v3 fallback sum")
 
+# ── Wire JSON = hashed JSON (issue #32) ───────────────────────────────────────
+# encode_hash must transmit what make_plan_id hashes, v3 fields included, so a
+# receiver computing the planId from the #l= wire JSON gets the same id.
+wire_of <- function(p) b64url_decode(sub("^#l=", "", encode_hash(p)))
+wp <- create_plan(title = "Réunion Mars \U0001F680", start_iso = "2026-03-15T14:00:00Z", delay = 840)
+check(make_plan_id(parse_json(wire_of(wp))) == make_plan_id(wp), "v2 planId of wire JSON equals make_plan_id")
+wv3 <- upgrade_plan_to_v3(wp, list(delays = list(`N0|N1` = 842L)))
+check(grepl('"delays":{"N0|N1":842}', wire_of(wv3), fixed = TRUE), "v3 wire JSON carries delays")
+check(make_plan_id(wv3) == "LTX-20260315-EARTHHQ-MARS-v3-cd55a366", "v3 planId matches JS")
+check(make_plan_id(parse_json(wire_of(wv3))) == make_plan_id(wv3), "v3 planId of wire JSON equals make_plan_id")
+
 cat(sprintf("\n%d passed, %d failed\n", pass, fail))
 if (fail > 0L) quit(status = 1L)

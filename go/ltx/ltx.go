@@ -655,6 +655,10 @@ type planJSONOrdered struct {
 	Mode     string            `json:"mode"`
 	Nodes    []nodeJSONOrdered `json:"nodes"`
 	Segments []segJSONOrdered  `json:"segments"`
+	// v3 extensions (§4.4): omitted when unset, so v2 wire bytes are unchanged.
+	Delays       map[string]int `json:"delays,omitempty"`
+	PlanVersion  int            `json:"planVersion,omitempty"`
+	PrevPlanHash string         `json:"prevPlanHash,omitempty"`
 }
 
 type nodeJSONOrdered struct {
@@ -673,7 +677,7 @@ type segJSONOrdered struct {
 }
 
 // planToJSON serialises a plan to compact JSON with exact key order:
-// v, title, start, quantum, mode, nodes, segments
+// v, title, start, quantum, mode, nodes, segments (then any v3 fields)
 func planToJSON(plan LtxPlan) ([]byte, error) {
 	nodes := make([]nodeJSONOrdered, 0, len(plan.Nodes))
 	for _, n := range plan.Nodes {
@@ -697,6 +701,11 @@ func planToJSON(plan LtxPlan) ([]byte, error) {
 		Mode:     plan.Mode,
 		Nodes:    nodes,
 		Segments: segs,
+		// Carry the v3 fields so a v3 plan's wire JSON hashes to the same
+		// planId as MakePlanID (which hashes the full typed plan).
+		Delays:       plan.Delays,
+		PlanVersion:  plan.PlanVersion,
+		PrevPlanHash: plan.PrevPlanHash,
 	}
 	buf := &bytes.Buffer{}
 	enc := json.NewEncoder(buf)

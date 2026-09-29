@@ -416,10 +416,13 @@ object InterplanetLTX {
     private fun q(s: String) = "\"${s.replace("\\", "\\\\").replace("\"", "\\\"")}\""
 
     private fun makePlanHashHex(plan: LtxPlan): String {
+        // FROZEN v2 hash (§4.3): imul31 over the UTF-16 code units of the
+        // JSON, as JS charCodeAt does (not over UTF-8 bytes, which diverges
+        // for any non-ASCII title or name).
         val json = planToJson(plan)
         var h = 0L
-        for (b in json.toByteArray()) {
-            h = (h * 31L + (b.toLong() and 0xFFL)) and 0xFFFFFFFFL
+        for (c in json) {
+            h = (h * 31L + c.code.toLong()) and 0xFFFFFFFFL
         }
         return h.toString(16).padStart(8, '0')
     }

@@ -6,6 +6,7 @@ package ltx_test
 // decisionRegister, and the sequence-tracker reorder window.
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -368,4 +369,39 @@ func TestSequenceReorderWindow(t *testing.T) {
 	c.check("storage key layout", persisted["ltx_seq_plan-persist_N2_rx"] == 4 && persisted["ltx_seq_plan-persist_N2_rx_miss_2"] == 1 &&
 		persisted["ltx_seq_plan-persist_N2_rx_miss_3"] == 0)
 	c.check("bundle helpers", strings.HasPrefix(fmt.Sprint(ltx.AddSeq(map[string]interface{}{}, tA, "N2")["seq"]), "1"))
+}
+
+// TestEncodeHashV3WireMatchesPlanID: the #l= wire JSON of a typed v3 plan must
+// carry its v3 fields, so a receiver hashing the wire JSON (JS makePlanId)
+// derives the same planId as MakePlanID (scripts/interop, issue #32).
+func TestEncodeHashV3WireMatchesPlanID(t *testing.T) {
+	wireOf := func(p ltx.LtxPlan) []byte {
+		b, err := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(ltx.EncodeHash(p), "#l="))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return b
+	}
+	p := ltx.CreatePlan(ltx.CreatePlanOpts{Title: "Réunion Mars 🚀", Start: "2026-03-15T14:00:00.000Z", DelayS: 840})
+	p.V = 3
+	p.PlanVersion = 1
+	p.Delays = map[string]int{"N0|N1": 842}
+	wire := wireOf(p)
+	if !strings.Contains(string(wire), `"delays":{"N0|N1":842}`) || !strings.Contains(string(wire), `"planVersion":1`) {
+		t.Fatalf("v3 fields missing from wire JSON: %s", wire)
+	}
+	fromWire, err := ltx.MakePlanIDFromJSON(wire)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// JS makePlanId(JSON.parse(wire)) for this plan.
+	const want = "LTX-20260315-EARTHHQ-MARS-v3-4192925c"
+	if got := ltx.MakePlanID(p); got != fromWire || got != want {
+		t.Fatalf("MakePlanID %s, planId of wire JSON %s, JS %s", got, fromWire, want)
+	}
+	// A v2 plan's wire JSON is unchanged: no v3 keys.
+	p.V, p.PlanVersion, p.Delays = 2, 0, nil
+	if w := string(wireOf(p)); strings.Contains(w, "delays") || strings.Contains(w, "planVersion") {
+		t.Fatalf("v2 wire JSON gained v3 keys: %s", w)
+	}
 }

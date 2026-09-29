@@ -3154,5 +3154,40 @@ class TestCanonicalJsonJsParity(unittest.TestCase):
                          '{"d":840,"e":1e+21,"x":0.1}')
 
 
+
+class TestCreatePlanInterop(unittest.TestCase):
+    """create_plan keeps speaker/label and the planId matches the JS SDK on
+    the encode_hash wire JSON (scripts/interop, issue #32)."""
+
+    def setUp(self):
+        self.plan = create_plan(
+            title='R\u00e9union Mars \U0001F680', start='2026-03-15T14:00:00.000Z',
+            quantum=3, mode='LTX-ASYNC',
+            nodes=[
+                {'id': 'N0', 'name': 'Earth HQ', 'role': 'HOST', 'delay': 0, 'location': 'earth'},
+                {'id': 'N1', 'name': 'Mars Hab-01', 'role': 'PARTICIPANT', 'delay': 840, 'location': 'mars'},
+                {'id': 'N2', 'name': 'Luna Gateway', 'role': 'PARTICIPANT', 'delay': 2, 'location': 'moon'},
+            ],
+            segments=[
+                {'type': 'PLAN_CONFIRM', 'q': 2},
+                {'type': 'TX', 'q': 3, 'speaker': 'N0', 'label': 'Ouverture: \u00e9tat de la mission'},
+                {'type': 'RX', 'q': 3},
+                {'type': 'TX', 'q': 2, 'speaker': 'N1', 'label': 'R\u00e9ponse \U0001F534'},
+                {'type': 'BUFFER', 'q': 1},
+            ])
+
+    def test_speaker_label_kept(self):
+        self.assertEqual(self.plan.segments[3].speaker, 'N1')
+        self.assertEqual(self.plan.segments[3].label, 'R\u00e9ponse \U0001F534')
+
+    def test_plan_id_matches_js_on_wire(self):
+        # JS makePlanId(JSON.parse(wire)) for this plan (nodes before segments).
+        want = 'LTX-20260315-EARTHHQ-MARS-LUNA-v2-dc3f1f4e'
+        self.assertEqual(make_plan_id(self.plan), want)
+        from interplanet_ltx._encoding import b64dec
+        wire = json.loads(b64dec(encode_hash(self.plan)[3:]))
+        self.assertEqual(make_plan_id(wire), want)
+
+
 if __name__ == '__main__':
     unittest.main()

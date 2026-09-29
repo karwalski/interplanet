@@ -1,0 +1,11 @@
+# Driver build outputs
+drivers/*/build/
+drivers/rust/Cargo.lock
+drivers/*/.gradle/
+drivers/*/.kotlin/
+drivers/*/project/
+drivers/*/target/
+drivers/dart/.dart_tool/
+drivers/dart/pubspec.lock
+drivers/swift/Package.resolved
+drivers/csharp/obj/

@@ -190,5 +190,25 @@ local dm3 = LTX.build_delay_matrix(V11.upgrade_plan_to_v3(dm_plan, { delays = { 
 ok(dm_get(dm3, 'N1', 'N2') == 2900 and dm_get(dm3, 'N2', 'N1') == 2900, 'delay matrix v3 entry authoritative')
 ok(dm_get(dm3, 'N1', 'N3') == 1240, 'delay matrix v3 fallback sum')
 
+-- ── Wire order = hash order (issue #32) ─────────────────────────────────────
+-- encode_hash must transmit a plain v2 table in the key order make_plan_id
+-- hashes, so a receiver hashing the wire JSON derives the same planId.
+local wp = LTX.create_plan({
+  title = 'Réunion Mars 🚀', start = '2026-03-15T14:00:00Z',
+  nodes = {
+    { id = 'N0', name = 'Earth HQ', role = 'HOST', delay = 0, location = 'earth' },
+    { id = 'N1', name = 'Mars Hab-01', role = 'PARTICIPANT', delay = 840, location = 'mars' },
+  },
+  segments = { { type = 'TX', q = 2, speaker = 'N0', label = 'Ouverture' }, { type = 'RX', q = 2 } },
+})
+local wire = LTX.wire_json(wp)
+ok(wire:sub(1, 12) == '{"v":2,"titl', 'wire JSON in schema key order')
+ok(LTX.make_plan_id(wp) == 'LTX-20260315-EARTHHQ-MARS-v2-4987df52', 'typed v2 planId matches JS')
+ok(LTX.plan_id_from_json(wire) == LTX.make_plan_id(wp), 'planId of wire JSON equals make_plan_id')
+local decoded = LTX.decode_hash(LTX.encode_hash(wp))
+ok(decoded and decoded.segments[1].label == 'Ouverture', 'encode_hash round-trips')
+local wv3 = V11.upgrade_plan_to_v3(wp, { delays = { ['N0|N1'] = 842 } })
+ok(LTX.plan_id_from_json(LTX.wire_json(wv3)) == LTX.make_plan_id(wv3), 'v3 planId of wire JSON equals make_plan_id')
+
 print(string.format('\n%d passed, %d failed', passed, failed))
 if failed > 0 then os.exit(1) end

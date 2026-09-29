@@ -1,0 +1,11 @@
+[package]
+name = "ltx-interop-driver"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+interplanet-ltx = { path = "../../../../rust/ltx" }
+base64 = "0.21"
+
+[workspace]

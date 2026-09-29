@@ -608,7 +608,18 @@ public enum InterplanetLTX {
             if let lb = s.label   { out += ",\"label\":\"\(escapeJSON(lb))\"" }
             return out + "}"
         }.joined(separator: ",")
-        return "{\"v\":\(plan.v),\"title\":\"\(escapeJSON(plan.title))\",\"start\":\"\(escapeJSON(plan.start))\",\"quantum\":\(plan.quantum),\"mode\":\"\(escapeJSON(plan.mode))\",\"nodes\":[\(nodesJSON)],\"segments\":[\(segsJSON)]}"
+        // v3 fields (§4.4), only when set so v2 bytes are unchanged; without
+        // them a v3 plan's wire JSON hashes to a different planId than
+        // makePlanID (which hashes planToDict).
+        var v3 = ""
+        if let delays = plan.delays {
+            v3 += ",\"delays\":{" + delays.keys.sorted().map { k in
+                "\"\(escapeJSON(k))\":\(delays[k]!)"
+            }.joined(separator: ",") + "}"
+        }
+        if let pv = plan.planVersion { v3 += ",\"planVersion\":\(pv)" }
+        if let pph = plan.prevPlanHash { v3 += ",\"prevPlanHash\":\"\(escapeJSON(pph))\"" }
+        return "{\"v\":\(plan.v),\"title\":\"\(escapeJSON(plan.title))\",\"start\":\"\(escapeJSON(plan.start))\",\"quantum\":\(plan.quantum),\"mode\":\"\(escapeJSON(plan.mode))\",\"nodes\":[\(nodesJSON)],\"segments\":[\(segsJSON)]\(v3)}"
     }
 
     /// Dictionary form of a plan for canonical-JSON hashing (v3 planId,
