@@ -29,10 +29,12 @@ async function openIndex(h, site, suffix, opts) {
 /** Text of a card's time element, with the expected planet time before and after reading it. */
 async function planetTimeCheck(page, id, planet, tz) {
   return page.evaluate(({ id, planet, tz }) => {
+    // The card refreshes on a timer: accept the value from up to 3 s ago.
+    const lag = PlanetTime.getPlanetTime(planet, new Date(getNow().getTime() - 3000), tz).timeString;
     const before = PlanetTime.getPlanetTime(planet, getNow(), tz).timeString;
     const shown = document.getElementById('time-' + id).textContent.trim();
     const after = PlanetTime.getPlanetTime(planet, getNow(), tz).timeString;
-    return { shown, ok: shown === before || shown === after, before, after };
+    return { shown, ok: shown === before || shown === after || shown === lag, before, after };
   }, { id, planet, tz });
 }
 
@@ -73,7 +75,8 @@ module.exports = async function (h, site) {
         const f = (d) => new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(d);
         const before = f(getNow());
         const shown = document.getElementById('time-' + id).textContent.trim();
-        return { shown, ok: shown === before || shown === f(getNow()), before };
+        const lag = f(new Date(getNow().getTime() - 3000));   // timer refresh lag
+        return { shown, ok: shown === before || shown === f(getNow()) || shown === lag, before };
       }, c);
       assert(r.ok, `${c.tz}: shown ${r.shown}, expected ${r.before}`);
     }

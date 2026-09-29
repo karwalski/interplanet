@@ -143,10 +143,10 @@ module.exports = async function (h, site) {
     await page.waitForTimeout(300);
     eq(await page.$$eval('.clock-card', (els) => els.map((e) => e.dataset.planet)), ['mars', 'saturn'], 'cards');
     assert(await page.evaluate(() => document.documentElement.classList.contains('light-mode')), 'light');
-    const ok = await page.evaluate(() => Array.from(document.querySelectorAll('.clock-card')).every((c) => {
+    const ok = await page.evaluate(() => { renderAll(); return Array.from(document.querySelectorAll('.clock-card')).every((c) => {
       const f = () => PlanetTime.getPlanetTime(c.dataset.planet, new Date(), 0).timeStringFull;
       const a = f(); const s = c.querySelector('.time-display').textContent; return s === a || s === f();
-    }));
+    }); });
     assert(ok, 'times match');
     h.clean(page);
     await page.ctx.close();
