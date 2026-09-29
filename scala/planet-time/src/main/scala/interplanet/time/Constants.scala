@@ -161,7 +161,7 @@ val ORB_ELEMS: Map[Planet, OrbElem] = Map(
   Planet.Mars    -> OrbElem(a = 1.52366,  e0 = 0.09341, om0 = 336.0600, l0 = 355.4330, dL =  19141.6964),
   Planet.Jupiter -> OrbElem(a = 5.20336,  e0 = 0.04849, om0 =  14.3320, l0 =  34.3515, dL =   3036.3027),
   Planet.Saturn  -> OrbElem(a = 9.53707,  e0 = 0.05551, om0 =  93.0572, l0 =  50.0775, dL =   1223.5093),
-  Planet.Uranus  -> OrbElem(a = 19.19126, e0 = 0.04630, om0 = 173.0052, l0 = 314.0550, dL =    429.8633),
+  Planet.Uranus  -> OrbElem(a = 19.1912,  e0 = 0.04630, om0 = 173.0052, l0 = 314.0550, dL =    429.8633),
   Planet.Neptune -> OrbElem(a = 30.06900, e0 = 0.00899, om0 =  48.1234, l0 = 304.3480, dL =    219.8997),
   // Moon uses Earth's orbital elements for helio position
   Planet.Moon    -> OrbElem(a = 1.00000,  e0 = 0.01671, om0 = 102.9373, l0 = 100.4664, dL =  36000.7698)

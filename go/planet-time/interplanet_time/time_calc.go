@@ -146,17 +146,18 @@ func GetPlanetTime(planet string, utcMs int64, tzOffsetH float64) PlanetTime {
 }
 
 // GetMTC returns Mars Coordinated Time for the given UTC milliseconds.
+//
+// As getMTC in planet-time.js, the hours, minutes and seconds divide the sol:
+// a Mars hour is 1/24 sol (about 3699 SI seconds).
 func GetMTC(utcMs int64) MTC {
-	ms := float64(utcMs - MarsEpochMs)
-	sol := int64(math.Floor(ms / float64(MarsSolMs)))
-	fracMs := math.Mod(ms, float64(MarsSolMs))
-	if fracMs < 0 {
-		fracMs += float64(MarsSolMs)
-	}
-	totalSec := fracMs / 1000.0
-	hour := int(totalSec / 3600.0)
-	minute := int(math.Mod(totalSec, 3600.0) / 60.0)
-	second := int(math.Mod(totalSec, 60.0))
+	totalSols := float64(utcMs-MarsEpochMs) / float64(MarsSolMs)
+	solF := math.Floor(totalSols)
+	frac := totalSols - solF
+	h := math.Floor(frac * 24)
+	m := math.Floor((frac*24 - h) * 60)
+	s := math.Floor(((frac*24-h)*60 - m) * 60)
+	sol := int64(solF)
+	hour, minute, second := int(h), int(m), int(s)
 
 	return MTC{
 		Sol:    sol,

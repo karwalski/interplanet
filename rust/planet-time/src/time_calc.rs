@@ -179,16 +179,20 @@ pub fn get_planet_time(planet: Planet, utc_ms: i64, tz_offset_h: f64) -> PlanetT
 // ── get_mtc ───────────────────────────────────────────────────────────────────
 
 /// Mars Coordinated Time (MTC) — sol count + HMS.
+///
+/// As getMTC in planet-time.js: the hours, minutes and seconds divide the sol
+/// (a Mars hour is 1/24 sol, about 3699 SI seconds), the sol is floored (so
+/// it is negative before the Mars epoch), and `mtc_str` is "HH:MM".
 pub fn get_mtc(utc_ms: i64) -> MTC {
-    let elapsed = utc_ms - MARS_EPOCH_MS;
-    let sol     = elapsed / MARS_SOL_MS;
-    let rem_ms  = (elapsed % MARS_SOL_MS + MARS_SOL_MS) % MARS_SOL_MS;
-    let rem_s   = rem_ms / 1000;
-    let hour    = (rem_s / 3600) as i32;
-    let minute  = ((rem_s % 3600) / 60) as i32;
-    let second  = (rem_s % 60) as i32;
-    let mtc_str = format!("{}:{}:{}", pad2(hour), pad2(minute), pad2(second));
-    MTC { sol, hour, minute, second, mtc_str }
+    let total_sols = (utc_ms - MARS_EPOCH_MS) as f64 / MARS_SOL_MS as f64;
+    let sol  = total_sols.floor();
+    let frac = total_sols - sol;
+    let h = (frac * 24.0).floor();
+    let m = ((frac * 24.0 - h) * 60.0).floor();
+    let s = (((frac * 24.0 - h) * 60.0 - m) * 60.0).floor();
+    let (hour, minute, second) = (h as i32, m as i32, s as i32);
+    let mtc_str = format!("{}:{}", pad2(hour), pad2(minute));
+    MTC { sol: sol as i64, hour, minute, second, mtc_str }
 }
 
 // ── get_mars_time_at_offset ───────────────────────────────────────────────────
@@ -234,6 +238,20 @@ mod tests {
         let pt_moon  = get_planet_time(Planet::Moon,  J2000_MS + 43_200_000, 0.0);
         // Moon maps to Earth solar day — noon Earth = hour 12
         assert_eq!(pt_earth.hour, pt_moon.hour);
+    }
+
+    #[test]
+    fn mtc_matches_planet_time_js() {
+        // getMTC(new Date(ms)) in planet-time.js
+        for (ms, sol, h, m, s, text) in [
+            (860_467_588_517_i64, 15595_i64, 23, 38, 0, "23:38"),
+            (-631_152_000_000, -1207, 18, 47, 2, "18:47"),
+            (946_728_000_000, 16567, 15, 45, 34, "15:45"),
+        ] {
+            let mtc = get_mtc(ms);
+            assert_eq!((mtc.sol, mtc.hour, mtc.minute, mtc.second), (sol, h, m, s), "at {}", ms);
+            assert_eq!(mtc.mtc_str, text);
+        }
     }
 
     #[test]
