@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "medium": "text",
+  "mediumNote": "This kit provides a text channel only. A voice condition is out of scope unless the researcher runs it with external tooling that applies the same delays and logs.",
+  "delaysMin": [0, 5, 10, 20],
+  "conditions": [
+    { "id": "D0-P0",  "oneWayDelayMin": 0,  "protocol": false },
+    { "id": "D0-P1",  "oneWayDelayMin": 0,  "protocol": true },
+    { "id": "D5-P0",  "oneWayDelayMin": 5,  "protocol": false },
+    { "id": "D5-P1",  "oneWayDelayMin": 5,  "protocol": true },
+    { "id": "D10-P0", "oneWayDelayMin": 10, "protocol": false },
+    { "id": "D10-P1", "oneWayDelayMin": 10, "protocol": true },
+    { "id": "D20-P0", "oneWayDelayMin": 20, "protocol": false },
+    { "id": "D20-P1", "oneWayDelayMin": 20, "protocol": true },
+    { "id": "D10-P0-INT", "oneWayDelayMin": 10, "protocol": false,
+      "interruptions": [ { "startMin": 30, "endMin": 50 }, { "startMin": 95, "endMin": 105 } ],
+      "interruptionMode": "hold",
+      "note": "Interrupted delivery. Messages that would arrive during an outage are held and delivered when it ends." },
+    { "id": "D10-P1-INT", "oneWayDelayMin": 10, "protocol": true,
+      "interruptions": [ { "startMin": 30, "endMin": 50 }, { "startMin": 95, "endMin": 105 } ],
+      "interruptionMode": "hold",
+      "note": "Interrupted delivery. Messages that would arrive during an outage are held and delivered when it ends." },
+    { "id": "D10-P0-DROP", "oneWayDelayMin": 10, "protocol": false,
+      "interruptions": [ { "startMin": 30, "endMin": 50 } ],
+      "interruptionMode": "drop",
+      "exploratory": true,
+      "note": "Exploratory. Messages that would arrive during the outage are lost. Participants must be told in the briefing that loss is possible." }
+  ]
+}

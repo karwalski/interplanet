@@ -24,6 +24,7 @@ test:
 	  console.log('All LTX SDK smoke tests passed'); \
 	"
 	@$(MAKE) --no-print-directory test-topics
+	node tests/protocol-templates.js
 	@echo "All tests passed ✓"
 
 # EXPERIMENTAL topics extension (docs/LTX-TOPICS-RFC.md, not for production)
@@ -35,6 +36,7 @@ test-topics:
 lint:
 	node --check ltx-sdk.js
 	node --check ltx-topics.js
+	node --check ltx-protocol-templates.js
 	@echo "Lint passed ✓"
 
 # Remove generated files
