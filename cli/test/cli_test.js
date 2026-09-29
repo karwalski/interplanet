@@ -274,6 +274,11 @@ test('los shows Elong in degrees', () => {
   assert.ok(/Elong\s*:\s*[\d.]+°/.test(r.stdout), 'Elong degrees');
 });
 
+test('los shows the closest Sun distance in AU', () => {
+  const r = run(['los', 'earth', 'mars']);
+  assert.ok(/Sun dist\s*:\s*[\d.]+ AU/.test(r.stdout), 'Sun dist line');
+});
+
 test('los with missing arg exits 1', () => {
   const r = run(['los', 'earth']);
   assert.strictEqual(r.code, 1);

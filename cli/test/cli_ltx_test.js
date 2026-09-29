@@ -380,7 +380,22 @@ test('ltx plan --quantum sets quantum', () => {
 test('ltx plan --mode sets mode', () => {
   const r = run(['ltx', 'plan', 'Earth HQ:host:earth', '--mode', 'async']);
   const plan = JSON.parse(r.stdout);
-  assert.strictEqual(plan.mode, 'async');
+  assert.strictEqual(plan.mode, 'LTX-ASYNC');
+});
+
+test('ltx plan --mode accepts spec strings and sync alias', () => {
+  assert.strictEqual(JSON.parse(run(['ltx', 'plan', 'Earth HQ:host:earth', '--mode', 'LTX-RELAY']).stdout).mode, 'LTX-RELAY');
+  assert.strictEqual(JSON.parse(run(['ltx', 'plan', 'Earth HQ:host:earth', '--mode', 'sync']).stdout).mode, 'LTX-LIVE');
+});
+
+test('ltx plan --mode unknown exits 1', () => {
+  assert.strictEqual(run(['ltx', 'plan', 'Earth HQ:host:earth', '--mode', 'bogus']).code, 1);
+});
+
+test('ltx plan invalid role, quantum or start exits 1', () => {
+  assert.strictEqual(run(['ltx', 'plan', 'Earth HQ:host:earth', 'Mars:guest:mars']).code, 1);
+  assert.strictEqual(run(['ltx', 'plan', 'Earth HQ:host:earth', '--quantum', '0']).code, 1);
+  assert.strictEqual(run(['ltx', 'plan', 'Earth HQ:host:earth', '--start', 'not-a-date']).code, 1);
 });
 
 test('ltx segments exits 0', () => {

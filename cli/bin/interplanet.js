@@ -150,8 +150,8 @@ function cmdLOS(args) {
   console.log('To       : ' + b);
   console.log('Status   : ' + status);
   console.log('Elong    : ' + los.elongDeg.toFixed(2) + '\u00b0');
-  if (los.closestSunAu != null)
-    console.log('Sun dist : ' + los.closestSunAu.toFixed(4) + ' AU');
+  if (los.closestSunAU != null)
+    console.log('Sun dist : ' + los.closestSunAU.toFixed(4) + ' AU');
   console.log('UTC now  : ' + now.toISOString());
 }
 
@@ -218,9 +218,28 @@ function buildPlanFromArgs(args) {
   const opts = { nodes: nodes };
   if (args.flags.title)   opts.title   = args.flags.title;
   if (args.flags.start)   opts.start   = args.flags.start;
-  if (args.flags.quantum) opts.quantum = parseInt(args.flags.quantum, 10);
-  if (args.flags.mode)    opts.mode    = args.flags.mode;
-  return LTX.createPlan(opts);
+  if (args.flags.quantum !== undefined) {
+    opts.quantum = Number(args.flags.quantum);
+    if (!(Number.isInteger(opts.quantum) && opts.quantum >= 1 && opts.quantum <= 60)) {
+      die('--quantum must be an integer 1..60 minutes');
+    }
+  }
+  if (args.flags.mode)    opts.mode    = normalizeMode(args.flags.mode);
+  const plan = LTX.createPlan(opts);
+  const check = LTX.validatePlan(plan);
+  if (!check.valid) die('Invalid plan: ' + check.errors.map(function(e) { return e.message; }).join('; '));
+  return plan;
+}
+
+// --mode accepts the spec mode strings (LTX, LTX-LIVE, LTX-RELAY, LTX-ASYNC,
+// docs/LTX-SPECIFICATION.md section 3.6) or the short aliases async, sync, live, relay.
+const MODE_ALIASES = { async: 'LTX-ASYNC', sync: 'LTX-LIVE', live: 'LTX-LIVE', relay: 'LTX-RELAY' };
+function normalizeMode(m) {
+  const s = String(m);
+  if (MODE_ALIASES[s.toLowerCase()]) return MODE_ALIASES[s.toLowerCase()];
+  const up = s.toUpperCase();
+  if (['LTX', 'LTX-LIVE', 'LTX-RELAY', 'LTX-ASYNC'].includes(up)) return up;
+  die('Unknown mode "' + s + '": use async, sync, relay, LTX, LTX-LIVE, LTX-RELAY or LTX-ASYNC');
 }
 
 // ── LTX subcommands ───────────────────────────────────────────────────────────
@@ -267,7 +286,7 @@ function cmdLtxHelp() {
     'interplanet ltx \u2014 LTX (Light-Time eXchange) subcommands',
     '',
     'Usage:',
-    '  ltx plan     <node1:role:location> [<node2> ...] [--title "T"] [--start ISO] [--quantum N] [--mode async|sync]',
+    '  ltx plan     <node1:role:location> [<node2> ...] [--title "T"] [--start ISO] [--quantum N] [--mode async|sync|relay]',
     '  ltx segments <node1:role:location> [<node2> ...]',
     '  ltx hash     <node1:role:location> [<node2> ...]',
     '  ltx ics      <node1:role:location> [<node2> ...]',
