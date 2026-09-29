@@ -160,7 +160,7 @@ const FORMATS = {
 const TARGETS = {
   c: 'c/ltx/src/itx_plan_json.c',
   ocaml: 'ocaml/ltx/lib/upper.ml',
-  r: 'r/ltx/R/upper_table.R',
+  r: 'r/ltx/R/ltx.R',
   lua: 'lua/ltx/src/interplanet_ltx.lua',
   zig: 'zig/ltx/src/upper.zig',
   dart: 'dart/ltx/lib/src/upper.dart',
