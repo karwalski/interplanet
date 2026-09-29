@@ -8,6 +8,8 @@ public class Driver {
     @SuppressWarnings("unchecked")
     public static void main(String[] args) throws Exception {
         Path in = Paths.get(args[0]), out = Paths.get(args[1]);
+        // UTF-8 stdout whatever the platform default (stdout.encoding).
+        System.setOut(new java.io.PrintStream(new java.io.FileOutputStream(java.io.FileDescriptor.out), true, StandardCharsets.UTF_8));
 
         LtxPlan plan = InterplanetLTX.createPlan("Réunion Mars 🚀", "2026-03-15T14:00:00.000Z", 840);
         plan.quantum = 3;
@@ -28,7 +30,7 @@ public class Driver {
         Files.write(out.resolve("wire-v2.json"), Base64.getUrlDecoder().decode(token));
         System.out.println("ID_V2 " + InterplanetLTX.makePlanId(plan));
 
-        for (String v : new String[] {"2", "3"}) {
+        for (String v : new String[] {"2", "3", "P"}) {
             String json = new String(Files.readAllBytes(in.resolve("js-v" + v + ".json")), StandardCharsets.UTF_8);
             System.out.println("JS_V" + v + " " + LtxPlans.makePlanId((Map<String, Object>) LtxJson.parse(json)));
         }
