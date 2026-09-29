@@ -1,5 +1,5 @@
 {
-  "description": "LTX planId prefix golden vectors (issue #37, docs/LTX-SPECIFICATION.md section 4.3). HOSTSTR is the HOST name with JS whitespace (/\\s/) removed, upper-cased with the locale-independent full Unicode mapping of String.prototype.toUpperCase (special casing included: ß to SS, ﬁ to FI, ŉ to ʼN, ΐ to Ϊ́, ᾳ to ΑΙ), then sliced to 8 UTF-16 code units; NODESTR is each other node name treated the same way and sliced to 4 units, joined with \"-\" and sliced to 16 units (\"RX\" for a single-node plan). Slicing can split a surrogate pair and leave a lone high surrogate in the id. planId is the exact JS string (a lone surrogate appears as a \\ud83d escape). planIdUtf8 is the same id as JS encodes it to UTF-8 (TextEncoder, Buffer, HTTP): each lone surrogate becomes U+FFFD. Ports whose strings are UTF-16 or code points (JS, TypeScript, Python, Dart, Java, Kotlin, C#, F#, Scala) MUST return planId; ports whose strings are UTF-8 and cannot hold a lone surrogate MUST return planIdUtf8. loneSurrogate says whether the two differ. The prefix (LTX-date-HOSTSTR-NODESTR) is the id without its last 12 characters (\"-v2-\" or \"-v3-\" and 8 hex digits). Plans are parsed preserving key order (see plan-ids.json); some vectors are in createPlan order (segments first), some nodes first. Regenerate with node scripts/conformance/gen-plan-id-prefixes.js.",
+  "description": "LTX planId prefix golden vectors (issue #37, docs/LTX-SPECIFICATION.md section 4.3). HOSTSTR is the HOST name with JS whitespace (/\\s/) removed, upper-cased with the locale-independent full Unicode mapping of String.prototype.toUpperCase (special casing included: ß to SS, ﬁ to FI, ŉ to ʼN, ΐ to Ϊ́, ᾳ to ΑΙ), then sliced to 8 UTF-16 code units; NODESTR is each other node name treated the same way and sliced to 4 units, joined with \"-\" and sliced to 16 units (\"RX\" for a single-node plan). Slicing can split a surrogate pair and leave a lone high surrogate in the id. planId is the exact JS string (a lone surrogate appears as a \\ud83d escape). planIdWtf8Hex is the hex of its WTF-8 bytes (a lone surrogate as ED A0..BF xx). planIdUtf8 is the same id as JS encodes it to UTF-8 (TextEncoder, Buffer, HTTP): each lone surrogate becomes U+FFFD. A port keeps the lone surrogate where its string type can hold it: ports whose strings are UTF-16 or code points (JS, TypeScript, Python, Dart, Java, Kotlin, C#, F#, Scala) MUST return planId; ports with byte strings that hold a lone surrogate as WTF-8 (C, Ruby, PHP, Julia, OCaml, Lua, Zig) MUST return the planIdWtf8Hex bytes; ports whose strings must be valid UTF-8 (Rust, Swift, Go, Elixir, R) MUST return planIdUtf8. loneSurrogate says whether the forms differ. The prefix (LTX-date-HOSTSTR-NODESTR) is the id without its last 12 characters (\"-v2-\" or \"-v3-\" and 8 hex digits). Plans are parsed preserving key order (see plan-ids.json); some vectors are in createPlan order (segments first), some nodes first. Regenerate with node scripts/conformance/gen-plan-id-prefixes.js.",
   "generatedBy": "interplanet-ltx 1.1.0 (node 22.22.2, Unicode 17.0)",
   "vectors": [
     {
@@ -74,6 +74,7 @@
       },
       "planId": "LTX-20261001-ÉQUIPEÉT-CAFÉ-ÑAND-CAFE-v2-f4240fd7",
       "planIdUtf8": "LTX-20261001-ÉQUIPEÉT-CAFÉ-ÑAND-CAFE-v2-f4240fd7",
+      "planIdWtf8Hex": "4c54582d32303236313030312dc3895155495045c389542d434146c3892dc391414e442d434146452d76322d6634323430666437",
       "loneSurrogate": false
     },
     {
@@ -148,6 +149,7 @@
       },
       "planId": "LTX-20261001-STRASSE1-SSA-GROS-ẞIG-v2-584c82f4",
       "planIdUtf8": "LTX-20261001-STRASSE1-SSA-GROS-ẞIG-v2-584c82f4",
+      "planIdWtf8Hex": "4c54582d32303236313030312d53545241535345312d5353412d47524f532de1ba9e49472d76322d3538346338326634",
       "loneSurrogate": false
     },
     {
@@ -229,6 +231,7 @@
       },
       "planId": "LTX-20261001-FIELDFLO-FFFI-ʼNA-FFIX-ST-v2-e9417fb4",
       "planIdUtf8": "LTX-20261001-FIELDFLO-FFFI-ʼNA-FFIX-ST-v2-e9417fb4",
+      "planIdWtf8Hex": "4c54582d32303236313030312d4649454c44464c4f2d464646492dcabc4e412d464649582d53542d76322d6539343137666234",
       "loneSurrogate": false
     },
     {
@@ -296,6 +299,7 @@
       },
       "planId": "LTX-20261001-ABCDEFGʼ-ABΪ-AAFF-v2-82610793",
       "planIdUtf8": "LTX-20261001-ABCDEFGʼ-ABΪ-AAFF-v2-82610793",
+      "planIdWtf8Hex": "4c54582d32303236313030312d41424344454647cabc2d4142ce99cc882d414146462d76322d3832363130373933",
       "loneSurrogate": false
     },
     {
@@ -377,6 +381,7 @@
       },
       "planId": "LTX-20261001-ΣΟΦΊΑΣ-Ϊ́Λ-ΑΙΔΗ-Σ-ΜἈΙ-v2-76a18428",
       "planIdUtf8": "LTX-20261001-ΣΟΦΊΑΣ-Ϊ́Λ-ΑΙΔΗ-Σ-ΜἈΙ-v2-76a18428",
+      "planIdWtf8Hex": "4c54582d32303236313030312dcea3ce9fcea6ce8ace91cea32dce99cc88cc81ce9b2dce91ce99ce94ce972dcea32dce9ce1bc88ce992d76322d3736613138343238",
       "loneSurrogate": false
     },
     {
@@ -451,6 +456,7 @@
       },
       "planId": "LTX-20261001-МОСКВАЮГ-ЁЛКА-КИЇВ-ѢРА-v2-194a0c1f",
       "planIdUtf8": "LTX-20261001-МОСКВАЮГ-ЁЛКА-КИЇВ-ѢРА-v2-194a0c1f",
+      "planIdWtf8Hex": "4c54582d32303236313030312dd09cd09ed0a1d09ad092d090d0aed0932dd081d09bd09ad0902dd09ad098d087d0922dd1a2d0a0d0902d76322d3139346130633166",
       "loneSurrogate": false
     },
     {
@@ -518,6 +524,7 @@
       },
       "planId": "LTX-20261001-ISTANBUL-IĞDI-İZMI-v2-c2f3eeca",
       "planIdUtf8": "LTX-20261001-ISTANBUL-IĞDI-İZMI-v2-c2f3eeca",
+      "planIdWtf8Hex": "4c54582d32303236313030312d495354414e42554c2d49c49e44492dc4b05a4d492d76322d6332663365656361",
       "loneSurrogate": false
     },
     {
@@ -585,6 +592,7 @@
       },
       "planId": "LTX-20261001-ԵՐԵՒԱՆ-ՄՆՄԵ-ԵՒ-v2-629a6187",
       "planIdUtf8": "LTX-20261001-ԵՐԵՒԱՆ-ՄՆՄԵ-ԵՒ-v2-629a6187",
+      "planIdWtf8Hex": "4c54582d32303236313030312dd4b5d590d4b5d592d4b1d5862dd584d586d584d4b52dd4b5d5922d76322d3632396136313837",
       "loneSurrogate": false
     },
     {
@@ -659,6 +667,7 @@
       },
       "planId": "LTX-20261001-東京宇宙センター-北京站-서울기지-ABC-v2-ace123b8",
       "planIdUtf8": "LTX-20261001-東京宇宙センター-北京站-서울기지-ABC-v2-ace123b8",
+      "planIdWtf8Hex": "4c54582d32303236313030312de69db1e4baace5ae87e5ae99e382bbe383b3e382bfe383bc2de58c97e4baace7ab992dec849cec9ab8eab8b0eca7802d4142432d76322d6163653132336238",
       "loneSurrogate": false
     },
     {
@@ -740,6 +749,7 @@
       },
       "planId": "LTX-20261001-ABCDE-XY-P\u001cQ\u001f-M᠎N​-TU-v2-06cdb855",
       "planIdUtf8": "LTX-20261001-ABCDE-XY-P\u001cQ\u001f-M᠎N​-TU-v2-06cdb855",
+      "planIdWtf8Hex": "4c54582d32303236313030312d41424344452d58c285592d501c511f2d4de1a08e4ee2808b2d54552d76322d3036636462383535",
       "loneSurrogate": false
     },
     {
@@ -814,6 +824,7 @@
       },
       "planId": "LTX-20261001-ROCKETS\ud83d-MARS-ABC\ud83d-🚀🚀-v2-f92085e9",
       "planIdUtf8": "LTX-20261001-ROCKETS�-MARS-ABC�-🚀🚀-v2-f92085e9",
+      "planIdWtf8Hex": "4c54582d32303236313030312d524f434b455453eda0bd2d4d4152532d414243eda0bd2df09f9a80f09f9a802d76322d6639323038356539",
       "loneSurrogate": true
     },
     {
@@ -888,6 +899,7 @@
       },
       "planId": "LTX-20261001-HUB-X🛰X-ABC\ud83c-🌍A-v2-06948735",
       "planIdUtf8": "LTX-20261001-HUB-X🛰X-ABC�-🌍A-v2-06948735",
+      "planIdWtf8Hex": "4c54582d32303236313030312d4855422d58f09f9bb0582d414243eda0bc2df09f8c8d412d76322d3036393438373335",
       "loneSurrogate": true
     },
     {
@@ -955,6 +967,7 @@
       },
       "planId": "LTX-20261001-STRASSE\ud83c-SS🌍-FFI\ud83c-v2-fd9b3001",
       "planIdUtf8": "LTX-20261001-STRASSE�-SS🌍-FFI�-v2-fd9b3001",
+      "planIdWtf8Hex": "4c54582d32303236313030312d53545241535345eda0bc2d5353f09f8c8d2d464649eda0bc2d76322d6664396233303031",
       "loneSurrogate": true
     },
     {
@@ -1036,6 +1049,7 @@
       },
       "planId": "LTX-20261001-HUB-MARS-LUNA-TITA-\ud83d-v2-93d64ed8",
       "planIdUtf8": "LTX-20261001-HUB-MARS-LUNA-TITA-�-v2-93d64ed8",
+      "planIdWtf8Hex": "4c54582d32303236313030312d4855422d4d4152532d4c554e412d544954412deda0bd2d76322d3933643634656438",
       "loneSurrogate": true
     },
     {
@@ -1103,6 +1117,7 @@
       },
       "planId": "LTX-20261001-𐐀𐐇𐐑AB-𐐀𐐁-A𐐀\ud801-v2-160fb583",
       "planIdUtf8": "LTX-20261001-𐐀𐐇𐐑AB-𐐀𐐁-A𐐀�-v2-160fb583",
+      "planIdWtf8Hex": "4c54582d32303236313030312df0909080f0909087f090909141422df0909080f09090812d41f0909080eda0812d76322d3136306662353833",
       "loneSurrogate": true
     },
     {
@@ -1156,6 +1171,7 @@
       },
       "planId": "LTX-20261001-ǄŸSJ̌NX-RX-v2-08406e9d",
       "planIdUtf8": "LTX-20261001-ǄŸSJ̌NX-RX-v2-08406e9d",
+      "planIdWtf8Hex": "4c54582d32303236313030312dc784c5b8534acc8c4e582d52582d76322d3038343036653964",
       "loneSurrogate": false
     },
     {
@@ -1223,6 +1239,7 @@
       },
       "planId": "LTX-20261001-ǄǇẠ-ǊẠ-Ǳ-v2-cac19167",
       "planIdUtf8": "LTX-20261001-ǄǇẠ-ǊẠ-Ǳ-v2-cac19167",
+      "planIdWtf8Hex": "4c54582d32303236313030312dc784c787e1baa02dc78ae1baa02dc7b12d76322d6361633139313637",
       "loneSurrogate": false
     },
     {
@@ -1294,6 +1311,7 @@
       },
       "planId": "LTX-20261001-ΩMEGAΣ-ABC\ud83d-SSET-v3-9e9d34fb",
       "planIdUtf8": "LTX-20261001-ΩMEGAΣ-ABC�-SSET-v3-9e9d34fb",
+      "planIdWtf8Hex": "4c54582d32303236313030312dcea94d454741cea32d414243eda0bd2d535345542d76332d3965396433346662",
       "loneSurrogate": true
     },
     {
@@ -1355,6 +1373,7 @@
       },
       "planId": "LTX-20261001-STRASSE\ud83c-FIX-v3-675115b7",
       "planIdUtf8": "LTX-20261001-STRASSE�-FIX-v3-675115b7",
+      "planIdWtf8Hex": "4c54582d32303236313030312d53545241535345eda0bc2d4649582d76332d3637353131356237",
       "loneSurrogate": true
     }
   ]

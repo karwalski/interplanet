@@ -94,11 +94,33 @@ function utf8Form(s) {
   return Buffer.from(s, 'utf8').toString('utf8');
 }
 
+function wtf8Hex(s) {
+  // WTF-8 (generalized UTF-8): code points as UTF-8, and each lone surrogate
+  // as the 3-byte sequence ED A0..BF xx, the form in which the ports with
+  // byte strings (C, Ruby, PHP, Julia, OCaml, Lua, ...) hold one.
+  const bytes = [];
+  for (let i = 0; i < s.length; i++) {
+    let cp = s.charCodeAt(i);
+    if (cp >= 0xD800 && cp < 0xDC00 && i + 1 < s.length) {
+      const lo = s.charCodeAt(i + 1);
+      if (lo >= 0xDC00 && lo < 0xE000) { cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00); i++; }
+    }
+    if (cp < 0x80) bytes.push(cp);
+    else if (cp < 0x800) bytes.push(0xC0 | (cp >> 6), 0x80 | (cp & 0x3F));
+    else if (cp < 0x10000) bytes.push(0xE0 | (cp >> 12), 0x80 | ((cp >> 6) & 0x3F), 0x80 | (cp & 0x3F));
+    else bytes.push(0xF0 | (cp >> 18), 0x80 | ((cp >> 12) & 0x3F), 0x80 | ((cp >> 6) & 0x3F), 0x80 | (cp & 0x3F));
+  }
+  return Buffer.from(bytes).toString('hex');
+}
+
 const vectors = [];
 function add(name, description, p) {
   const planId = LTX.makePlanId(p);
   const planIdUtf8 = utf8Form(planId);
-  vectors.push({ name, description, plan: p, planId, planIdUtf8, loneSurrogate: planId !== planIdUtf8 });
+  vectors.push({
+    name, description, plan: p, planId, planIdUtf8, planIdWtf8Hex: wtf8Hex(planId),
+    loneSurrogate: planId !== planIdUtf8,
+  });
 }
 for (const [name, description, p] of CASES) add(name, description, p);
 // v3: the prefix is the same; the digest is SHA-256 over canonical JSON.
@@ -115,9 +137,12 @@ const doc = {
     'then sliced to 8 UTF-16 code units; NODESTR is each other node name treated the same way and sliced to 4 units, ' +
     'joined with "-" and sliced to 16 units ("RX" for a single-node plan). Slicing can split a surrogate pair and leave a ' +
     'lone high surrogate in the id. planId is the exact JS string (a lone surrogate appears as a \\ud83d escape). ' +
+    'planIdWtf8Hex is the hex of its WTF-8 bytes (a lone surrogate as ED A0..BF xx). ' +
     'planIdUtf8 is the same id as JS encodes it to UTF-8 (TextEncoder, Buffer, HTTP): each lone surrogate becomes U+FFFD. ' +
-    'Ports whose strings are UTF-16 or code points (JS, TypeScript, Python, Dart, Java, Kotlin, C#, F#, Scala) MUST return planId; ' +
-    'ports whose strings are UTF-8 and cannot hold a lone surrogate MUST return planIdUtf8. loneSurrogate says whether the two differ. ' +
+    'A port keeps the lone surrogate where its string type can hold it: ports whose strings are UTF-16 or code points ' +
+    '(JS, TypeScript, Python, Dart, Java, Kotlin, C#, F#, Scala) MUST return planId; ports with byte strings that hold ' +
+    'a lone surrogate as WTF-8 (C, Ruby, PHP, Julia, OCaml, Lua, Zig) MUST return the planIdWtf8Hex bytes; ports whose ' +
+    'strings must be valid UTF-8 (Rust, Swift, Go, Elixir, R) MUST return planIdUtf8. loneSurrogate says whether the forms differ. ' +
     'The prefix (LTX-date-HOSTSTR-NODESTR) is the id without its last 12 characters ("-v2-" or "-v3-" and 8 hex digits). ' +
     'Plans are parsed preserving key order (see plan-ids.json); some vectors are in createPlan order (segments first), some nodes first. ' +
     'Regenerate with node scripts/conformance/gen-plan-id-prefixes.js.',
