@@ -11,14 +11,14 @@ const VERSION = "1.0.0"
 
 // Fundamental constants
 const (
-	J2000Ms       = int64(946_728_000_000)    // Date.UTC(2000,0,1,12,0,0) — TT noon
-	J2000JD       = 2_451_545.0               // Julian Day at J2000
-	EarthDayMs    = int64(86_400_000)         // ms per Earth solar day
-	MarsEpochMs   = int64(-524_069_761_536)   // MY 0 sol 0 — Date.UTC(1953,4,24,9,3,58,464)
-	MarsSolMs     = int64(88_775_244)         // ms per Mars solar day
-	AuKm          = 149_597_870.7             // km per AU
-	CKms          = 299_792.458               // km/s (speed of light)
-	AuSeconds     = AuKm / CKms              // ~499.0 light-seconds per AU
+	J2000Ms     = int64(946_728_000_000)  // Date.UTC(2000,0,1,12,0,0) — TT noon
+	J2000JD     = 2_451_545.0             // Julian Day at J2000
+	EarthDayMs  = int64(86_400_000)       // ms per Earth solar day
+	MarsEpochMs = int64(-524_069_761_536) // MY 0 sol 0 — Date.UTC(1953,4,24,9,3,58,464)
+	MarsSolMs   = int64(88_775_244)       // ms per Mars solar day
+	AuKm        = 149_597_870.7           // km per AU
+	CKms        = 299_792.458             // km/s (speed of light)
+	AuSeconds   = AuKm / CKms             // ~499.0 light-seconds per AU
 )
 
 // Planets ordered by index
@@ -43,69 +43,69 @@ type PlanetData struct {
 // PLANET_DATA mirrors the PLANETS table in planet-time.js.
 var PLANET_DATA = map[string]PlanetData{
 	"mercury": {
-		SolarDayMs:        int64(math.Round(175.9408 * float64(EarthDayMs))),
-		SiderealYrMs:      int64(math.Round(87.9691 * float64(EarthDayMs))),
-		EpochMs:           J2000Ms,
-		WorkStart:         9, WorkEnd: 17, // Earth-clock scheduling: UTC 09–17
+		SolarDayMs:   int64(math.Round(175.9408 * float64(EarthDayMs))),
+		SiderealYrMs: int64(math.Round(87.9691 * float64(EarthDayMs))),
+		EpochMs:      J2000Ms,
+		WorkStart:    9, WorkEnd: 17, // Earth-clock scheduling: UTC 09–17
 		DaysPerPeriod: 1.0, PeriodsPerWeek: 7, WorkPeriodsPerWeek: 5,
 		EarthClockSched: true,
 	},
 	"venus": {
-		SolarDayMs:        int64(math.Round(116.7500 * float64(EarthDayMs))),
-		SiderealYrMs:      int64(math.Round(224.701 * float64(EarthDayMs))),
-		EpochMs:           J2000Ms,
-		WorkStart:         9, WorkEnd: 17, // Earth-clock scheduling: UTC 09–17
+		SolarDayMs:   int64(math.Round(116.7500 * float64(EarthDayMs))),
+		SiderealYrMs: int64(math.Round(224.701 * float64(EarthDayMs))),
+		EpochMs:      J2000Ms,
+		WorkStart:    9, WorkEnd: 17, // Earth-clock scheduling: UTC 09–17
 		DaysPerPeriod: 1.0, PeriodsPerWeek: 7, WorkPeriodsPerWeek: 5,
 		EarthClockSched: true,
 	},
 	"earth": {
-		SolarDayMs:        EarthDayMs,
-		SiderealYrMs:      int64(math.Round(365.25636 * float64(EarthDayMs))),
-		EpochMs:           J2000Ms,
-		WorkStart:         9, WorkEnd: 17,
+		SolarDayMs:   EarthDayMs,
+		SiderealYrMs: int64(math.Round(365.25636 * float64(EarthDayMs))),
+		EpochMs:      J2000Ms,
+		WorkStart:    9, WorkEnd: 17,
 		DaysPerPeriod: 1.0, PeriodsPerWeek: 7, WorkPeriodsPerWeek: 5,
 	},
 	"mars": {
-		SolarDayMs:        MarsSolMs,
-		SiderealYrMs:      int64(math.Round(686.9957 * float64(EarthDayMs))),
-		EpochMs:           MarsEpochMs,
-		WorkStart:         9, WorkEnd: 17,
+		SolarDayMs:   MarsSolMs,
+		SiderealYrMs: int64(math.Round(686.9957 * float64(EarthDayMs))),
+		EpochMs:      MarsEpochMs,
+		WorkStart:    9, WorkEnd: 17,
 		DaysPerPeriod: 1.0, PeriodsPerWeek: 7, WorkPeriodsPerWeek: 5,
 	},
 	"jupiter": {
-		SolarDayMs:        int64(math.Round(9.9250 * 3_600_000)),
-		SiderealYrMs:      int64(math.Round(4332.589 * float64(EarthDayMs))),
-		EpochMs:           J2000Ms,
-		WorkStart:         8, WorkEnd: 16,
+		SolarDayMs:   int64(math.Round(9.9250 * 3_600_000)),
+		SiderealYrMs: int64(math.Round(4332.589 * float64(EarthDayMs))),
+		EpochMs:      J2000Ms,
+		WorkStart:    8, WorkEnd: 16,
 		DaysPerPeriod: 2.5, PeriodsPerWeek: 7, WorkPeriodsPerWeek: 5,
 	},
 	"saturn": {
 		// Mankovich, Marley, Fortney & Mozshovitz 2023 ring seismology refinement
-		SolarDayMs:        int64(math.Round(10.578 * 3_600_000)),
-		SiderealYrMs:      int64(math.Round(10_759.22 * float64(EarthDayMs))),
-		EpochMs:           J2000Ms,
-		WorkStart:         8, WorkEnd: 16,
+		SolarDayMs:   int64(math.Round(10.578 * 3_600_000)),
+		SiderealYrMs: int64(math.Round(10_759.22 * float64(EarthDayMs))),
+		EpochMs:      J2000Ms,
+		WorkStart:    8, WorkEnd: 16,
 		DaysPerPeriod: 2.25, PeriodsPerWeek: 7, WorkPeriodsPerWeek: 5,
 	},
 	"uranus": {
-		SolarDayMs:        int64(math.Round(17.2479 * 3_600_000)),
-		SiderealYrMs:      int64(math.Round(30_688.5 * float64(EarthDayMs))),
-		EpochMs:           J2000Ms,
-		WorkStart:         8, WorkEnd: 16,
+		SolarDayMs:   int64(math.Round(17.2479 * 3_600_000)),
+		SiderealYrMs: int64(math.Round(30_688.5 * float64(EarthDayMs))),
+		EpochMs:      J2000Ms,
+		WorkStart:    8, WorkEnd: 16,
 		DaysPerPeriod: 1.0, PeriodsPerWeek: 7, WorkPeriodsPerWeek: 5,
 	},
 	"neptune": {
-		SolarDayMs:        int64(math.Round(16.1100 * 3_600_000)),
-		SiderealYrMs:      int64(math.Round(60_195.0 * float64(EarthDayMs))),
-		EpochMs:           J2000Ms,
-		WorkStart:         8, WorkEnd: 16,
+		SolarDayMs:   int64(math.Round(16.1100 * 3_600_000)),
+		SiderealYrMs: int64(math.Round(60_195.0 * float64(EarthDayMs))),
+		EpochMs:      J2000Ms,
+		WorkStart:    8, WorkEnd: 16,
 		DaysPerPeriod: 1.0, PeriodsPerWeek: 7, WorkPeriodsPerWeek: 5,
 	},
 	"moon": {
-		SolarDayMs:        EarthDayMs,
-		SiderealYrMs:      int64(math.Round(365.25636 * float64(EarthDayMs))),
-		EpochMs:           J2000Ms,
-		WorkStart:         9, WorkEnd: 17,
+		SolarDayMs:   EarthDayMs,
+		SiderealYrMs: int64(math.Round(365.25636 * float64(EarthDayMs))),
+		EpochMs:      J2000Ms,
+		WorkStart:    9, WorkEnd: 17,
 		DaysPerPeriod: 1.0, PeriodsPerWeek: 7, WorkPeriodsPerWeek: 5,
 	},
 }
@@ -127,7 +127,7 @@ var ORBITAL_ELEMENTS = map[string]OrbitalElements{
 	"mars":    {L0: 355.4330, DL: 19_141.6964, Om0: 336.0600, E0: 0.09341, A: 1.52366},
 	"jupiter": {L0: 34.3515, DL: 3_036.3027, Om0: 14.3320, E0: 0.04849, A: 5.20336},
 	"saturn":  {L0: 50.0775, DL: 1_223.5093, Om0: 93.0572, E0: 0.05551, A: 9.53707},
-	"uranus":  {L0: 314.0550, DL: 429.8633, Om0: 173.0052, E0: 0.04630, A: 19.19126},
+	"uranus":  {L0: 314.0550, DL: 429.8633, Om0: 173.0052, E0: 0.04630, A: 19.19120},
 	"neptune": {L0: 304.3480, DL: 219.8997, Om0: 48.1234, E0: 0.00899, A: 30.06900},
 	"moon":    {L0: 100.4664, DL: 36_000.7698, Om0: 102.9373, E0: 0.01671, A: 1.00000},
 }

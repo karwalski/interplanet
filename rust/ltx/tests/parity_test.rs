@@ -208,7 +208,7 @@ fn test_reduce_decisions() {
         "N0", 1, "2026-08-01T12:00:00.000Z", &hp, None);
     c.check("decision id prefix DEC", dec1.entry_id == "DEC-N0-1");
     c.check("decision entry verifies", verify_register_entry(&dec1, &cache).valid);
-    let (r1, _) = reduce_decisions(&[dec1.clone()]);
+    let (r1, _) = reduce_decisions(std::slice::from_ref(&dec1));
     let d = &r1["DEC-N0-1"];
     c.check("decision RECORDED", d.status == "RECORDED" && d.version == 1);
     c.check("decision fields", d.text == "Proceed with EVA-3" && d.recorded_by == "N0"
@@ -242,13 +242,13 @@ fn test_reduce_decisions() {
     c.check("decision orphan update superseded", sup3.contains(&"DEC-N1-9".to_string()));
     c.check("decision duplicate create ignored", r3["DEC-N0-1"].text == "Proceed with EVA-3" && r3["DEC-N0-1"].recorded_by == "N0");
     c.check("decision reducer ignores others", reduce_decisions(&[dec1.clone(), dec_rev.clone()]).0.len() == 1
-        && reduce_actions(&[dec1.clone()]).0.is_empty());
+        && reduce_actions(std::slice::from_ref(&dec1)).0.is_empty());
 
     let opts = CreateEntryOptions {
         session_id: "LTX-DEC-TEST".into(), node_id: "N0".into(), seq: 99,
         timestamp: "2026-08-01T15:00:00.000Z".into(), private_key_b64: hp.clone(), entry_id: None,
     };
-    let (merged, snap) = run_merge_segment(&[dec1.clone()], &[dec_rev.clone()], &cache, &opts).unwrap();
+    let (merged, snap) = run_merge_segment(std::slice::from_ref(&dec1), std::slice::from_ref(&dec_rev), &cache, &opts).unwrap();
     c.check("runMergeSegment ok", merged.entries.len() == 2 && merged.rejected.is_empty());
     c.check("snapshot is merge_snapshot MRG", snap.entry_type == "merge_snapshot" && snap.entry_id == "MRG-N0-99");
     c.check("snapshot verifies", verify_register_entry(&snap, &cache).valid);
@@ -266,8 +266,8 @@ fn test_reduce_decisions() {
     let (m2, snap2) = run_merge_segment(&[dec1.clone(), stray], &[], &cache, &opts2).unwrap();
     c.check("merge rejects unverifiable entry", m2.rejected.len() == 1 && m2.rejected[0].1 == "key_not_in_cache"
         && snap2.content.get("rejectedCount").and_then(|v| v.as_i64()) == Some(1));
-    let ab = merge_logs(&[dec1.clone()], &[dec_rev.clone(), dec1.clone()], &cache);
-    let ba = merge_logs(&[dec_rev.clone(), dec1.clone()], &[dec1.clone()], &cache);
+    let ab = merge_logs(std::slice::from_ref(&dec1), &[dec_rev.clone(), dec1.clone()], &cache);
+    let ba = merge_logs(&[dec_rev.clone(), dec1.clone()], std::slice::from_ref(&dec1), &cache);
     let ids = |m: &MergeResult| m.entries.iter().map(|e| e.entry_id.clone()).collect::<Vec<_>>();
     c.check("mergeLogs symmetric and de-duplicated", ab.entries.len() == 2 && ids(&ab) == ids(&ba));
     c.done();

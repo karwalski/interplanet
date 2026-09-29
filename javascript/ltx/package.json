@@ -17,8 +17,20 @@
   },
   "main": "ltx-sdk.js",
   "types": "ltx-sdk.d.ts",
+  "exports": {
+    ".": {
+      "types": "./ltx-sdk.d.ts",
+      "import": "./ltx-sdk.mjs",
+      "require": "./ltx-sdk.js",
+      "default": "./ltx-sdk.js"
+    },
+    "./ltx-sdk.js": "./ltx-sdk.js",
+    "./ltx-protocol-templates.js": "./ltx-protocol-templates.js",
+    "./package.json": "./package.json"
+  },
   "files": [
     "ltx-sdk.js",
+    "ltx-sdk.mjs",
     "ltx-sdk.d.ts",
     "ltx-protocol-templates.js",
     "dist/",
@@ -26,6 +38,7 @@
   ],
   "scripts": {
     "build:types": "node build-types.mjs",
+    "build:esm": "node build-esm.mjs",
     "test": "node -e \"const sdk = require('./ltx-sdk'); console.assert(typeof sdk.createPlan === 'function', 'createPlan ok'); console.assert(typeof sdk.computeSegments === 'function', 'computeSegments ok'); console.assert(typeof sdk.encodeHash === 'function', 'encodeHash ok'); console.log('smoke tests passed');\""
   },
   "engines": {

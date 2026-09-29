@@ -171,6 +171,27 @@ func TestMtcStrFormat(t *testing.T) {
 	}
 }
 
+// Values from getMTC(new Date(ms)) in planet-time.js.
+func TestMtcMatchesPlanetTimeJs(t *testing.T) {
+	cases := []struct {
+		ms                   int64
+		sol                  int64
+		hour, minute, second int
+		str                  string
+	}{
+		{860467588517, 15595, 23, 38, 0, "23:38"},
+		{-631152000000, -1207, 18, 47, 2, "18:47"},
+		{946728000000, 16567, 15, 45, 34, "15:45"},
+	}
+	for _, c := range cases {
+		m := ipt.GetMTC(c.ms)
+		if m.Sol != c.sol || m.Hour != c.hour || m.Minute != c.minute || m.Second != c.second || m.MTCStr != c.str {
+			t.Errorf("GetMTC(%d) = %d %02d:%02d:%02d %q, want %d %02d:%02d:%02d %q", c.ms,
+				m.Sol, m.Hour, m.Minute, m.Second, m.MTCStr, c.sol, c.hour, c.minute, c.second, c.str)
+		}
+	}
+}
+
 func TestMtcSolAtMarsEpoch(t *testing.T) {
 	mtc := ipt.GetMTC(ipt.MarsEpochMs)
 	if mtc.Sol != 0 {

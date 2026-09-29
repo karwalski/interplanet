@@ -1,8 +1,8 @@
 # Makefile — InterplanetTime Java library
 # Requires: Java 16+ (for records)  No Maven/Gradle needed.
 
-JAVAC    = javac
-JAVA     = java
+JAVAC    = javac -encoding UTF-8 -Xlint:all
+JAVA     = java -Dfile.encoding=UTF-8 -Dstdout.encoding=UTF-8
 SRC_DIR  = src
 TEST_DIR = tests
 OUT_DIR  = out/classes

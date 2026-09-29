@@ -106,11 +106,11 @@ func LightTravelSeconds(a, b string, utcMs int64) float64 {
 
 // LineOfSight holds the result of a line-of-sight check.
 type LineOfSight struct {
-	Clear         bool
-	Blocked       bool
-	Degraded      bool
-	ClosestSunAu  float64 // -1 if same body
-	ElongDeg      float64
+	Clear        bool
+	Blocked      bool
+	Degraded     bool
+	ClosestSunAu float64 // -1 if same body
+	ElongDeg     float64
 }
 
 // CheckLineOfSight checks whether two bodies have a clear line of sight.

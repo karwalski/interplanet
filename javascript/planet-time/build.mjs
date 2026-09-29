@@ -3,6 +3,9 @@
  *
  * Usage:  node build.mjs
  * Output: dist/planet-time.esm.js   — ES module (named exports + default)
+ *         dist/planet-time.esm.mjs  — the same module for Node's `import`
+ *                                     (a .js file in this CommonJS package is
+ *                                     not ESM to Node before 20.19 / 22.7)
  *         dist/planet-time.iife.js  — IIFE bundle (window.PlanetTime)
  *         dist/planet-time.d.ts     — TypeScript definitions
  *
@@ -94,7 +97,8 @@ const esm = [
 ].join('\n');
 
 writeFileSync(`${DIST}/planet-time.esm.js`, esm, 'utf8');
-console.log(`✓  ESM: dist/planet-time.esm.js  (${exportNames.length} named exports)`);
+writeFileSync(`${DIST}/planet-time.esm.mjs`, esm, 'utf8');
+console.log(`✓  ESM: dist/planet-time.esm.js + .esm.mjs  (${exportNames.length} named exports)`);
 
 // ── 3. IIFE ───────────────────────────────────────────────────────────────────
 

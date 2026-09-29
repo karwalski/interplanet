@@ -7,18 +7,20 @@ var passed: u32 = 0;
 var failed: u32 = 0;
 
 fn check(label: []const u8, cond: bool) void {
-    if (cond) { passed += 1; }
-    else {
+    if (cond) {
+        passed += 1;
+    } else {
         failed += 1;
         std.debug.print("FAIL: {s}\n", .{label});
     }
 }
 
 fn checkStr(label: []const u8, got: []const u8, exp: []const u8) void {
-    if (std.mem.eql(u8, got, exp)) { passed += 1; }
-    else {
+    if (std.mem.eql(u8, got, exp)) {
+        passed += 1;
+    } else {
         failed += 1;
-        std.debug.print("FAIL: {s}  expected={s}  got={s}\n", .{label, exp, got});
+        std.debug.print("FAIL: {s}  expected={s}  got={s}\n", .{ label, exp, got });
     }
 }
 
@@ -88,23 +90,23 @@ pub fn main() !void {
     check("fresh nik not expired", !fresh_expired);
 
     const old_nik = sec.Nik{
-        .key_type        = nik1.key_type,
-        .node_id         = nik1.node_id,
-        .kid             = nik1.kid,
-        .issued_at       = nik1.issued_at,
-        .expires_at      = "2000-01-01T00:00:00Z",
-        .node_label      = nik1.node_label,
-        .public_key_b64  = nik1.public_key_b64,
+        .key_type = nik1.key_type,
+        .node_id = nik1.node_id,
+        .kid = nik1.kid,
+        .issued_at = nik1.issued_at,
+        .expires_at = "2000-01-01T00:00:00Z",
+        .node_label = nik1.node_label,
+        .public_key_b64 = nik1.public_key_b64,
         .private_key_b64 = nik1.private_key_b64,
-        .key_pair        = nik1.key_pair,
-        .allocator       = allocator,
+        .key_pair = nik1.key_pair,
+        .allocator = allocator,
     };
     const old_expired = try sec.isNikExpired(allocator, &old_nik);
     check("old nik expired", old_expired);
 
     // ---- sign_plan / verify_plan ----
     const plan_kvs = [_]sec.KvPair{
-        .{ .key = "planId",  .val = sec.JsonVal{ .Str = "p1" } },
+        .{ .key = "planId", .val = sec.JsonVal{ .Str = "p1" } },
         .{ .key = "quantum", .val = sec.JsonVal{ .Int = 60 } },
         .{ .key = "startAt", .val = sec.JsonVal{ .Str = "2026-05-01T00:00:00Z" } },
     };
@@ -139,9 +141,9 @@ pub fn main() !void {
         .{ .key = "planId", .val = sec.JsonVal{ .Str = "TAMPERED" } },
     };
     const tampered_sp = sec.SignedPlan{
-        .plan      = sec.JsonVal{ .Obj = &tampered_plan_kvs },
+        .plan = sec.JsonVal{ .Obj = &tampered_plan_kvs },
         .cose_sign1 = sp.cose_sign1,
-        .allocator  = allocator,
+        .allocator = allocator,
     };
     const vr4 = try sec.verifyPlan(allocator, tampered_sp, &cache);
     check("verify fails tampered", !vr4.ok);

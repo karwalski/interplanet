@@ -375,8 +375,12 @@ int ipt_get_mars_time_at_offset(int64_t utc_ms, int offset_h,
     out->day_number  = mtc.sol + sol_delta;
     out->local_hour  = (double)h + mtc.minute / 60.0 + mtc.second / 3600.0;
     out->day_fraction = out->local_hour / 24.0;
-    snprintf(out->time_str,      sizeof(out->time_str),      "%02d:%02d",    h, mtc.minute);
-    snprintf(out->time_str_full, sizeof(out->time_str_full), "%02d:%02d:%02d", h, mtc.minute, mtc.second);
+    /* h, minute and second are in 0..59; the % 100u only tells the compiler
+     * each field fits the 2-digit slots of time_str / time_str_full. */
+    snprintf(out->time_str,      sizeof(out->time_str),      "%02u:%02u",
+             (unsigned)h % 100u, (unsigned)mtc.minute % 100u);
+    snprintf(out->time_str_full, sizeof(out->time_str_full), "%02u:%02u:%02u",
+             (unsigned)h % 100u, (unsigned)mtc.minute % 100u, (unsigned)mtc.second % 100u);
     return 0;
 }
 
@@ -472,10 +476,10 @@ int ipt_get_planet_time(ipt_planet_t p, int64_t utc_ms, int tz_h,
         }
         if (prefix == NULL) {
             out->zone_id[0] = '\0';
-        } else if (tz_h >= 0) {
-            snprintf(out->zone_id, sizeof(out->zone_id), "%s+%d", prefix, tz_h);
         } else {
-            snprintf(out->zone_id, sizeof(out->zone_id), "%s%d", prefix, tz_h);
+            /* Zone offsets are whole hours well inside +-99 ("AMT+4", "AMT-3"). */
+            int z = tz_h < -99 ? -99 : (tz_h > 99 ? 99 : tz_h);
+            snprintf(out->zone_id, sizeof(out->zone_id), "%s%+d", prefix, z);
         }
     }
 

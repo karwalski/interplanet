@@ -12,7 +12,7 @@ const std = @import("std");
 const ipt = @import("interplanet_time");
 
 const PLANET_NAMES = [_][]const u8{
-    "mercury", "venus", "earth", "mars",
+    "mercury", "venus",  "earth",  "mars",
     "jupiter", "saturn", "uranus", "neptune",
     "moon",
 };
@@ -51,8 +51,14 @@ fn jsonField(json: []const u8, key: []const u8) ?[]const u8 {
             // String value
             j += 1;
             while (j < json.len) : (j += 1) {
-                if (json[j] == '\\') { j += 1; continue; }
-                if (json[j] == '"') { j += 1; break; }
+                if (json[j] == '\\') {
+                    j += 1;
+                    continue;
+                }
+                if (json[j] == '"') {
+                    j += 1;
+                    break;
+                }
             }
             return json[val_start..j];
         } else if (json[j] == '{' or json[j] == '[') {
@@ -62,8 +68,7 @@ fn jsonField(json: []const u8, key: []const u8) ?[]const u8 {
             var depth: u32 = 1;
             j += 1;
             while (j < json.len and depth > 0) : (j += 1) {
-                if (json[j] == open) depth += 1
-                else if (json[j] == close) depth -= 1;
+                if (json[j] == open) depth += 1 else if (json[j] == close) depth -= 1;
             }
             return json[val_start..j];
         } else {
@@ -119,15 +124,17 @@ fn iterateEntries(json: []const u8, comptime callback: fn (entry: []const u8, id
         // Skip whitespace and commas
         while (i < json.len and (json[i] == ' ' or json[i] == '\t' or json[i] == '\n' or json[i] == '\r' or json[i] == ',')) : (i += 1) {}
         if (i >= json.len or json[i] == ']') break;
-        if (json[i] != '{') { i += 1; continue; }
+        if (json[i] != '{') {
+            i += 1;
+            continue;
+        }
 
         // Find matching }
         const entry_start = i;
         var depth: u32 = 1;
         i += 1;
         while (i < json.len and depth > 0) : (i += 1) {
-            if (json[i] == '{') depth += 1
-            else if (json[i] == '}') depth -= 1;
+            if (json[i] == '{') depth += 1 else if (json[i] == '}') depth -= 1;
         }
         const entry_json = json[entry_start..i];
         callback(entry_json, count);

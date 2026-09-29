@@ -2,7 +2,7 @@
 //! Mirrors the orbital section of planet-time.js.
 
 use crate::constants::{
-    AU_SECONDS, DEG, J2000_MS, LEAP_SECS, ORB_ELEMS, Planet,
+    AU_SECONDS, DEG, LEAP_SECS, ORB_ELEMS, Planet,
 };
 use std::f64::consts::PI;
 
@@ -132,11 +132,7 @@ pub fn check_line_of_sight(a: Planet, b: Planet, utc_ms: i64) -> LineOfSight {
 
     // Elongation: angle at body-a between Sun and body-b
     let elong_deg = {
-        let ra  = pa.r;
-        let rb  = body_distance_au(a, b, utc_ms);
-        let rsun = pa.r; // a–Sun = ra
-        // law of cosines: cos(elong) = (ra² + rb² - rb_abs²) / 2 ra rb
-        // Simpler: angle between vector (0,0)→pa and pa→pb
+        // Angle between vector (0,0)→pa and pa→pb
         let ax = -pa.x;   // Sun relative to a
         let ay = -pa.y;
         let bx = pb.x - pa.x;
@@ -170,6 +166,7 @@ pub fn lower_quartile_light_time(a: Planet, b: Planet, ref_ms: i64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::constants::J2000_MS;
 
     #[test]
     fn jde_at_j2000() {

@@ -9,7 +9,10 @@ const path = require('path');
 const fs   = require('fs');
 const ipt  = require('../dist/cjs/index.js');
 
-const FIXTURE_PATH = path.resolve(__dirname, '../../../c/planet-time/fixtures/reference.json');
+// Usage: node tests/fixtures.js [path/to/reference.json]
+const FIXTURE_PATH = process.argv[2]
+  ? path.resolve(process.argv[2])
+  : path.resolve(__dirname, '../../../c/planet-time/fixtures/reference.json');
 
 if (!fs.existsSync(FIXTURE_PATH)) {
   console.log('SKIP: fixture file not found at', FIXTURE_PATH);

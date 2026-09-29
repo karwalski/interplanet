@@ -7,22 +7,22 @@ import (
 
 // PlanetTime holds the result of GetPlanetTime.
 type PlanetTime struct {
-	Hour           int
-	Minute         int
-	Second         int
-	LocalHour      float64
-	DayFraction    float64
-	DayNumber      int64
-	DayInYear      int64
-	YearNumber     int64
-	PeriodInWeek   int
-	IsWorkPeriod   bool
-	IsWorkHour     bool
-	TimeStr        string // "HH:MM"
-	TimeStrFull    string // "HH:MM:SS"
-	SolInYear      int64  // Mars only; -1 otherwise
-	SolsPerYear    int64  // Mars only; -1 otherwise
-	ZoneID         string // interplanetary zone ID e.g. "AMT+4"; "" for Earth
+	Hour         int
+	Minute       int
+	Second       int
+	LocalHour    float64
+	DayFraction  float64
+	DayNumber    int64
+	DayInYear    int64
+	YearNumber   int64
+	PeriodInWeek int
+	IsWorkPeriod bool
+	IsWorkHour   bool
+	TimeStr      string // "HH:MM"
+	TimeStrFull  string // "HH:MM:SS"
+	SolInYear    int64  // Mars only; -1 otherwise
+	SolsPerYear  int64  // Mars only; -1 otherwise
+	ZoneID       string // interplanetary zone ID e.g. "AMT+4"; "" for Earth
 }
 
 // MTC holds Mars Coordinated Time.
@@ -90,7 +90,7 @@ func GetPlanetTime(planet string, utcMs int64, tzOffsetH float64) PlanetTime {
 		// UTC day-of-week: ((floor(unix_ms / 86400000) % 7) + 3) % 7 → Mon=0..Sun=6
 		// Use math.Floor for correct signed floor division
 		utcDay := int64(math.Floor(float64(utcMs) / float64(EarthDayMs)))
-		piw = int(((utcDay%7)+7+3)%7)
+		piw = int(((utcDay % 7) + 7 + 3) % 7)
 		isWorkPeriod = piw < pd.WorkPeriodsPerWeek
 		msInDay := ((utcMs % int64(EarthDayMs)) + int64(EarthDayMs)) % int64(EarthDayMs)
 		utcHour := float64(msInDay) / 3_600_000.0
@@ -146,17 +146,18 @@ func GetPlanetTime(planet string, utcMs int64, tzOffsetH float64) PlanetTime {
 }
 
 // GetMTC returns Mars Coordinated Time for the given UTC milliseconds.
+//
+// As getMTC in planet-time.js, the hours, minutes and seconds divide the sol:
+// a Mars hour is 1/24 sol (about 3699 SI seconds).
 func GetMTC(utcMs int64) MTC {
-	ms := float64(utcMs - MarsEpochMs)
-	sol := int64(math.Floor(ms / float64(MarsSolMs)))
-	fracMs := math.Mod(ms, float64(MarsSolMs))
-	if fracMs < 0 {
-		fracMs += float64(MarsSolMs)
-	}
-	totalSec := fracMs / 1000.0
-	hour := int(totalSec / 3600.0)
-	minute := int(math.Mod(totalSec, 3600.0) / 60.0)
-	second := int(math.Mod(totalSec, 60.0))
+	totalSols := float64(utcMs-MarsEpochMs) / float64(MarsSolMs)
+	solF := math.Floor(totalSols)
+	frac := totalSols - solF
+	h := math.Floor(frac * 24)
+	m := math.Floor((frac*24 - h) * 60)
+	s := math.Floor(((frac*24-h)*60 - m) * 60)
+	sol := int64(solF)
+	hour, minute, second := int(h), int(m), int(s)
 
 	return MTC{
 		Sol:    sol,
