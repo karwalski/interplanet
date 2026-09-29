@@ -197,6 +197,55 @@ check 'format_utc has time part',      utc.start_with?('14:30:45')
 check 'format_utc ends UTC',           utc.end_with?('UTC')
 check 'format_utc(0) == 00:00:00 UTC', format_utc(0) == '00:00:00 UTC'
 
+# ── Conformance: golden planId vectors (spec/golden/plan-ids.json) ─────────
+section 'Conformance: golden planId vectors'
+golden = JSON.parse(File.read(File.join(__dir__, '../../../spec/golden/plan-ids.json')))
+gv_by_name = golden['vectors'].each_with_object({}) { |gv, h| h[gv['name']] = gv }
+check 'golden vectors present (>= 9)',    golden['vectors'].size >= 9
+golden['vectors'].each do |gv|
+  got = make_plan_id(gv['plan'])
+  check "golden #{gv['name']} planId (got #{got})", got == gv['planId']
+  check "golden #{gv['name']} planHash", ILX.plan_hash(gv['plan']) == gv['planHash'] if gv['planHash']
+end
+check 'golden anchor v2 default',         gv_by_name['v2-createPlan-default']['planId'] == 'LTX-20260315-EARTHHQ-MARS-v2-2596ffe8'
+check 'golden v2 key-order sensitive',    gv_by_name['v2-createPlan-default']['planId'] != gv_by_name['v2-key-order-sensitive']['planId']
+check 'golden v3 order-insensitive',      gv_by_name['v3-upgrade-delays']['planId'] == gv_by_name['v3-key-order-insensitive']['planId']
+check 'golden v3 amendment chain hash',   gv_by_name['v3-amendment']['plan']['prevPlanHash'] == gv_by_name['v3-upgrade-delays']['planHash']
+fc_float = JSON.parse(JSON.generate(gv_by_name['v2-freeze-check']['plan']))
+fc_float['nodes'][1]['delay'] = fc_float['nodes'][1]['delay'].to_f
+check 'v2 hash formats 840.0 as 840',     make_plan_id(fc_float) == gv_by_name['v2-freeze-check']['planId']
+check 'JsJson.number matches JS',         [840.0, 0.1, 1e21, 1e-7, 1.5e-7, 1e16, -2.5, 0.000001].map { |x| JsJson.number(x) } ==
+                                          %w[840 0.1 1e+21 1e-7 1.5e-7 10000000000000000 -2.5 0.000001]
+
+# ── Plan validation: reserved streams / branching (§3.5, §7) ─────────────
+section 'Plan validation: reserved fields'
+codes_of = ->(r) { r[:errors].map { |e| e[:code] } }
+golden['vectors'].each do |gv|
+  check "validate_plan accepts golden #{gv['name']}", ILX.validate_plan(gv['plan'])[:valid] == true
+end
+vp_base = gv_by_name['v3-upgrade-delays']['plan']
+vp_v2   = gv_by_name['v2-freeze-check']['plan']
+check 'validate_plan v3 empty streams ok',  ILX.validate_plan(vp_base.merge('streams' => []))[:valid] == true
+vp_streams = ILX.validate_plan(vp_base.merge('streams' => [{ 'id' => 'S1' }]))
+check 'validate_plan non-empty streams',    vp_streams[:valid] == false && codes_of.call(vp_streams).include?('reserved_streams')
+check 'validate_plan streams error path',   vp_streams[:errors].find { |e| e[:code] == 'reserved_streams' }[:path] == 'streams'
+check 'validate_plan streams non-array',    codes_of.call(ILX.validate_plan(vp_base.merge('streams' => 'S1'))).include?('reserved_streams')
+check 'validate_plan segment stream',       codes_of.call(ILX.validate_plan(vp_base.merge('segments' => [{ 'type' => 'TX', 'q' => 1, 'stream' => 'S1' }]))).include?('reserved_streams')
+check 'validate_plan branches',             codes_of.call(ILX.validate_plan(vp_base.merge('branches' => []))).include?('reserved_branching')
+check 'validate_plan branching',            codes_of.call(ILX.validate_plan(vp_base.merge('branching' => { 'mode' => 'local' }))).include?('reserved_branching')
+vp_seg_branch = ILX.validate_plan(vp_base.merge('segments' => [{ 'type' => 'CAUCUS', 'q' => 1, 'branch' => 'B1' }]))
+check 'validate_plan segment branch',       codes_of.call(vp_seg_branch).include?('reserved_branching') &&
+                                            vp_seg_branch[:errors][0][:path] == 'segments[0].branch'
+check 'validate_plan v2 streams is v3 field', codes_of.call(ILX.validate_plan(vp_v2.merge('streams' => []))).include?('v3_field_in_v2')
+check 'validate_plan v2 branching',         codes_of.call(ILX.validate_plan(vp_v2.merge('branching' => true))).include?('reserved_branching')
+check 'validate_plan symbol keys',          codes_of.call(ILX.validate_plan(vp_v2.merge(branches: []))).include?('reserved_branching')
+check 'validate_plan non-object',           codes_of.call(ILX.validate_plan(nil)).include?('not_an_object')
+check 'validate_plan bad version',          codes_of.call(ILX.validate_plan(vp_v2.merge('v' => 7))).include?('invalid_version')
+check 'validate_plan host not first',       codes_of.call(ILX.validate_plan(vp_v2.merge('nodes' => vp_v2['nodes'].reverse))).include?('invalid_host')
+check 'validate_plan unsorted delays key',  codes_of.call(ILX.validate_plan(vp_base.merge('delays' => { 'N1|N0' => 860 }))).include?('invalid_delays')
+check 'validate_plan unknown speaker',      codes_of.call(ILX.validate_plan(vp_v2.merge('segments' => [{ 'type' => 'TX', 'q' => 1, 'speaker' => 'N9' }]))).include?('unknown_speaker')
+check 'validate_plan quantum out of range', codes_of.call(ILX.validate_plan(vp_v2.merge('quantum' => 0))).include?('invalid_quantum')
+
 # ── Summary ──────────────────────────────────────────────────────────────
 puts "\n=========================================="
 puts "#{@passed} passed  #{@failed} failed"

@@ -11,6 +11,7 @@
 #   hash = InterplanetLtx.encode_hash(plan)
 
 require 'base64'
+require 'digest'
 require 'json'
 require 'net/http'
 require 'time'
@@ -18,6 +19,8 @@ require 'uri'
 
 require_relative 'interplanet_ltx/constants'
 require_relative 'interplanet_ltx/models'
+require_relative 'interplanet_ltx/js_json'
+require_relative 'interplanet_ltx/validate'
 
 module InterplanetLtx
 
@@ -115,34 +118,55 @@ module InterplanetLtx
 
   # ── Plan ID ──────────────────────────────────────────────────────────────
 
-  # Compute the deterministic plan ID string.
-  # Format: "LTX-YYYYMMDD-HOST-NODE-v2-XXXXXXXX"
+  # Compute the deterministic plan ID string (matches makePlanId in ltx-sdk.js).
+  # Format: "LTX-YYYYMMDD-HOST-NODE-v2-XXXXXXXX" or "...-v3-XXXXXXXX"
   #
-  # @param plan [LtxPlan]
+  # Accepts an LtxPlan (v2, serialised in _plan_to_json order) or a plan Hash
+  # as parsed from JSON (v2 or v3, key insertion order preserved). v2 uses the
+  # FROZEN imul31 hash over the UTF-16 code units of JSON.stringify(plan)
+  # (LTX-SPECIFICATION.md §4.3); v3 uses SHA-256 over canonical JSON (§4.5).
+  # Reproduces every vector in spec/golden/plan-ids.json.
+  #
+  # @param plan [LtxPlan, Hash]
   # @return [String]
   def self.make_plan_id(plan)
-    start_ms = _parse_iso_ms(plan.start)
-    date     = Time.at(start_ms / 1000.0).utc.strftime('%Y%m%d')
-
-    # Host string: remove spaces, uppercase, max 8 chars
-    host_str = 'HOST'
-    unless plan.nodes.empty?
-      host_str = plan.nodes[0].name.gsub(/\s+/, '').upcase[0, 8]
+    if plan.is_a?(Hash)
+      c     = _upgrade_config_hash(plan)
+      nodes = (c['nodes'] || c[:nodes] || []).map { |n| n.transform_keys(&:to_s) }
+      start = c['start'] || c[:start]
+      v     = c['v'] || c[:v] || 1
+    else
+      c     = plan
+      nodes = plan.nodes.map { |n| { 'name' => n.name } }
+      start = plan.start
+      v     = 2
     end
+    date = Time.at(_parse_iso_ms(start) / 1000r).utc.strftime('%Y%m%d')
 
-    # Node string: first 4 non-space chars of each remote node name
+    # Host string: remove whitespace, uppercase, max 8 UTF-16 units
+    host_str = _id_part(nodes[0] && nodes[0]['name'], 8, 'HOST')
+
+    # Node string: first 4 of each remote node name, joined, max 16
     node_str = 'RX'
-    if plan.nodes.size > 1
-      parts = plan.nodes[1..].map do |n|
-        n.name.gsub(/\s+/, '').upcase[0, 4]
-      end
-      node_str = parts.join('-')
+    if nodes.size > 1
+      node_str = JsJson.utf16_slice(nodes[1..].map { |n| _id_part(n['name'], 4, '') }.join('-'), 16)
     end
 
-    # Polynomial hash matching Math.imul(31, h) in ltx-sdk.js
-    h = _plan_hash_hex(plan)
+    if v.is_a?(Numeric) && v >= 3
+      digest = Digest::SHA256.hexdigest(JsJson.canonical(c))
+      return "LTX-#{date}-#{host_str}-#{node_str}-v3-#{digest[0, 8]}"
+    end
 
-    "LTX-#{date}-#{host_str}-#{node_str}-v2-#{h}"
+    json = plan.is_a?(Hash) ? JsJson.stringify(c) : _plan_to_json(plan)
+    "LTX-#{date}-#{host_str}-#{node_str}-v2-#{_imul31_hex(json)}"
+  end
+
+  # SHA-256 hex of the canonical JSON of a plan Hash (prevPlanHash, §6.4).
+  #
+  # @param plan [Hash]
+  # @return [String]
+  def self.plan_hash(plan)
+    Digest::SHA256.hexdigest(JsJson.canonical(plan))
   end
 
   # ── Encoding ─────────────────────────────────────────────────────────────
@@ -385,13 +409,42 @@ module InterplanetLtx
   end
   private_class_method :_plan_to_json
 
-  # Compute the polynomial hash hex string (matches ltx-sdk.js makePlanId).
-  def self._plan_hash_hex(plan)
+  # imul31 over the UTF-16 code units of a JSON string (ltx-sdk.js makePlanId).
+  def self._imul31_hex(json)
     h = 0
-    _plan_to_json(plan).each_byte { |b| h = (h * 31 + b) & 0xFFFFFFFF }
+    JsJson.utf16_units(json).each { |u| h = (h * 31 + u) & 0xFFFFFFFF }
     format('%08x', h)
   end
-  private_class_method :_plan_hash_hex
+  private_class_method :_imul31_hex
+
+  # (name || default).replace(/\s+/g, '').toUpperCase().slice(0, n)
+  def self._id_part(name, n, default)
+    s = name.is_a?(String) && !name.empty? ? name : default
+    JsJson.utf16_slice(s.gsub(/\s+/, '').upcase, n)
+  end
+  private_class_method :_id_part
+
+  # upgradeConfig for plan Hashes: v1 (txName/rxName/delay) to v2 nodes[];
+  # v2+ plans with nodes are returned unchanged (same object, same key order).
+  def self._upgrade_config_hash(cfg)
+    get = ->(k) { cfg.key?(k) ? cfg[k] : cfg[k.to_sym] }
+    v = get.call('v')
+    nodes = get.call('nodes')
+    return cfg if v.is_a?(Numeric) && v >= 2 && nodes.is_a?(Array) && !nodes.empty?
+
+    rx = get.call('rxName').to_s.downcase
+    remote_loc = rx.include?('mars') ? 'mars' : (rx.include?('moon') ? 'moon' : 'earth')
+    cfg.transform_keys(&:to_s).merge(
+      'v' => 2,
+      'nodes' => [
+        { 'id' => 'N0', 'name' => get.call('txName') || 'Earth HQ', 'role' => 'HOST',
+          'delay' => 0, 'location' => 'earth' },
+        { 'id' => 'N1', 'name' => get.call('rxName') || 'Mars Hab-01', 'role' => 'PARTICIPANT',
+          'delay' => get.call('delay') || 0, 'location' => remote_loc },
+      ],
+    )
+  end
+  private_class_method :_upgrade_config_hash
 
   # URL-safe base64 encode (no padding, `-` and `_` substitutions).
   def self._b64url_encode(str)
