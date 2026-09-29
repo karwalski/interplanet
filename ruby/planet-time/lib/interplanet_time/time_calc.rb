@@ -43,7 +43,7 @@ module InterplanetTime
         utc_hour       = utc_sec / 3600.0
         is_work_hour   = is_work_period && utc_hour >= work_start && utc_hour < work_end
       else
-        # Work period — positive modulo so pre-epoch dates give valid 0..(n-1) range
+        # Work period: positive modulo so pre-epoch dates give valid 0..(n-1) range
         total_periods  = total_days / days_per_p
         period_in_week = ((total_periods.floor % per_per_wk) + per_per_wk) % per_per_wk
         is_work_period = period_in_week < work_per_wk

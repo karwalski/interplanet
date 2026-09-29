@@ -18,7 +18,7 @@ lint:
 ifdef ELIXIR
 	mix compile --warnings-as-errors --force 2>&1
 else
-	@echo "elixir not installed — skipping lint"
+	@echo "elixir not installed, skipping lint"
 endif
 
 clean:

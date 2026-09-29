@@ -30,7 +30,7 @@ pack:
 ifdef DOTNET
 	dotnet pack InterplanetLTX.csproj -c Release -o bin/pkg
 else
-	@echo "dotnet not installed — skipping pack"
+	@echo "dotnet not installed, skipping pack"
 endif
 
 clean:

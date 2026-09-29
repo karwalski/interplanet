@@ -342,7 +342,7 @@ end
     @test abs(mtc_half.hour - 12) <= 1
 end
 
-@testset "get_mtc — Mars hours as in planet-time.js (issue #38)" begin
+@testset "get_mtc: Mars hours as in planet-time.js (issue #38)" begin
     m = get_mtc(Int64(860467588517))  # 1997-04-08T02:46:28.517Z
     @test (m.sol, m.hour, m.minute, m.second) == (15595, 23, 38, 0)
     ms = Int64(1815216150793)
