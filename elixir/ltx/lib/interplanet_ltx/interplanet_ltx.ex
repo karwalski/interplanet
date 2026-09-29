@@ -525,13 +525,14 @@ defmodule InterplanetLtx do
     ~s({"v":#{plan.v},"title":#{json_str(plan.title)},"start":#{json_str(plan.start)},"quantum":#{plan.quantum},"mode":#{json_str(plan.mode)},"nodes":[#{nodes_json}],"segments":[#{segs_json}]})
   end
 
-  # Polynomial hash matching Math.imul(31, h) >>> 0 in ltx-sdk.js
+  # Polynomial hash matching Math.imul(31, h) >>> 0 in ltx-sdk.js. JS iterates
+  # UTF-16 code units (charCodeAt), so astral characters count as two units.
   defp djb_hash(str) do
-    str
-    |> String.to_charlist()
-    |> Enum.reduce(0, fn c, h ->
-      band(h * 31 + c, 0xFFFFFFFF)
-    end)
+    utf16 = :unicode.characters_to_binary(str, :utf8, {:utf16, :big})
+
+    for <<unit::16 <- utf16>>, reduce: 0 do
+      h -> band(h * 31 + unit, 0xFFFFFFFF)
+    end
   end
 
   # Compute 8-char lowercase hex hash for plan ID
