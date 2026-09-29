@@ -171,3 +171,55 @@ fun runParityTests() {
     check("snapshot signature verifies", LtxV11.verifyRegisterEntry(decSnap.snapshot, decCache).valid)
     check("snapshot counts", decSnap.snapshot.content["entryCount"] == 2 && decSnap.snapshot.content["rejectedCount"] == 0)
 }
+
+/** Typed LtxPlan with the characters of issue #36 (see [runIssue36Tests]). */
+internal fun issue36Plan() = LtxPlan(
+    v = 2,
+    title = "Ctl\u0001\b\u000c\n\r\t\"\\\u001f\u007f\ud800 \ud83d\ude80",
+    start = "2026-03-15T14:00:00.000Z", quantum = 3, mode = "LTX-ASYNC",
+    nodes = listOf(
+        LtxNode("N0", "Earth\tHQ", "HOST", 0, "earth"),
+        LtxNode("N1", "Ma\u00a0r\u3000s\u2009Hab-01", "PARTICIPANT", 840, "mars"),
+        LtxNode("N2", "L-1\u2028Gate\ufeffway\n", "PARTICIPANT", 2, "moon")),
+    segments = listOf(
+        LtxSegmentTemplate("PLAN_CONFIRM", 2),
+        LtxSegmentTemplate("TX", 3, "N0", "Opening\tremarks"),
+        LtxSegmentTemplate("RX", 3),
+        LtxSegmentTemplate("TX", 2, speaker = "N1"),
+        LtxSegmentTemplate("TX", 1, label = "Q&A \ud83d\udd34"),
+        LtxSegmentTemplate("BUFFER", 1)))
+
+/** JSON.stringify of the same plan object and its makePlanId, from ltx-sdk.js (node 22). */
+internal const val ISSUE36_JS_JSON = "{\"v\":2,\"title\":\"Ctl\\u0001\\b\\f\\n\\r\\t\\\"\\\\\\u001f\u007f\\ud800 \ud83d\ude80\",\"start\":\"2026-03-15T14:00:00.000Z\",\"quantum\":3,\"mode\":\"LTX-ASYNC\",\"nodes\":[{\"id\":\"N0\",\"name\":\"Earth\\tHQ\",\"role\":\"HOST\",\"delay\":0,\"location\":\"earth\"},{\"id\":\"N1\",\"name\":\"Ma\u00a0r\u3000s\u2009Hab-01\",\"role\":\"PARTICIPANT\",\"delay\":840,\"location\":\"mars\"},{\"id\":\"N2\",\"name\":\"L-1\u2028Gate\ufeffway\\n\",\"role\":\"PARTICIPANT\",\"delay\":2,\"location\":\"moon\"}],\"segments\":[{\"type\":\"PLAN_CONFIRM\",\"q\":2},{\"type\":\"TX\",\"q\":3,\"speaker\":\"N0\",\"label\":\"Opening\\tremarks\"},{\"type\":\"RX\",\"q\":3},{\"type\":\"TX\",\"q\":2,\"speaker\":\"N1\"},{\"type\":\"TX\",\"q\":1,\"label\":\"Q&A \ud83d\udd34\"},{\"type\":\"BUFFER\",\"q\":1}]}"
+internal const val ISSUE36_JS_ID = "LTX-20260315-EARTHHQ-MARS-L-1G-v2-39d48c2a"
+
+/**
+ * Issue #36: the typed LtxPlan wire JSON is exactly JSON.stringify (control
+ * characters, lone surrogates), makePlanId strips JS \s whitespace, and
+ * segments carry optional speaker/label.
+ */
+fun runIssue36Tests() {
+    println("── Issue #36: escaping, whitespace, attribution ──")
+    val plan = issue36Plan()
+    val json = InterplanetLTX.planToJson(plan)
+    check("planToJson == JSON.stringify (control chars, speaker/label)", json == ISSUE36_JS_JSON)
+    check("planToJson has no raw control characters", json.none { it < ' ' })
+    check("unattributed segment has no speaker/label", json.contains("{\"type\":\"RX\",\"q\":3}"))
+    val parsed = asMap(LtxJson.parse(json))
+    check("planToJson re-stringifies identically", LtxJson.stringify(parsed) == json)
+    val id = InterplanetLTX.makePlanId(plan)
+    check("makePlanId == JS makePlanId", id == ISSUE36_JS_ID)
+    check("makePlanId == LtxPlans.makePlanId(wire JSON)", id == LtxPlans.makePlanId(parsed))
+    val back = InterplanetLTX.decodeHash(InterplanetLTX.encodeHash(plan))
+    check("decodeHash round-trips the whole plan", back == plan)
+    check("decoded plan has the same planId", back != null && InterplanetLTX.makePlanId(back) == id)
+    val ws = LtxPlan(v = 2, title = "t", start = "2026-03-15T14:00:00.000Z", quantum = 3, mode = "LTX",
+        nodes = listOf(
+            LtxNode("N0", "\u00a0Ea\u1680rth\u205fHQ\u202f", "HOST", 0, "earth"),
+            LtxNode("N1", "M\u000ba\u000cr\u3000s", "PARTICIPANT", 0, "mars")),
+        segments = listOf(LtxSegmentTemplate("TX", 1)))
+    check("makePlanId strips all JS \\s whitespace", InterplanetLTX.makePlanId(ws).startsWith("LTX-20260315-EARTHHQ-MARS-v2-"))
+    val fromMap = InterplanetLTX.upgradeConfig(mapOf("v" to 2, "title" to "t", "start" to "2026-03-15T14:00:00.000Z",
+        "segments" to listOf(mapOf("type" to "TX", "q" to 2, "speaker" to "N0", "label" to "L"))))
+    check("upgradeConfig keeps speaker/label", fromMap.segments == listOf(LtxSegmentTemplate("TX", 2, "N0", "L")))
+}

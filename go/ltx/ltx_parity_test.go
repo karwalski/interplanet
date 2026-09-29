@@ -405,3 +405,76 @@ func TestEncodeHashV3WireMatchesPlanID(t *testing.T) {
 		t.Fatalf("v2 wire JSON gained v3 keys: %s", w)
 	}
 }
+
+// Issue #36: the typed wire JSON is exactly JSON.stringify (control
+// characters; U+2028, which encoding/json would escape), MakePlanID strips
+// JS \s whitespace (not only spaces, and not unicode.IsSpace), and segments
+// keep speaker/label only when present.
+func TestIssue36TypedWireAndWhitespace(t *testing.T) {
+	p := ltx.LtxPlan{
+		V:     2,
+		Title: "Ctl\u0001\b\f\n\r\t\"\\\u001f\u007f \U0001F680",
+		Start: "2026-03-15T14:00:00.000Z", Quantum: 3, Mode: "LTX-ASYNC",
+		Nodes: []ltx.LtxNode{
+			{ID: "N0", Name: "Earth\tHQ", Role: "HOST", Delay: 0, Location: "earth"},
+			{ID: "N1", Name: "Ma\u00a0r\u3000s\u2009Hab-01", Role: "PARTICIPANT", Delay: 840, Location: "mars"},
+			{ID: "N2", Name: "L-1\u2028Gate\ufeffway\n", Role: "PARTICIPANT", Delay: 2, Location: "moon"},
+		},
+		Segments: []ltx.LtxSegmentTemplate{
+			{Type: "PLAN_CONFIRM", Q: 2},
+			{Type: "TX", Q: 3, Speaker: "N0", Label: "Opening\tremarks"},
+			{Type: "RX", Q: 3},
+			{Type: "TX", Q: 2, Speaker: "N1"},
+			{Type: "TX", Q: 1, Label: "Q&A \U0001F534"},
+			{Type: "BUFFER", Q: 1},
+		},
+	}
+	// JSON.stringify of the same plan object and its makePlanId, from ltx-sdk.js (node 22).
+	const wantJSON = "{\"v\":2,\"title\":\"Ctl\\u0001\\b\\f\\n\\r\\t\\\"\\\\\\u001f\u007f \U0001F680\",\"start\":\"2026-03-15T14:00:00.000Z\",\"quantum\":3,\"mode\":\"LTX-ASYNC\",\"nodes\":[{\"id\":\"N0\",\"name\":\"Earth\\tHQ\",\"role\":\"HOST\",\"delay\":0,\"location\":\"earth\"},{\"id\":\"N1\",\"name\":\"Ma\u00a0r\u3000s\u2009Hab-01\",\"role\":\"PARTICIPANT\",\"delay\":840,\"location\":\"mars\"},{\"id\":\"N2\",\"name\":\"L-1\u2028Gate\ufeffway\\n\",\"role\":\"PARTICIPANT\",\"delay\":2,\"location\":\"moon\"}],\"segments\":[{\"type\":\"PLAN_CONFIRM\",\"q\":2},{\"type\":\"TX\",\"q\":3,\"speaker\":\"N0\",\"label\":\"Opening\\tremarks\"},{\"type\":\"RX\",\"q\":3},{\"type\":\"TX\",\"q\":2,\"speaker\":\"N1\"},{\"type\":\"TX\",\"q\":1,\"label\":\"Q&A \U0001F534\"},{\"type\":\"BUFFER\",\"q\":1}]}"
+	const wantID = "LTX-20260315-EARTHHQ-MARS-L-1G-v2-9d8c90f7"
+	wire, err := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(ltx.EncodeHash(p), "#l="))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(wire) != wantJSON {
+		t.Fatalf("wire JSON is not JSON.stringify:\n got %q\nwant %q", wire, wantJSON)
+	}
+	parsed, err := ltx.ParseOrderedJSON(wire)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ltx.JSStringify(parsed) != string(wire) {
+		t.Fatalf("wire JSON does not re-stringify identically")
+	}
+	fromWire, err := ltx.MakePlanIDFromJSON(wire)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := ltx.MakePlanID(p); got != wantID || got != fromWire {
+		t.Fatalf("MakePlanID %s, planId of wire JSON %s, JS %s", got, fromWire, wantID)
+	}
+	back := ltx.DecodeHash(ltx.EncodeHash(p))
+	if back == nil || back.Title != p.Title || !reflect.DeepEqual(back.Nodes, p.Nodes) || !reflect.DeepEqual(back.Segments, p.Segments) {
+		t.Fatalf("DecodeHash did not round-trip title, names, speaker/label: %+v", back)
+	}
+
+	// JS \s is not unicode.IsSpace: U+FEFF is stripped, U+0085 is kept.
+	ws := ltx.LtxPlan{
+		V: 2, Title: "t", Start: "2026-03-15T14:00:00.000Z", Quantum: 3, Mode: "LTX",
+		Nodes: []ltx.LtxNode{
+			{ID: "N0", Name: "\u00a0Ea\u1680rth\u205fHQ\u202f", Role: "HOST", Location: "earth"},
+			{ID: "N1", Name: "\ufeffM\va\fr\u3000s", Role: "PARTICIPANT", Location: "mars"},
+			{ID: "N2", Name: "X\u0085Y", Role: "PARTICIPANT", Location: "moon"},
+		},
+		Segments: []ltx.LtxSegmentTemplate{{Type: "TX", Q: 1}},
+	}
+	const wsWant = "LTX-20260315-EARTHHQ-MARS-X\u0085Y-v2-aa92073b"
+	wsWire, _ := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(ltx.EncodeHash(ws), "#l="))
+	wsFromWire, err := ltx.MakePlanIDFromJSON(wsWire)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := ltx.MakePlanID(ws); got != wsWant || wsFromWire != wsWant {
+		t.Fatalf("whitespace: MakePlanID %q, planId of wire JSON %q, JS %q", got, wsFromWire, wsWant)
+	}
+}

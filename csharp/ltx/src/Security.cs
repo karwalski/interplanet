@@ -46,8 +46,9 @@ public static class LtxSecurity
     {
         var sb = new StringBuilder(s.Length + 2);
         sb.Append('"');
-        foreach (char c in s)
+        for (int i = 0; i < s.Length; i++)
         {
+            char c = s[i];
             switch (c)
             {
                 case '"': sb.Append("\\\""); break;
@@ -59,6 +60,13 @@ public static class LtxSecurity
                 case '\t': sb.Append("\\t"); break;
                 default:
                     if (c < 0x20) sb.Append("\\u").Append(((int)c).ToString("x4"));
+                    else if (char.IsHighSurrogate(c) && i + 1 < s.Length && char.IsLowSurrogate(s[i + 1]))
+                    {
+                        sb.Append(c).Append(s[i + 1]);
+                        i++;
+                    }
+                    // ES2019 well-formed JSON.stringify: lone surrogates as \uXXXX.
+                    else if (char.IsSurrogate(c)) sb.Append("\\u").Append(((int)c).ToString("x4"));
                     else sb.Append(c);
                     break;
             }
@@ -66,6 +74,52 @@ public static class LtxSecurity
         sb.Append('"');
         return sb.ToString();
     }
+
+    /// <summary>
+    /// The string value of a JSON string element, keeping lone surrogates
+    /// (JSON.parse accepts "\ud800"; JsonElement.GetString throws on it).
+    /// </summary>
+    public static string JsonString(JsonElement e)
+    {
+        string raw = e.GetRawText();
+        if (raw.IndexOf('\\') < 0) return raw.Substring(1, raw.Length - 2);
+        var sb = new StringBuilder(raw.Length);
+        for (int i = 1; i < raw.Length - 1; i++)
+        {
+            char c = raw[i];
+            if (c != '\\') { sb.Append(c); continue; }
+            char n = raw[++i];
+            switch (n)
+            {
+                case 'b': sb.Append('\b'); break;
+                case 'f': sb.Append('\f'); break;
+                case 'n': sb.Append('\n'); break;
+                case 'r': sb.Append('\r'); break;
+                case 't': sb.Append('\t'); break;
+                case 'u':
+                    sb.Append((char)Convert.ToInt32(raw.Substring(i + 1, 4), 16));
+                    i += 4;
+                    break;
+                default: sb.Append(n); break; // " \ /
+            }
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>JavaScript \s: ECMAScript WhiteSpace and LineTerminator.</summary>
+    public static bool IsJsSpace(char c) => c switch
+    {
+        '\t' or '\n' or '\v' or '\f' or '\r' or ' ' or '\u00a0' or '\u1680' or '\u2028' or '\u2029'
+            or '\u202f' or '\u205f' or '\u3000' or '\ufeff' => true,
+        _ => c >= '\u2000' && c <= '\u200a',
+    };
+
+    /// <summary>
+    /// s.replace(/\s+/g, '').toUpperCase() as in ltx-sdk.js makePlanId.
+    /// (char.IsWhiteSpace differs from JS \s: it includes U+0085 and not U+FEFF.)
+    /// </summary>
+    public static string StripJsSpaceUpper(string s) =>
+        string.Concat(s.Where(c => !IsJsSpace(c))).ToUpperInvariant();
 
     public static string CanonicalJSON(JsonElement element)
     {
@@ -80,7 +134,7 @@ public static class LtxSecurity
                 var items = element.EnumerateArray().Select(CanonicalJSON);
                 return "[" + string.Join(",", items) + "]";
             case JsonValueKind.String:
-                return JsQuote(element.GetString()!);
+                return JsQuote(JsonString(element));
             case JsonValueKind.Number:
                 return LtxPlanJson.JsNumber(element);
             default:

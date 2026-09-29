@@ -8,9 +8,16 @@ data class LtxNode(
     val location: String = "earth"
 )
 
+/**
+ * A segment in a plan's segment list. [speaker] (a node id) and [label] (an
+ * agenda title) are the optional attribution fields of LTX-SPECIFICATION.md
+ * section 3.4.1; null means absent, and absent fields are not serialised.
+ */
 data class LtxSegmentTemplate(
     val type: String,
-    val q: Int = 1
+    val q: Int = 1,
+    val speaker: String? = null,
+    val label: String? = null
 )
 
 data class LtxSegment(

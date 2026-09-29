@@ -166,7 +166,7 @@ let pidPunct =
         v = 2; title = "T"; start = "2026-03-01T12:00:00Z"; quantum = 5; mode = "LTX"
         nodes = [ { id = "N0"; name = "Earth HQ"; role = "HOST"; delay = 0; location = "earth" }
                   { id = "N1"; name = "L-1 Gateway"; role = "PARTICIPANT"; delay = 2; location = "moon" } ]
-        segments = [ { segType = "TX"; q = 2 } ]; planId = None }
+        segments = [ segment "TX" 2 ]; planId = None }
 check (pidPunct = "LTX-20260301-EARTHHQ-L-1G-v2-18453830")  "makePlanId keeps punctuation in node names (JS parity)"
 
 // ── toJson / fromJson ─────────────────────────────────────────────────────────

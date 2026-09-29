@@ -149,5 +149,44 @@ object ParityTest:
     check("snapshot signature verifies", V11.verifyRegisterEntry(snap.snapshot, decCache)._1)
     check("snapshot counts", snap.snapshot.content("entryCount") == 2 && snap.snapshot.content("rejectedCount") == 0)
 
+    // Issue #36: the typed LtxPlan wire JSON is exactly JSON.stringify
+    // (control characters, lone surrogates), makePlanId strips JS \s
+    // whitespace, and segments carry optional speaker/label.
+    println("-- Issue #36: escaping, whitespace, attribution --")
+    val ctl = LtxPlan(2,
+      "Ctl\u0001\b\f\n\r\t\"\\\u001f\u007f\ud800 \ud83d\ude80",
+      "2026-03-15T14:00:00.000Z", 3, "LTX-ASYNC",
+      List(
+        LtxNode("N0", "Earth\tHQ", "HOST", 0, "earth"),
+        LtxNode("N1", "Ma\u00a0r\u3000s\u2009Hab-01", "PARTICIPANT", 840, "mars"),
+        LtxNode("N2", "L-1\u2028Gate\ufeffway\n", "PARTICIPANT", 2, "moon")),
+      List(
+        LtxSegmentTemplate("PLAN_CONFIRM", 2),
+        LtxSegmentTemplate("TX", 3, Some("N0"), Some("Opening\tremarks")),
+        LtxSegmentTemplate("RX", 3),
+        LtxSegmentTemplate("TX", 2, speaker = Some("N1")),
+        LtxSegmentTemplate("TX", 1, label = Some("Q&A \ud83d\udd34")),
+        LtxSegmentTemplate("BUFFER", 1)))
+    // JSON.stringify of the same plan object and its makePlanId, from ltx-sdk.js (node 22).
+    val ctlJs = "{\"v\":2,\"title\":\"Ctl\\u0001\\b\\f\\n\\r\\t\\\"\\\\\\u001f\u007f\\ud800 \ud83d\ude80\",\"start\":\"2026-03-15T14:00:00.000Z\",\"quantum\":3,\"mode\":\"LTX-ASYNC\",\"nodes\":[{\"id\":\"N0\",\"name\":\"Earth\\tHQ\",\"role\":\"HOST\",\"delay\":0,\"location\":\"earth\"},{\"id\":\"N1\",\"name\":\"Ma\u00a0r\u3000s\u2009Hab-01\",\"role\":\"PARTICIPANT\",\"delay\":840,\"location\":\"mars\"},{\"id\":\"N2\",\"name\":\"L-1\u2028Gate\ufeffway\\n\",\"role\":\"PARTICIPANT\",\"delay\":2,\"location\":\"moon\"}],\"segments\":[{\"type\":\"PLAN_CONFIRM\",\"q\":2},{\"type\":\"TX\",\"q\":3,\"speaker\":\"N0\",\"label\":\"Opening\\tremarks\"},{\"type\":\"RX\",\"q\":3},{\"type\":\"TX\",\"q\":2,\"speaker\":\"N1\"},{\"type\":\"TX\",\"q\":1,\"label\":\"Q&A \ud83d\udd34\"},{\"type\":\"BUFFER\",\"q\":1}]}"
+    val ctlJson = ctl.toJson
+    check("toJson == JSON.stringify (control chars, speaker/label)", ctlJson == ctlJs)
+    check("toJson has no raw control characters", !ctlJson.exists(_ < ' '))
+    check("unattributed segment has no speaker/label", ctlJson.contains("{\"type\":\"RX\",\"q\":3}"))
+    val ctlMap = m(LtxJson.parse(ctlJson))
+    check("toJson re-stringifies identically", LtxJson.stringify(ctlMap) == ctlJson)
+    val ctlId = InterplanetLtx.makePlanId(ctl)
+    check("makePlanId == JS makePlanId", ctlId == "LTX-20260315-EARTHHQ-MARS-L-1G-v2-39d48c2a")
+    check("makePlanId == LtxPlans.makePlanId(wire JSON)", ctlId == LtxPlans.makePlanId(ctlMap))
+    val ctlBack = InterplanetLtx.decodeHash(InterplanetLtx.encodeHash(ctl))
+    check("decodeHash round-trips the whole plan", ctlBack.contains(ctl))
+    check("decoded plan has the same planId", ctlBack.map(InterplanetLtx.makePlanId).contains(ctlId))
+    val ws = LtxPlan(2, "t", "2026-03-15T14:00:00.000Z", 3, "LTX",
+      List(
+        LtxNode("N0", "\u00a0Ea\u1680rth\u205fHQ\u202f", "HOST", 0, "earth"),
+        LtxNode("N1", "M\u000ba\fr\u3000s", "PARTICIPANT", 0, "mars")),
+      List(LtxSegmentTemplate("TX", 1)))
+    check("makePlanId strips all JS \\s whitespace", InterplanetLtx.makePlanId(ws).startsWith("LTX-20260315-EARTHHQ-MARS-v2-"))
+
     println(s"$passed passed  $failed failed")
     if failed > 0 then System.exit(1)

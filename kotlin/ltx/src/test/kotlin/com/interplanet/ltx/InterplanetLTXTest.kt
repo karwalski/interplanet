@@ -295,6 +295,7 @@ fun main() {
 
     runV11Tests()
     runParityTests()
+    runIssue36Tests()
 
     println("\n$passed passed  $failed failed")
     if (failed > 0) kotlin.system.exitProcess(1)

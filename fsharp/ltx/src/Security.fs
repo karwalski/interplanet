@@ -53,7 +53,9 @@ let rec canonicalJson (v: obj) : string =
 /// escaped (\b \f \n \r \t, others as \u00xx); everything else raw.
 and jsonStr (s: string) : string =
     let sb = StringBuilder("\"")
-    for c in s do
+    let mutable i = 0
+    while i < s.Length do
+        let c = s.[i]
         match c with
         | '"'  -> sb.Append("\\\"") |> ignore
         | '\\' -> sb.Append("\\\\") |> ignore
@@ -63,9 +65,50 @@ and jsonStr (s: string) : string =
         | '\r' -> sb.Append("\\r")  |> ignore
         | '\t' -> sb.Append("\\t")  |> ignore
         | c when c < ' ' -> sb.Append("\\u").Append((int c).ToString("x4")) |> ignore
+        | c when Char.IsHighSurrogate c && i + 1 < s.Length && Char.IsLowSurrogate s.[i + 1] ->
+            sb.Append(c).Append(s.[i + 1]) |> ignore
+            i <- i + 1
+        // ES2019 well-formed JSON.stringify: lone surrogates as \uXXXX.
+        | c when Char.IsSurrogate c -> sb.Append("\\u").Append((int c).ToString("x4")) |> ignore
         | c    -> sb.Append(c) |> ignore
+        i <- i + 1
     sb.Append('"') |> ignore
     sb.ToString()
+
+/// Decode the raw text of a JSON string token (quotes included), keeping
+/// lone surrogates (JSON.parse accepts "\ud800"; JsonElement.GetString throws).
+let unquoteJson (raw: string) : string =
+    let sb = StringBuilder(raw.Length)
+    let mutable i = 1
+    while i < raw.Length - 1 do
+        let c = raw.[i]
+        if c <> '\\' then sb.Append(c) |> ignore
+        else
+            i <- i + 1
+            match raw.[i] with
+            | 'b' -> sb.Append('\b') |> ignore
+            | 'f' -> sb.Append('\f') |> ignore
+            | 'n' -> sb.Append('\n') |> ignore
+            | 'r' -> sb.Append('\r') |> ignore
+            | 't' -> sb.Append('\t') |> ignore
+            | 'u' ->
+                sb.Append(char (Convert.ToInt32(raw.Substring(i + 1, 4), 16))) |> ignore
+                i <- i + 4
+            | n -> sb.Append(n) |> ignore
+        i <- i + 1
+    sb.ToString()
+
+/// JavaScript \s: ECMAScript WhiteSpace and LineTerminator. (Char.IsWhiteSpace
+/// differs: it includes U+0085 and not U+FEFF.)
+let isJsSpace (c: char) : bool =
+    match c with
+    | '\t' | '\n' | '\v' | '\f' | '\r' | ' ' | '\u00a0' | '\u1680' | '\u2028' | '\u2029'
+    | '\u202f' | '\u205f' | '\u3000' | '\ufeff' -> true
+    | c -> c >= '\u2000' && c <= '\u200a'
+
+/// s.replace(/\s+/g, '').toUpperCase() as in ltx-sdk.js makePlanId.
+let stripJsSpaceUpper (s: string) : string =
+    String(s.ToCharArray() |> Array.filter (isJsSpace >> not)).ToUpperInvariant()
 
 // ---- SHA-256 helper ----
 

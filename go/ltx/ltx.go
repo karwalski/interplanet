@@ -228,7 +228,8 @@ func UpgradeConfig(raw map[string]interface{}) LtxPlan {
 				if q == 0 {
 					q = 2
 				}
-				segs = append(segs, LtxSegmentTemplate{Type: typ, Q: q})
+				// Attributed segments (§3.4.1) keep speaker/label.
+				segs = append(segs, LtxSegmentTemplate{Type: typ, Q: q, Speaker: strField(sm, "speaker"), Label: strField(sm, "label")})
 			}
 			plan.Segments = segs
 		}
@@ -319,29 +320,21 @@ func MakePlanID(plan LtxPlan) string {
 	startMs := parseISOMs(plan.Start)
 	date := time.UnixMilli(startMs).UTC().Format("20060102")
 
+	// HOSTSTR/NODESTR as ltx-sdk.js: name.replace(/\s+/g, '').toUpperCase()
+	// sliced in UTF-16 code units. Every JS whitespace character is removed
+	// (tab, newline, NBSP, U+2028, U+3000, BOM, ...), not only spaces.
 	hostStr := "HOST"
-	if len(plan.Nodes) > 0 {
-		s := strings.ToUpper(strings.ReplaceAll(plan.Nodes[0].Name, " ", ""))
-		if len(s) > 8 {
-			s = s[:8]
-		}
-		hostStr = s
+	if len(plan.Nodes) > 0 && plan.Nodes[0].Name != "" {
+		hostStr = jsNameToken(plan.Nodes[0].Name, 8)
 	}
 
 	nodeStr := "RX"
 	if len(plan.Nodes) > 1 {
 		parts := make([]string, 0, len(plan.Nodes)-1)
 		for _, n := range plan.Nodes[1:] {
-			s := strings.ToUpper(strings.ReplaceAll(n.Name, " ", ""))
-			if len(s) > 4 {
-				s = s[:4]
-			}
-			parts = append(parts, s)
+			parts = append(parts, jsNameToken(n.Name, 4))
 		}
-		nodeStr = strings.Join(parts, "-")
-		if len(nodeStr) > 16 {
-			nodeStr = nodeStr[:16]
-		}
+		nodeStr = utf16Prefix(strings.Join(parts, "-"), 16)
 	}
 
 	if plan.V >= 3 {
@@ -647,33 +640,41 @@ func parseISOMs(iso string) int64 {
 }
 
 // planJSONOrdered is used for controlled JSON key ordering.
+// jsString is a string that marshals exactly as JSON.stringify quotes it.
+// encoding/json differs: it always escapes U+2028 and U+2029, which
+// JSON.stringify writes raw, so a name containing them would give wire
+// JSON whose planId no JS receiver reproduces.
+type jsString string
+
+func (s jsString) MarshalJSON() ([]byte, error) { return []byte(jsQuote(string(s))), nil }
+
 type planJSONOrdered struct {
 	V        int               `json:"v"`
-	Title    string            `json:"title"`
-	Start    string            `json:"start"`
+	Title    jsString          `json:"title"`
+	Start    jsString          `json:"start"`
 	Quantum  int               `json:"quantum"`
-	Mode     string            `json:"mode"`
+	Mode     jsString          `json:"mode"`
 	Nodes    []nodeJSONOrdered `json:"nodes"`
 	Segments []segJSONOrdered  `json:"segments"`
 	// v3 extensions (§4.4): omitted when unset, so v2 wire bytes are unchanged.
 	Delays       map[string]int `json:"delays,omitempty"`
 	PlanVersion  int            `json:"planVersion,omitempty"`
-	PrevPlanHash string         `json:"prevPlanHash,omitempty"`
+	PrevPlanHash jsString       `json:"prevPlanHash,omitempty"`
 }
 
 type nodeJSONOrdered struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Role     string `json:"role"`
-	Delay    int    `json:"delay"`
-	Location string `json:"location"`
+	ID       jsString `json:"id"`
+	Name     jsString `json:"name"`
+	Role     jsString `json:"role"`
+	Delay    int      `json:"delay"`
+	Location jsString `json:"location"`
 }
 
 type segJSONOrdered struct {
-	Type    string `json:"type"`
-	Q       int    `json:"q"`
-	Speaker string `json:"speaker,omitempty"`
-	Label   string `json:"label,omitempty"`
+	Type    jsString `json:"type"`
+	Q       int      `json:"q"`
+	Speaker jsString `json:"speaker,omitempty"`
+	Label   jsString `json:"label,omitempty"`
 }
 
 // planToJSON serialises a plan to compact JSON with exact key order:
@@ -682,30 +683,30 @@ func planToJSON(plan LtxPlan) ([]byte, error) {
 	nodes := make([]nodeJSONOrdered, 0, len(plan.Nodes))
 	for _, n := range plan.Nodes {
 		nodes = append(nodes, nodeJSONOrdered{
-			ID:       n.ID,
-			Name:     n.Name,
-			Role:     n.Role,
+			ID:       jsString(n.ID),
+			Name:     jsString(n.Name),
+			Role:     jsString(n.Role),
 			Delay:    n.Delay,
-			Location: n.Location,
+			Location: jsString(n.Location),
 		})
 	}
 	segs := make([]segJSONOrdered, 0, len(plan.Segments))
 	for _, s := range plan.Segments {
-		segs = append(segs, segJSONOrdered{Type: s.Type, Q: s.Q, Speaker: s.Speaker, Label: s.Label})
+		segs = append(segs, segJSONOrdered{Type: jsString(s.Type), Q: s.Q, Speaker: jsString(s.Speaker), Label: jsString(s.Label)})
 	}
 	ordered := planJSONOrdered{
 		V:        plan.V,
-		Title:    plan.Title,
-		Start:    plan.Start,
+		Title:    jsString(plan.Title),
+		Start:    jsString(plan.Start),
 		Quantum:  plan.Quantum,
-		Mode:     plan.Mode,
+		Mode:     jsString(plan.Mode),
 		Nodes:    nodes,
 		Segments: segs,
 		// Carry the v3 fields so a v3 plan's wire JSON hashes to the same
 		// planId as MakePlanID (which hashes the full typed plan).
 		Delays:       plan.Delays,
 		PlanVersion:  plan.PlanVersion,
-		PrevPlanHash: plan.PrevPlanHash,
+		PrevPlanHash: jsString(plan.PrevPlanHash),
 	}
 	buf := &bytes.Buffer{}
 	enc := json.NewEncoder(buf)

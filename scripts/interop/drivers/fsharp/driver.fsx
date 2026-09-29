@@ -21,6 +21,11 @@ let title = "Réunion Mars 🚀"
 let start = "2026-03-15T14:00:00.000Z"
 let utf8 = UTF8Encoding(false)
 
+/// The #l= token of a typed plan, decoded to its wire JSON bytes.
+let wire (plan: Models.LtxPlan) : byte[] =
+    let token = (InterplanetLtx.encodeHash plan).Substring(3).Replace('-', '+').Replace('_', '/')
+    Convert.FromBase64String(token.PadRight(token.Length + (4 - token.Length % 4) % 4, '='))
+
 if mode = "main" then
     let basePlan = InterplanetLtx.createPlan None
     let plan : Models.LtxPlan =
@@ -30,15 +35,50 @@ if mode = "main" then
                 { id = "N0"; name = "Earth HQ"; role = "HOST"; delay = 0; location = "earth" }
                 { id = "N1"; name = "Mars Hab-01"; role = "PARTICIPANT"; delay = 840; location = "mars" }
                 { id = "N2"; name = "L-1 Gateway"; role = "PARTICIPANT"; delay = 2; location = "moon" } ]
-            // LtxSegmentTemplate is (segType, q) only: no speaker/label.
             segments = [
-                { segType = "PLAN_CONFIRM"; q = 2 }; { segType = "TX"; q = 3 }; { segType = "RX"; q = 3 }
-                { segType = "TX"; q = 2 }; { segType = "BUFFER"; q = 1 } ] }
-    printfn "NOTE LtxPlan: no speaker/label, no v3"
-    let token = (InterplanetLtx.encodeHash plan).Substring(3).Replace('-', '+').Replace('_', '/')
-    let padded = token.PadRight(token.Length + (4 - token.Length % 4) % 4, '=')
-    File.WriteAllBytes(Path.Combine(outDir, "wire-v2.json"), Convert.FromBase64String padded)
+                Models.segment "PLAN_CONFIRM" 2
+                { Models.segment "TX" 3 with speaker = Some "N0"; label = Some "Ouverture: état de la mission" }
+                Models.segment "RX" 3
+                { Models.segment "TX" 2 with speaker = Some "N1"; label = Some "Réponse 🔴" }
+                Models.segment "BUFFER" 1 ] }
+    printfn "NOTE LtxPlan: no v3"
+    File.WriteAllBytes(Path.Combine(outDir, "wire-v2.json"), wire plan)
     printfn "ID_V2 %s" (InterplanetLtx.makePlanId plan)
+
+    // Issue #36 extra case (not a run.js column): control characters, a lone
+    // surrogate and JS \s whitespace (tab, NBSP, U+3000, U+2028, BOM, LF) in
+    // the title and node names, plus a speaker-only and a label-only segment.
+    // The typed wire JSON must be exactly what JSON.stringify writes for it,
+    // and the typed planId must equal the JSON-based planId of that wire and
+    // the JS reference id (ltx-sdk.js makePlanId on the same plan object).
+    let ctl : Models.LtxPlan =
+        { v = 2
+          // an F# literal turns a lone surrogate into U+FFFD, so build it
+          title = "Ctl\u0001\b\f\n\r\t\"\\\u001f\u007f" + string (char 0xd800) + " \ud83d\ude80"
+          start = start; quantum = 3; mode = "LTX-ASYNC"
+          nodes = [
+            { id = "N0"; name = "Earth\tHQ"; role = "HOST"; delay = 0; location = "earth" }
+            { id = "N1"; name = "Ma\u00a0r\u3000s\u2009Hab-01"; role = "PARTICIPANT"; delay = 840; location = "mars" }
+            { id = "N2"; name = "L-1\u2028Gate\ufeffway\n"; role = "PARTICIPANT"; delay = 2; location = "moon" } ]
+          segments = [
+            Models.segment "PLAN_CONFIRM" 2
+            { Models.segment "TX" 3 with speaker = Some "N0"; label = Some "Opening\tremarks" }
+            Models.segment "RX" 3
+            { Models.segment "TX" 2 with speaker = Some "N1" }
+            { Models.segment "TX" 1 with label = Some "Q&A \ud83d\udd34" }
+            Models.segment "BUFFER" 1 ]
+          planId = None }
+    let reference = "LTX-20260315-EARTHHQ-MARS-L-1G-v2-39d48c2a"
+    let ctlWire = wire ctl
+    File.WriteAllBytes(Path.Combine(outDir, "wire-ctl.json"), ctlWire)
+    let ctlJson = Encoding.UTF8.GetString ctlWire
+    let ctlId = InterplanetLtx.makePlanId ctl
+    let ctlJsonId = Validate.makePlanIdFromJson ctlJson
+    let ok =
+        Validate.stringify (Json.JsonDocument.Parse(ctlJson).RootElement) = ctlJson
+        && ctlId = ctlJsonId && ctlId = reference
+    printfn "NOTE ctl/whitespace case: typed %s, JSON %s, JS %s%s" ctlId ctlJsonId reference (if ok then " (ok)" else " (MISMATCH)")
+    if not ok then exit 1
 else
     let seg t q sp lb : V11.SegV11 = { segType = t; q = q; speaker = sp; label = lb }
     let plan : V11.PlanV11 =

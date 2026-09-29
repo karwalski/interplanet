@@ -204,6 +204,52 @@ public class TestInterplanetLTX {
         check("fromJson invalid → null",       LtxPlan.fromJson("not json") == null || LtxPlan.fromJson("not json") != null);
         check("fromJson null → null",          LtxPlan.fromJson(null) == null);
 
+        // ── Issue #36: JSON.stringify escaping, JS \s, speaker/label ───────
+
+        System.out.println("\n── Issue #36: escaping, whitespace, attribution ──");
+        // Title with every class of character JSON.stringify escapes (and DEL,
+        // which it does not), a lone surrogate and an astral character; node
+        // names with tab, NBSP, ideographic space, thin space, LS, BOM, LF.
+        LtxPlan ctl = new LtxPlan(2,
+            "Ctl\u0001\b\f\n\r\t\"\\\u001f\u007f\ud800 \ud83d\ude80",
+            "2026-03-15T14:00:00.000Z", 3, "LTX-ASYNC",
+            new java.util.ArrayList<>(List.of(
+                new LtxNode("N0", "Earth\tHQ", "HOST", 0, "earth"),
+                new LtxNode("N1", "Ma\u00a0r\u3000s\u2009Hab-01", "PARTICIPANT", 840, "mars"),
+                new LtxNode("N2", "L-1\u2028Gate\ufeffway\n", "PARTICIPANT", 2, "moon"))),
+            new java.util.ArrayList<>(List.of(
+                new LtxSegmentTemplate("PLAN_CONFIRM", 2),
+                new LtxSegmentTemplate("TX", 3, "N0", "Opening\tremarks"),
+                new LtxSegmentTemplate("RX", 3),
+                new LtxSegmentTemplate("TX", 2, "N1", null),
+                new LtxSegmentTemplate("TX", 1, null, "Q&A \ud83d\udd34"),
+                new LtxSegmentTemplate("BUFFER", 1))));
+        // JSON.stringify of the same plan object, from ltx-sdk.js (node 22).
+        String ctlJs = "{\"v\":2,\"title\":\"Ctl\\u0001\\b\\f\\n\\r\\t\\\"\\\\\\u001f\u007f\\ud800 \ud83d\ude80\",\"start\":\"2026-03-15T14:00:00.000Z\",\"quantum\":3,\"mode\":\"LTX-ASYNC\",\"nodes\":[{\"id\":\"N0\",\"name\":\"Earth\\tHQ\",\"role\":\"HOST\",\"delay\":0,\"location\":\"earth\"},{\"id\":\"N1\",\"name\":\"Ma\u00a0r\u3000s\u2009Hab-01\",\"role\":\"PARTICIPANT\",\"delay\":840,\"location\":\"mars\"},{\"id\":\"N2\",\"name\":\"L-1\u2028Gate\ufeffway\\n\",\"role\":\"PARTICIPANT\",\"delay\":2,\"location\":\"moon\"}],\"segments\":[{\"type\":\"PLAN_CONFIRM\",\"q\":2},{\"type\":\"TX\",\"q\":3,\"speaker\":\"N0\",\"label\":\"Opening\\tremarks\"},{\"type\":\"RX\",\"q\":3},{\"type\":\"TX\",\"q\":2,\"speaker\":\"N1\"},{\"type\":\"TX\",\"q\":1,\"label\":\"Q&A \ud83d\udd34\"},{\"type\":\"BUFFER\",\"q\":1}]}";
+        String ctlJson = ctl.toJson();
+        check("toJson == JSON.stringify (control chars, speaker/label)", ctlJs.equals(ctlJson));
+        boolean rawCtl = false;
+        for (int i = 0; i < ctlJson.length(); i++) if (ctlJson.charAt(i) < 0x20) rawCtl = true;
+        check("toJson has no raw control characters", !rawCtl);
+        check("toJson unattributed segment has no speaker/label", ctlJson.contains("{\"type\":\"RX\",\"q\":3}"));
+        @SuppressWarnings("unchecked")
+        java.util.Map<String, Object> ctlMap = (java.util.Map<String, Object>) LtxJson.parse(ctlJson);
+        check("toJson re-stringifies identically", ctlJson.equals(LtxJson.stringify(ctlMap)));
+        String ctlId = InterplanetLTX.makePlanId(ctl);
+        check("makePlanId == JS makePlanId", "LTX-20260315-EARTHHQ-MARS-L-1G-v2-39d48c2a".equals(ctlId));
+        check("makePlanId == LtxPlans.makePlanId(wire JSON)", ctlId.equals(LtxPlans.makePlanId(ctlMap)));
+        LtxPlan ctlBack = InterplanetLTX.decodeHash(InterplanetLTX.encodeHash(ctl));
+        check("decodeHash round-trips control-char title", ctlBack != null && ctl.title.equals(ctlBack.title));
+        check("decodeHash round-trips node names", ctlBack != null && ctl.nodes.equals(ctlBack.nodes));
+        check("decodeHash keeps speaker/label", ctlBack != null && ctl.segments.equals(ctlBack.segments));
+        check("decoded plan has the same planId", ctlBack != null && ctlId.equals(InterplanetLTX.makePlanId(ctlBack)));
+        LtxPlan ws = new LtxPlan(2, "t", "2026-03-15T14:00:00.000Z", 3, "LTX",
+            new java.util.ArrayList<>(List.of(
+                new LtxNode("N0", "\u00a0Ea\u1680rth\u205fHQ\u202f", "HOST", 0, "earth"),
+                new LtxNode("N1", "M\u000ba\u000cr\u3000s", "PARTICIPANT", 0, "mars"))),
+            new java.util.ArrayList<>(List.of(new LtxSegmentTemplate("TX", 1))));
+        check("makePlanId strips all JS \\s whitespace", InterplanetLTX.makePlanId(ws).startsWith("LTX-20260315-EARTHHQ-MARS-v2-"));
+
         // ── Summary ───────────────────────────────────────────────────────
 
         System.out.println("\n══════════════════════════════════════════");

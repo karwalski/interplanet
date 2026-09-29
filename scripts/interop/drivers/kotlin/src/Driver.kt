@@ -19,14 +19,17 @@ fun main(args: Array<String>) {
                 LtxNode("N0", "Earth HQ", "HOST", 0, "earth"),
                 LtxNode("N1", "Mars Hab-01", "PARTICIPANT", 840, "mars"),
                 LtxNode("N2", "L-1 Gateway", "PARTICIPANT", 2, "moon")),
-            // LtxSegmentTemplate is (type, q) only: no speaker/label.
             segments = listOf(
-                LtxSegmentTemplate("PLAN_CONFIRM", 2), LtxSegmentTemplate("TX", 3),
-                LtxSegmentTemplate("RX", 3), LtxSegmentTemplate("TX", 2), LtxSegmentTemplate("BUFFER", 1)))
-        println("NOTE LtxPlan: no speaker/label, no v3")
+                LtxSegmentTemplate("PLAN_CONFIRM", 2),
+                LtxSegmentTemplate("TX", 3, "N0", "Ouverture: état de la mission"),
+                LtxSegmentTemplate("RX", 3),
+                LtxSegmentTemplate("TX", 2, "N1", "Réponse 🔴"),
+                LtxSegmentTemplate("BUFFER", 1)))
+        println("NOTE LtxPlan: no v3")
         val token = InterplanetLTX.encodeHash(plan).removePrefix("#l=")
         File(outDir, "wire-v2.json").writeBytes(Base64.getUrlDecoder().decode(token))
         println("ID_V2 " + InterplanetLTX.makePlanId(plan))
+        ctlCase(outDir)
     } else {
         val plan = PlanV11(
             v = 2, title = TITLE, start = START, quantum = 3, mode = "LTX-ASYNC",
@@ -52,4 +55,41 @@ fun main(args: Array<String>) {
         val parsed = LtxJson.parse(File(inDir, "js-v$v.json").readText(Charsets.UTF_8)) as Map<String, Any?>
         println("JS_V$v " + LtxPlans.makePlanId(parsed))
     }
+}
+
+/**
+ * Issue #36 extra case (not a run.js column): control characters, a lone
+ * surrogate and JS \s whitespace (tab, NBSP, U+3000, U+2028, BOM, LF) in the
+ * title and node names, plus a speaker-only and a label-only segment. The
+ * typed wire JSON must be exactly what JSON.stringify writes for it, and the
+ * typed planId must equal the JSON-based planId of that wire and the JS
+ * reference id (ltx-sdk.js makePlanId on the same plan object).
+ */
+@Suppress("UNCHECKED_CAST")
+fun ctlCase(outDir: String) {
+    val ctl = LtxPlan(
+        v = 2,
+        title = "Ctl\u0001\b\u000c\n\r\t\"\\\u001f\u007f\ud800 \ud83d\ude80",
+        start = START, quantum = 3, mode = "LTX-ASYNC",
+        nodes = listOf(
+            LtxNode("N0", "Earth\tHQ", "HOST", 0, "earth"),
+            LtxNode("N1", "Ma\u00a0r\u3000s\u2009Hab-01", "PARTICIPANT", 840, "mars"),
+            LtxNode("N2", "L-1\u2028Gate\ufeffway\n", "PARTICIPANT", 2, "moon")),
+        segments = listOf(
+            LtxSegmentTemplate("PLAN_CONFIRM", 2),
+            LtxSegmentTemplate("TX", 3, "N0", "Opening\tremarks"),
+            LtxSegmentTemplate("RX", 3),
+            LtxSegmentTemplate("TX", 2, speaker = "N1"),
+            LtxSegmentTemplate("TX", 1, label = "Q&A \ud83d\udd34"),
+            LtxSegmentTemplate("BUFFER", 1)))
+    val ref = "LTX-20260315-EARTHHQ-MARS-L-1G-v2-39d48c2a"
+    val wire = Base64.getUrlDecoder().decode(InterplanetLTX.encodeHash(ctl).removePrefix("#l="))
+    File(outDir, "wire-ctl.json").writeBytes(wire)
+    val json = String(wire, Charsets.UTF_8)
+    val parsed = LtxJson.parse(json) as Map<String, Any?>
+    val id = InterplanetLTX.makePlanId(ctl)
+    val jsonId = LtxPlans.makePlanId(parsed)
+    val ok = LtxJson.stringify(parsed) == json && id == jsonId && id == ref
+    println("NOTE ctl/whitespace case: typed $id, JSON $jsonId, JS $ref" + if (ok) " (ok)" else " (MISMATCH)")
+    if (!ok) kotlin.system.exitProcess(1)
 }

@@ -14,13 +14,13 @@ let DEFAULT_QUANTUM = 5  // minutes per quantum (LTX-SPECIFICATION §3.2)
 let DEFAULT_API_BASE = "https://api.interplanet.app/ltx"
 
 let DEFAULT_SEGMENTS : LtxSegmentTemplate list = [
-    { segType = "PLAN_CONFIRM"; q = 2 }
-    { segType = "TX";           q = 2 }
-    { segType = "RX";           q = 2 }
-    { segType = "CAUCUS";       q = 2 }
-    { segType = "TX";           q = 2 }
-    { segType = "RX";           q = 2 }
-    { segType = "BUFFER";       q = 1 }
+    segment "PLAN_CONFIRM" 2
+    segment "TX" 2
+    segment "RX" 2
+    segment "CAUCUS" 2
+    segment "TX" 2
+    segment "RX" 2
+    segment "BUFFER" 1
 ]
 
 // Story 26.4 constants

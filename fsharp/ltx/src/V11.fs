@@ -141,22 +141,20 @@ let toJsonV2 (p: PlanV11) : string =
 
 // ---- 1. plan ID (v3 SHA-256 + frozen v2 polynomial) ----
 
-let private stripWs (s: string) =
-    String(s.ToCharArray() |> Array.filter (Char.IsWhiteSpace >> not))
 
 /// Deterministic plan ID. v3: SHA-256 over RFC 8785 canonical JSON (§4.5,
 /// "-v3-" infix). v2: FROZEN 32-bit polynomial hash over the JSON (§4.3).
 let makePlanId (p: PlanV11) : string =
     let date = p.start.Substring(0, 10).Replace("-", "")
     let hostStr =
-        let h = if p.nodes.IsEmpty then "HOST" else (stripWs p.nodes.Head.name).ToUpper()
+        let h = if p.nodes.IsEmpty then "HOST" else stripJsSpaceUpper p.nodes.Head.name
         if h.Length > 8 then h.Substring(0, 8) else h
     let nodeStr =
         if p.nodes.Length > 1 then
             let s =
                 p.nodes.Tail
                 |> List.map (fun n ->
-                    let x = (stripWs n.name).ToUpper()
+                    let x = stripJsSpaceUpper n.name
                     if x.Length > 4 then x.Substring(0, 4) else x)
                 |> String.concat "-"
             if s.Length > 16 then s.Substring(0, 16) else s

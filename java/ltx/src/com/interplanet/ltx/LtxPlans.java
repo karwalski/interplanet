@@ -107,13 +107,19 @@ public final class LtxPlans {
         return v instanceof List ? (List<?>) v : null;
     }
 
-    /** JS \s */
-    private static boolean isJsSpace(char c) {
-        return "\t\n\u000b\u000c\r       　﻿".indexOf(c) >= 0
-            || (c >= ' ' && c <= ' ');
+    /** JS \\s (WhiteSpace and LineTerminator). */
+    static boolean isJsSpace(char c) {
+        switch (c) {
+            case '\t': case '\n': case 0x0b: case '\f': case '\r': case 0x20:
+            case 0xa0: case 0x1680: case 0x2028: case 0x2029: case 0x202f: case 0x205f:
+            case 0x3000: case 0xfeff:
+                return true;
+            default:
+                return c >= 0x2000 && c <= 0x200a;
+        }
     }
 
-    private static String stripSpaceUpper(String s) {
+    static String stripSpaceUpper(String s) {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < s.length(); i++) if (!isJsSpace(s.charAt(i))) sb.append(s.charAt(i));
         return sb.toString().toUpperCase(Locale.ROOT);

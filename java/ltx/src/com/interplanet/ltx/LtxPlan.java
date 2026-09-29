@@ -59,17 +59,26 @@ public final class LtxPlan {
             if (i > 0) sb.append(",");
             LtxSegmentTemplate s = segments.get(i);
             sb.append("{\"type\":").append(jsonStr(s.type()))
-              .append(",\"q\":").append(s.q())
-              .append("}");
+              .append(",\"q\":").append(s.q());
+            // Attributed segments (§3.4.1): written only when present, in the
+            // order ltx-sdk.js writes them (type, q, speaker, label).
+            if (s.speaker() != null) sb.append(",\"speaker\":").append(jsonStr(s.speaker()));
+            if (s.label()   != null) sb.append(",\"label\":").append(jsonStr(s.label()));
+            sb.append("}");
         }
         sb.append("]}");
         return sb.toString();
     }
 
-    /** Escape and quote a string for JSON. */
+    /**
+     * Quote a string exactly as JSON.stringify does: quote and backslash
+     * escaped, \b \f \n \r \t, other control characters and lone surrogates
+     * as lowercase \\u00XX / \\uXXXX.
+     */
     private static String jsonStr(String s) {
-        if (s == null) return "\"\"";
-        return "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
+        StringBuilder sb = new StringBuilder();
+        LtxJson.quote(sb, s == null ? "" : s);
+        return sb.toString();
     }
 
     // ── JSON deserialisation ───────────────────────────────────────────────
@@ -87,108 +96,45 @@ public final class LtxPlan {
         }
     }
 
+    @SuppressWarnings("unchecked")
     private static LtxPlan parseJson(String json) {
-        int    v       = (int) numField(json, "v");
-        String title   = strField(json, "title");
-        String start   = strField(json, "start");
-        int    quantum = (int) numField(json, "quantum");
-        String mode    = strField(json, "mode");
+        Object root = LtxJson.parse(json);
+        if (!(root instanceof Map)) return null;
+        Map<String, Object> m = (Map<String, Object>) root;
 
         List<LtxNode> nodes = new ArrayList<>();
-        int nIdx = json.indexOf("\"nodes\"");
-        if (nIdx >= 0) {
-            int arrOpen  = json.indexOf('[', nIdx);
-            int arrClose = findMatchingBracket(json, arrOpen, '[', ']');
-            if (arrOpen >= 0 && arrClose > arrOpen) {
-                for (String obj : splitObjects(json.substring(arrOpen + 1, arrClose))) {
-                    String id  = strField(obj, "id");
-                    String nm  = strField(obj, "name");
-                    String rl  = strField(obj, "role");
-                    int    dl  = (int) numField(obj, "delay");
-                    String loc = strField(obj, "location");
-                    if (id != null && !id.isEmpty()) {
-                        nodes.add(new LtxNode(id, nm, rl, dl, loc));
-                    }
+        if (m.get("nodes") instanceof List) {
+            for (Object o : (List<Object>) m.get("nodes")) {
+                if (!(o instanceof Map)) continue;
+                Map<String, Object> n = (Map<String, Object>) o;
+                String id = str(n.get("id"));
+                if (!id.isEmpty()) {
+                    nodes.add(new LtxNode(id, str(n.get("name")), str(n.get("role")),
+                                          (int) num(n.get("delay")), str(n.get("location"))));
                 }
             }
         }
 
         List<LtxSegmentTemplate> segs = new ArrayList<>();
-        int sIdx = json.indexOf("\"segments\"");
-        if (sIdx >= 0) {
-            int arrOpen  = json.indexOf('[', sIdx);
-            int arrClose = findMatchingBracket(json, arrOpen, '[', ']');
-            if (arrOpen >= 0 && arrClose > arrOpen) {
-                for (String obj : splitObjects(json.substring(arrOpen + 1, arrClose))) {
-                    String type = strField(obj, "type");
-                    int    q    = (int) numField(obj, "q");
-                    if (type != null && !type.isEmpty()) {
-                        segs.add(new LtxSegmentTemplate(type, q));
-                    }
+        if (m.get("segments") instanceof List) {
+            for (Object o : (List<Object>) m.get("segments")) {
+                if (!(o instanceof Map)) continue;
+                Map<String, Object> sg = (Map<String, Object>) o;
+                String type = str(sg.get("type"));
+                if (!type.isEmpty()) {
+                    Object sp = sg.get("speaker"), lb = sg.get("label");
+                    segs.add(new LtxSegmentTemplate(type, (int) num(sg.get("q")),
+                        sp instanceof String ? (String) sp : null,
+                        lb instanceof String ? (String) lb : null));
                 }
             }
         }
 
-        return new LtxPlan(v, title, start, quantum, mode, nodes, segs);
+        return new LtxPlan((int) num(m.get("v")), str(m.get("title")), str(m.get("start")),
+                           (int) num(m.get("quantum")), str(m.get("mode")), nodes, segs);
     }
 
-    /** Extract a quoted string field from JSON. */
-    static String strField(String json, String key) {
-        String pat = "\"" + key + "\":\"";
-        int i = json.indexOf(pat);
-        if (i < 0) return "";
-        int s = i + pat.length();
-        int e = s;
-        while (e < json.length() && json.charAt(e) != '"') {
-            if (json.charAt(e) == '\\') e++;  // skip escaped char
-            e++;
-        }
-        return json.substring(s, e);
-    }
+    private static String str(Object o) { return o instanceof String ? (String) o : ""; }
 
-    /** Extract a numeric field from JSON. */
-    static double numField(String json, String key) {
-        String pat = "\"" + key + "\":";
-        int i = json.indexOf(pat);
-        if (i < 0) return 0;
-        int s = i + pat.length();
-        // skip whitespace
-        while (s < json.length() && json.charAt(s) == ' ') s++;
-        int e = s;
-        while (e < json.length() && (Character.isDigit(json.charAt(e))
-                || json.charAt(e) == '.' || json.charAt(e) == '-')) {
-            e++;
-        }
-        if (s == e) return 0;
-        try { return Double.parseDouble(json.substring(s, e)); }
-        catch (NumberFormatException ex) { return 0; }
-    }
-
-    /** Find matching closing bracket, tracking depth. */
-    private static int findMatchingBracket(String s, int open, char openCh, char closeCh) {
-        int depth = 0;
-        for (int i = open; i < s.length(); i++) {
-            if (s.charAt(i) == openCh)  depth++;
-            else if (s.charAt(i) == closeCh) { depth--; if (depth == 0) return i; }
-        }
-        return -1;
-    }
-
-    /** Split a JSON array body into individual object strings. */
-    private static List<String> splitObjects(String arr) {
-        List<String> result = new ArrayList<>();
-        int depth = 0, start = -1;
-        for (int i = 0; i < arr.length(); i++) {
-            char c = arr.charAt(i);
-            if (c == '{') { if (depth == 0) start = i; depth++; }
-            else if (c == '}') {
-                depth--;
-                if (depth == 0 && start >= 0) {
-                    result.add(arr.substring(start, i + 1));
-                    start = -1;
-                }
-            }
-        }
-        return result;
-    }
+    private static double num(Object o) { return o instanceof Number ? ((Number) o).doubleValue() : 0; }
 }

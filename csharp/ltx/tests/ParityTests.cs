@@ -233,4 +233,70 @@ public static class ParityTests
         Check(rej.Entries.Count == 1 && rej.Rejected.Count == 1 && rej.Rejected[0].Reason == "key_not_in_cache",
             "mergeLogs rejects unverifiable entries");
     }
+
+    /// <summary>
+    /// Issue #36: the typed LtxPlan wire JSON is exactly JSON.stringify
+    /// (control characters, lone surrogates), MakePlanId strips JS \s
+    /// whitespace (not only spaces), and segments carry optional speaker/label.
+    /// </summary>
+    public static void RunIssue36(Action<bool, string> Check)
+    {
+        var ctl = new LtxPlan
+        {
+            V = 2,
+            Title = "Ctl\u0001\b\f\n\r\t\"\\\u001f\u007f\ud800 \ud83d\ude80",
+            Start = "2026-03-15T14:00:00.000Z", Quantum = 3, Mode = "LTX-ASYNC",
+            Nodes = new List<LtxNode> {
+                new("N0", "Earth\tHQ", "HOST", 0, "earth"),
+                new("N1", "Ma\u00a0r\u3000s\u2009Hab-01", "PARTICIPANT", 840, "mars"),
+                new("N2", "L-1\u2028Gate\ufeffway\n", "PARTICIPANT", 2, "moon"),
+            },
+            Segments = new List<LtxSegmentTemplate> {
+                new("PLAN_CONFIRM", 2),
+                new("TX", 3, "N0", "Opening\tremarks"),
+                new("RX", 3),
+                new("TX", 2, Speaker: "N1"),
+                new("TX", 1, Label: "Q&A \ud83d\udd34"),
+                new("BUFFER", 1),
+            },
+        };
+        // JSON.stringify of the same plan object and its makePlanId, from ltx-sdk.js (node 22).
+        const string ctlJs = "{\"v\":2,\"title\":\"Ctl\\u0001\\b\\f\\n\\r\\t\\\"\\\\\\u001f\u007f\\ud800 \ud83d\ude80\",\"start\":\"2026-03-15T14:00:00.000Z\",\"quantum\":3,\"mode\":\"LTX-ASYNC\",\"nodes\":[{\"id\":\"N0\",\"name\":\"Earth\\tHQ\",\"role\":\"HOST\",\"delay\":0,\"location\":\"earth\"},{\"id\":\"N1\",\"name\":\"Ma\u00a0r\u3000s\u2009Hab-01\",\"role\":\"PARTICIPANT\",\"delay\":840,\"location\":\"mars\"},{\"id\":\"N2\",\"name\":\"L-1\u2028Gate\ufeffway\\n\",\"role\":\"PARTICIPANT\",\"delay\":2,\"location\":\"moon\"}],\"segments\":[{\"type\":\"PLAN_CONFIRM\",\"q\":2},{\"type\":\"TX\",\"q\":3,\"speaker\":\"N0\",\"label\":\"Opening\\tremarks\"},{\"type\":\"RX\",\"q\":3},{\"type\":\"TX\",\"q\":2,\"speaker\":\"N1\"},{\"type\":\"TX\",\"q\":1,\"label\":\"Q&A \ud83d\udd34\"},{\"type\":\"BUFFER\",\"q\":1}]}";
+        const string ctlJsId = "LTX-20260315-EARTHHQ-MARS-L-1G-v2-39d48c2a";
+        string json = ctl.ToJson();
+        Check(json == ctlJs, "issue36: ToJson == JSON.stringify (control chars, lone surrogate, speaker/label)");
+        Check(!json.Any(c => c < ' '), "issue36: ToJson has no raw control characters");
+        Check(json.Contains("{\"type\":\"RX\",\"q\":3}"), "issue36: unattributed segment has no speaker/label");
+        Check(LtxPlanJson.Stringify(JsonDocument.Parse(json).RootElement) == json,
+            "issue36: ToJson re-stringifies identically (lone surrogate kept)");
+        string id = InterplanetLTX.MakePlanId(ctl);
+        Check(id == ctlJsId, "issue36: MakePlanId == JS makePlanId");
+        Check(LtxPlanJson.MakePlanIdFromJson(json) == id, "issue36: MakePlanId == MakePlanIdFromJson(wire JSON)");
+        var back = InterplanetLTX.DecodeHash(InterplanetLTX.EncodeHash(ctl));
+        Check(back != null && back.Title == ctl.Title && back.Nodes.SequenceEqual(ctl.Nodes)
+              && back.Segments.SequenceEqual(ctl.Segments), "issue36: DecodeHash round-trips title, names, speaker/label");
+        Check(back != null && InterplanetLTX.MakePlanId(back) == id, "issue36: decoded plan has the same planId");
+
+        // JS \s is not char.IsWhiteSpace: U+FEFF is stripped, U+0085 is kept.
+        var ws = new LtxPlan
+        {
+            V = 2, Title = "t", Start = "2026-03-15T14:00:00.000Z", Quantum = 3, Mode = "LTX",
+            Nodes = new List<LtxNode> {
+                new("N0", "\u00a0Ea\u1680rth\u205fHQ\u202f", "HOST", 0, "earth"),
+                new("N1", "\ufeffM\va\fr\u3000s", "PARTICIPANT", 0, "mars"),
+                new("N2", "X\u0085Y", "PARTICIPANT", 0, "moon"),
+            },
+            Segments = new List<LtxSegmentTemplate> { new("TX", 1) },
+        };
+        const string wsJsId = "LTX-20260315-EARTHHQ-MARS-X\u0085Y-v2-aa92073b";
+        Check(InterplanetLTX.MakePlanId(ws) == wsJsId, "issue36: MakePlanId strips JS \\s whitespace only");
+        Check(LtxPlanJson.MakePlanIdFromJson(ws.ToJson()) == wsJsId, "issue36: MakePlanIdFromJson strips JS \\s whitespace only");
+        var wsV11 = new PlanV11
+        {
+            V = 2, Title = "t", Start = "2026-03-15T14:00:00.000Z", Quantum = 3, Mode = "LTX",
+            Nodes = ws.Nodes.Select(n => new NodeV11(n.Id, n.Name, n.Role, (long)n.Delay, n.Location)).ToList(),
+            Segments = new List<SegmentTemplateV11> { new("TX", 1) },
+        };
+        Check(LtxV11.MakePlanId(wsV11) == wsJsId, "issue36: PlanV11 MakePlanId strips JS \\s whitespace only");
+    }
 }
