@@ -290,13 +290,28 @@ pub fn imul31(s: &str) -> u32 {
 
 // ── makePlanId / planHash over the wire plan ──────────────────────────────
 
-fn utf16_prefix(s: &str, max: usize) -> String {
+/// `s.slice(0, max)` in UTF-16 code units. A Rust `String` cannot hold the
+/// lone surrogate JS leaves when the cut splits a surrogate pair, so it
+/// becomes U+FFFD: the UTF-8 form of the JS id (`planIdUtf8` in
+/// spec/golden/plan-id-prefixes.json).
+pub(crate) fn utf16_prefix(s: &str, max: usize) -> String {
     let units: Vec<u16> = s.encode_utf16().take(max).collect();
     String::from_utf16_lossy(&units)
 }
 
-fn name_token(name: &str, max: usize) -> String {
-    let stripped: String = name.chars().filter(|c| !c.is_whitespace() && *c != '\u{FEFF}').collect();
+/// ECMAScript `\s` (WhiteSpace and LineTerminator). `char::is_whitespace`
+/// differs: it matches U+0085 and not U+FEFF.
+pub(crate) fn is_js_whitespace(c: char) -> bool {
+    matches!(c, '\t' | '\n' | '\u{0B}' | '\u{0C}' | '\r' | ' ' | '\u{A0}' | '\u{1680}'
+        | '\u{2000}'..='\u{200A}' | '\u{2028}' | '\u{2029}' | '\u{202F}' | '\u{205F}'
+        | '\u{3000}' | '\u{FEFF}')
+}
+
+/// `name.replace(/\s+/g, '').toUpperCase().slice(0, max)`. `to_uppercase`
+/// is the full, locale-independent Unicode mapping (special casing
+/// included: 'ß' to "SS"), as JS `toUpperCase`.
+pub(crate) fn name_token(name: &str, max: usize) -> String {
+    let stripped: String = name.chars().filter(|c| !is_js_whitespace(*c)).collect();
     utf16_prefix(&stripped.to_uppercase(), max)
 }
 
