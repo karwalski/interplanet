@@ -16,9 +16,9 @@ import {
   planetHelioXY,
   PLANETS,
   MARS_ZONES,
-} from '../dist/planet-time.esm.js';
+} from '../dist/planet-time.esm.mjs';
 
-import defaultExport from '../dist/planet-time.esm.js';
+import defaultExport from '../dist/planet-time.esm.mjs';
 
 let pass = 0; let fail = 0;
 function assert(cond, msg) {

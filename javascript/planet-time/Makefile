@@ -11,17 +11,18 @@ build:
 test: build
 	@echo "Running CJS smoke tests..."
 	node -e " \
+	  const assert = require('assert'); \
 	  const pt = require('./planet-time.js'); \
-	  console.assert(typeof pt.getPlanetTime === 'function', 'CJS: getPlanetTime'); \
-	  console.assert(typeof pt.lightTravelSeconds === 'function', 'CJS: lightTravelSeconds'); \
-	  console.assert(pt.VERSION.startsWith('1'), 'CJS: VERSION'); \
+	  assert(typeof pt.getPlanetTime === 'function', 'CJS: getPlanetTime'); \
+	  assert(typeof pt.lightTravelSeconds === 'function', 'CJS: lightTravelSeconds'); \
+	  assert(pt.VERSION.startsWith('1'), 'CJS: VERSION'); \
 	  if (pt.VERSION !== require('./package.json').version) { \
 	    console.error('VERSION ' + pt.VERSION + ' != package.json ' + require('./package.json').version); \
 	    process.exit(1); \
 	  } \
 	  const t = pt.getPlanetTime('mars', new Date('2024-06-15T00:00:00Z')); \
-	  console.assert(t.planet === 'Mars', 'CJS: getPlanetTime returns planet'); \
-	  console.assert(typeof t.isWorkHour === 'boolean', 'CJS: isWorkHour boolean'); \
+	  assert(t.planet === 'Mars', 'CJS: getPlanetTime returns planet'); \
+	  assert(typeof t.isWorkHour === 'boolean', 'CJS: isWorkHour boolean'); \
 	  console.log('CJS: all smoke tests passed'); \
 	"
 	@echo "Running ESM smoke tests..."

@@ -22,10 +22,14 @@
   "types": "dist/planet-time.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/planet-time.esm.js",
+      "types": "./dist/planet-time.d.ts",
+      "import": "./dist/planet-time.esm.mjs",
       "require": "./planet-time.js",
       "default": "./planet-time.js"
-    }
+    },
+    "./dist/*": "./dist/*",
+    "./planet-time.js": "./planet-time.js",
+    "./package.json": "./package.json"
   },
   "files": [
     "planet-time.js",
