@@ -70,6 +70,7 @@ export {
   orderEntries,
   reduceQuestions,
   reduceActions,
+  reduceDecisions,
   emitQuestionSeeds,
 } from './registers.js';
 export type {
@@ -79,6 +80,7 @@ export type {
   EntryVerifyResult,
   QuestionState,
   ActionState,
+  DecisionState,
   RegisterReduction,
 } from './registers.js';
 

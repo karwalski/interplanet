@@ -687,6 +687,61 @@ const bcbEnc1 = ltx.encryptWindow({ x: 1 }, bcbKey);
 const bcbEnc2 = ltx.encryptWindow({ x: 1 }, bcbKey);
 check('nonce_uniqueness',                  bcbEnc1.nonce !== bcbEnc2.nonce);
 
+// ── Decision register (§10.3): same §8.2 conflict rules as questions/actions ──
+
+console.log('\n── Registers: reduceDecisions ───────────────');
+const decHost = ltx.generateNIK({ nodeLabel: 'HOST' });
+const decMars = ltx.generateNIK({ nodeLabel: 'MARS' });
+const decCache = { N0: decHost.nik, N1: decMars.nik };
+const mkDec = (type, content, nodeId, seq, ts, priv) => ltx.createRegisterEntry(type, content, {
+  sessionId: 'LTX-DEC-TEST', nodeId, seq, timestamp: ts, privateKeyB64: priv,
+});
+const dec1 = mkDec('decision', { text: 'Proceed with EVA-3', rationale: 'Weather window', originWindow: 'W2' },
+  'N0', 1, '2026-08-01T12:00:00.000Z', decHost.privateKeyB64);
+check('decision id prefix DEC',            dec1.entryId === 'DEC-N0-1');
+check('decision entry verifies',           ltx.verifyRegisterEntry(dec1, decCache).valid === true);
+const decReg1 = ltx.reduceDecisions([dec1]);
+check('decision RECORDED',                 decReg1.byId['DEC-N0-1'].status === 'RECORDED' && decReg1.byId['DEC-N0-1'].version === 1);
+check('decision fields',                   decReg1.byId['DEC-N0-1'].text === 'Proceed with EVA-3' &&
+                                           decReg1.byId['DEC-N0-1'].recordedBy === 'N0' &&
+                                           decReg1.byId['DEC-N0-1'].rationale === 'Weather window');
+const decRev = mkDec('decision_update', { did: 'DEC-N0-1', text: 'Proceed with EVA-3 at 14:00', version: 2 },
+  'N1', 1, '2026-08-01T12:10:00.000Z', decMars.privateKeyB64);
+const decRes = mkDec('decision_update', { did: 'DEC-N0-1', status: 'RESCINDED', version: 3 },
+  'N0', 2, '2026-08-01T12:20:00.000Z', decHost.privateKeyB64);
+const decReg2 = ltx.reduceDecisions([decRes, dec1, decRev]);
+check('decision update applied',           decReg2.byId['DEC-N0-1'].text === 'Proceed with EVA-3 at 14:00');
+check('decision RESCINDED v3',             decReg2.byId['DEC-N0-1'].status === 'RESCINDED' && decReg2.byId['DEC-N0-1'].version === 3);
+check('decision editor recorded',          decReg2.byId['DEC-N0-1'].editor === 'N0');
+check('decision older update superseded',  decReg2.superseded.includes(decRev.entryId));
+// conflict: equal version, different editors → lowest nodeId wins; loser superseded
+const decA = mkDec('decision_update', { did: 'DEC-N0-1', text: 'From N0', version: 5 }, 'N0', 7, '2026-08-01T13:00:00.000Z', decHost.privateKeyB64);
+const decB = mkDec('decision_update', { did: 'DEC-N0-1', text: 'From N1', version: 5 }, 'N1', 7, '2026-08-01T13:00:00.000Z', decMars.privateKeyB64);
+const decConf1 = ltx.reduceDecisions([dec1, decB, decA]);
+const decConf2 = ltx.reduceDecisions([decA, dec1, decB]);
+check('decision tie lowest nodeId wins',   decConf1.byId['DEC-N0-1'].text === 'From N0');
+check('decision tie loser superseded',     decConf1.superseded.includes(decB.entryId) && !decConf1.superseded.includes(decA.entryId));
+check('decision reduce order-independent', JSON.stringify(decConf1) === JSON.stringify(decConf2));
+// higher version beats lower nodeId
+const decHi = mkDec('decision_update', { did: 'DEC-N0-1', text: 'N1 v6', version: 6 }, 'N1', 8, '2026-08-01T12:30:00.000Z', decMars.privateKeyB64);
+check('decision higher version wins',      ltx.reduceDecisions([dec1, decA, decHi]).byId['DEC-N0-1'].text === 'N1 v6');
+// duplicate create and orphan update are superseded, never dropped silently
+const decOrphan = mkDec('decision_update', { did: 'DEC-NOPE-1', version: 2 }, 'N1', 9, '2026-08-01T12:40:00.000Z', decMars.privateKeyB64);
+const decDup = ltx.createRegisterEntry('decision', { text: 'dup' }, {
+  sessionId: 'LTX-DEC-TEST', nodeId: 'N1', seq: 10, timestamp: '2026-08-01T12:50:00.000Z',
+  privateKeyB64: decMars.privateKeyB64, entryId: 'DEC-N0-1',
+});
+const decReg3 = ltx.reduceDecisions([dec1, decOrphan, decDup]);
+check('decision orphan update superseded', decReg3.superseded.includes('DEC-N1-9'));
+check('decision duplicate create ignored', decReg3.byId['DEC-N0-1'].text === 'Proceed with EVA-3' && decReg3.byId['DEC-N0-1'].recordedBy === 'N0');
+check('decision reducer ignores others',   Object.keys(ltx.reduceDecisions([dec1, decRev]).byId).length === 1 &&
+                                           Object.keys(ltx.reduceActions([dec1]).byId).length === 0);
+// merge_snapshot carries the decision register
+const decSnap = ltx.runMergeSegment([dec1], [decRev], decCache, {
+  sessionId: 'LTX-DEC-TEST', nodeId: 'N0', seq: 99, timestamp: '2026-08-01T15:00:00.000Z', privateKeyB64: decHost.privateKeyB64,
+});
+check('snapshot decisionRegister',         decSnap.snapshot.content.decisionRegister['DEC-N0-1'].version === 2);
+
 // ── Conformance: golden planId vectors (spec/golden/plan-ids.json) ─────────
 
 console.log('\n── Conformance: golden planId vectors ───────');

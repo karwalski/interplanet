@@ -472,7 +472,7 @@ When two nodes hold divergent logs (partition, conjunction blackout, or parallel
 1. **Verify** every entry: signature (LTX-SECURITY §9.5), sequence freshness, and — where tree heads are available — inclusion/consistency proofs (LTX-SECURITY §9.3).
 2. **Union** all verified entries, de-duplicated by `(nodeId, seq)`.
 3. **Order** by `(timestamp, nodeId, seq)` ascending — a total order, since `(nodeId, seq)` is unique per entry.
-4. **Reduce** registers from the ordered union (§9.4, §10.2). Object-level conflicts (two entries updating the same object at the same object version) resolve deterministically: **highest object version wins; at equal versions, the entry from the lexicographically lowest editor nodeId wins.** NodeIds are key-fingerprint-derived (LTX-SECURITY §5.1), so this order cannot be ground by an attacker. Losing entries remain in the log, flagged `superseded`, and are surfaced for explicit human review in the MERGE segment.
+4. **Reduce** registers from the ordered union (§9.4, §10.2, §10.3). Object-level conflicts (two entries updating the same object at the same object version) resolve deterministically: **highest object version wins; at equal versions, the entry from the lexicographically lowest editor nodeId wins.** NodeIds are key-fingerprint-derived (LTX-SECURITY §5.1), so this order cannot be ground by an attacker. Losing entries remain in the log, flagged `superseded`, and are surfaced for explicit human review in the MERGE segment.
 
 ## 8.3 Partition Recovery
 If link fails:
@@ -543,6 +543,16 @@ Actions are audit-log entries with `type: "action"` (creation) and `type: "actio
 
 ## 10.2 Versioning
 Updates create new `action_update` entries carrying an incremented object `version`. Entries are immutable once recorded; the current state of an action is the §8.2 reduction over its entries. High-stakes actions MAY require multi-person authorisation (LTX-SECURITY §19) before an `ACCEPTED` state is derived.
+
+## 10.3 Decision Register
+
+Decisions (the "explicit restatement of decisions" of §15) are audit-log entries with `type: "decision"` (recording) and `type: "decision_update"` (revision), entryId prefix `DEC-`:
+
+- `decision`: `did` (entryId), `text`, optional `rationale`, `originWindow`. Emitted by the HOST or the Merge Steward.
+- `decision_update`: references `did`, carries an incremented object `version`, and MAY change `text`/`rationale` or set `status: "RESCINDED"`.
+- Lifecycle (derived): `RECORDED → RESCINDED`.
+
+The decision register is reduced exactly like the question and action registers: a pure function of the §8.2 ordered log, where concurrent updates at the same object version resolve to the lowest editor nodeId, a higher version always wins, and losing entries are flagged `superseded` for review in the MERGE segment. Reference API: `reduceDecisions(entries) → { byId, superseded }`, alongside `reduceQuestions` and `reduceActions`; the §8.4 `merge_snapshot` carries it as `decisionRegister`.
 
 ---
 

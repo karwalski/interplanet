@@ -2868,7 +2868,7 @@
     question: 'QST', question_response: 'QST',
     action: 'ACT', action_update: 'ACT',
     amendment: 'AMD', state_transition: 'STA',
-    merge_snapshot: 'MRG', decision: 'DEC',
+    merge_snapshot: 'MRG', decision: 'DEC', decision_update: 'DEC',
   };
 
   function _regSign(dataStr, privateKeyB64) {
@@ -3018,6 +3018,50 @@
     return { byId, superseded };
   }
 
+  const _DECISION_STATUSES = ['RECORDED', 'RESCINDED'];
+
+  /**
+   * Reduce decision register state (LTX-SPECIFICATION.md §10.3). Pure.
+   * `decision` entries record a decision (did = entryId, version 1);
+   * `decision_update` entries reference content.did and revise text/rationale
+   * or rescind it. Conflicts follow §8.2 exactly as for questions and actions:
+   * higher object version wins, then the lowest editor nodeId; losers are
+   * returned in `superseded`.
+   */
+  function reduceDecisions(entries) {
+    const byId = {}, winners = {}, superseded = [];
+    for (const e of orderEntries(entries)) {
+      if (e.type === 'decision') {
+        const did = e.entryId;
+        if (byId[did]) { superseded.push(e.entryId); continue; }
+        winners[did] = { version: 1, editor: e.nodeId, entryId: e.entryId };
+        byId[did] = Object.assign(
+          { did, text: String(e.content.text ?? ''), recordedBy: e.nodeId },
+          e.content.rationale !== undefined ? { rationale: String(e.content.rationale) } : {},
+          e.content.originWindow !== undefined ? { originWindow: String(e.content.originWindow) } : {},
+          { status: 'RECORDED', version: 1 },
+        );
+      } else if (e.type === 'decision_update') {
+        const did = String(e.content.did ?? '');
+        const d = byId[did];
+        if (!d) { superseded.push(e.entryId); continue; }
+        const version = Number(e.content.version ?? d.version + 1);
+        const incoming = { version, editor: e.nodeId, entryId: e.entryId };
+        const current = winners[did];
+        if (current && !_conflictWins(incoming, current)) { superseded.push(e.entryId); continue; }
+        if (current && current.entryId !== d.did) superseded.push(current.entryId);
+        winners[did] = incoming;
+        byId[did] = Object.assign({}, d,
+          { status: _DECISION_STATUSES.includes(e.content.status) ? e.content.status : d.status },
+          e.content.text !== undefined ? { text: String(e.content.text) } : {},
+          e.content.rationale !== undefined ? { rationale: String(e.content.rationale) } : {},
+          { editor: e.nodeId, version },
+        );
+      }
+    }
+    return { byId, superseded };
+  }
+
   /** Re-emit v3 plan question seeds as signed log entries at lock (§9.2). */
   function emitQuestionSeeds(seeds, opts) {
     let seq = opts.startSeq !== undefined ? opts.startSeq : opts.seq;
@@ -3057,13 +3101,15 @@
     const merged = mergeLogs(localEntries, remoteEntries, keyCache);
     const questions = reduceQuestions(merged.entries);
     const actions = reduceActions(merged.entries);
+    const decisions = reduceDecisions(merged.entries);
     const snapshot = createRegisterEntry('merge_snapshot', {
       mergedRoot: entriesRoot(merged.entries),
       entryCount: merged.entries.length,
       rejectedCount: merged.rejected.length,
       questionRegister: questions.byId,
       actionRegister: actions.byId,
-      superseded: questions.superseded.concat(actions.superseded),
+      decisionRegister: decisions.byId,
+      superseded: questions.superseded.concat(actions.superseded, decisions.superseded),
     }, opts);
     return { merged, snapshot };
   }
@@ -3610,6 +3656,7 @@
     orderEntries,
     reduceQuestions,
     reduceActions,
+    reduceDecisions,
     emitQuestionSeeds,
     // Merge + partition recovery (Epic 69.2)
     mergeLogs,

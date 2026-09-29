@@ -850,9 +850,10 @@ dropped.
 | `amendment` | `AMD-` | Each accepting node | new planId, planVersion, prevPlanHash (§7.6) |
 | `state_transition` | `STA-` | Local session engine | from-state, to-state, triggering event (LTX-SPECIFICATION §5.2) |
 | `merge_snapshot` | `MRG-` | HOST | merged tree head, resolved register states (LTX-SPECIFICATION §8.4) |
-| `decision` | `DEC-` | HOST or steward | recorded decision text |
+| `decision` | `DEC-` | HOST or steward | recorded decision text, rationale, originWindow (LTX-SPECIFICATION §10.3) |
+| `decision_update` | `DEC-` (references did) | HOST or steward | revised text/rationale or `status: RESCINDED`, incremented object version |
 
-Register state (questions, actions) is always a deterministic reduction over the
+Register state (questions, actions, decisions) is always a deterministic reduction over the
 ordered, verified log — LTX-SPECIFICATION §8.2. Signatures make each register entry
 individually attributable; the Merkle tree makes the register history tamper-evident
 as a whole. Entries losing a §8.2 conflict resolution remain in the log flagged
