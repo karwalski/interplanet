@@ -5,17 +5,18 @@
 //   Network-First — external APIs (weather, HDTN, SLM, geocoding)
 // ═══════════════════════════════════════════════════════════════════════════
 
-const CACHE_VERSION = 'interplanet-v1.17.2';
+const CACHE_VERSION = 'interplanet-v1.17.3';
 
 const SHELL_URLS = [
   '/',
   '/index.html',
-  '/sky.js?v=1.17.2',
-  '/planet-time.js?v=1.17.2',
-  '/assets/sky.css?v=1.17.2',
-  '/assets/i18n.js?v=1.17.2',
-  '/assets/holidays-data.js?v=1.17.2',
-  '/assets/un-days.js?v=1.17.2',
+  '/sky.js?v=1.17.3',
+  '/planet-time.js?v=1.17.3',
+  '/assets/sky.css?v=1.17.3',
+  '/assets/i18n.js?v=1.17.3',
+  '/assets/llm-providers.js?v=1.17.3',
+  '/assets/holidays-data.js?v=1.17.3',
+  '/assets/un-days.js?v=1.17.3',
   '/ltx.html',
   '/dashboard.html',
   '/playground.html',
