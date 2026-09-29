@@ -143,9 +143,21 @@ async function handleRegisterSession(req, res) {
     ? Number(participants[0].delay) : 0;
   const delay_ms     = Math.round(delayS * 1000);
 
+  // Re-registering a live session must not hand it to a new token: only the
+  // holder of its token (Bearer, or the same relay.tls_fingerprint) may.
+  const existing = sessions.get(sessionId);
+  if (existing) {
+    const token = extractBearer(req);
+    const owner = (token && safeEqual(token, existing.tls_fingerprint)) ||
+      (body.relay && body.relay.tls_fingerprint && safeEqual(body.relay.tls_fingerprint, existing.tls_fingerprint));
+    if (!owner) {
+      return sendJSON(res, 409, { error: 'Session already registered', sessionId, planId: sessionId });
+    }
+  }
+  // The owner re-registering keeps its token unless the plan names one.
   const tls_fingerprint = (body.relay && body.relay.tls_fingerprint)
-    ? body.relay.tls_fingerprint
-    : crypto.randomBytes(16).toString('hex');
+    ? String(body.relay.tls_fingerprint)
+    : (existing ? existing.tls_fingerprint : crypto.randomBytes(16).toString('hex'));
 
   sessions.set(sessionId, {
     nodes: body.nodes, delay_ms, tls_fingerprint, created_at: Date.now(), plan: body,
@@ -156,7 +168,12 @@ async function handleRegisterSession(req, res) {
 }
 
 function handleDeleteSession(req, res, sessionId) {
-  if (!sessions.has(sessionId)) return sendJSON(res, 404, { error: 'Session not found' });
+  const session = sessions.get(sessionId);
+  if (!session) return sendJSON(res, 404, { error: 'Session not found' });
+  const token = extractBearer(req);
+  if (!token || !safeEqual(token, session.tls_fingerprint)) {
+    return sendJSON(res, 401, { error: 'Invalid or missing Authorization token' });
+  }
   sessions.delete(sessionId);
   queues.delete(sessionId);
   sendJSON(res, 200, { deleted: true, sessionId });

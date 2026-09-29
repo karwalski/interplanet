@@ -238,7 +238,8 @@ function handleFindMeetingWindows(params) {
   if (!keyA) throw new Error('Unknown planet_a: ' + params.planet_a);
   if (!keyB) throw new Error('Unknown planet_b: ' + params.planet_b);
   if (typeof params.from_ms !== 'number') throw new Error('from_ms must be a number');
-  const days  = typeof params.days === 'number' ? params.days : 7;
+  const days  = typeof params.days === 'number' && Number.isFinite(params.days)
+    ? Math.min(90, Math.max(1, params.days)) : 7;
   const start = new Date(params.from_ms);
   const wins  = PT.findMeetingWindows(keyA, keyB, days, start);
   return wins.map(w => ({
@@ -291,7 +292,18 @@ function handleMessage(msg) {
     return;
   }
 
+  if (!req || typeof req !== 'object' || Array.isArray(req)) {
+    sendError(null, -32600, 'Invalid Request');
+    return;
+  }
   const { id, method, params } = req;
+  // Notifications (no id) never get a response (JSON-RPC 2.0 section 4.1).
+  const isNotification = id === undefined;
+
+  if (method === 'ping') {
+    if (!isNotification) sendResponse({ jsonrpc: '2.0', id, result: {} });
+    return;
+  }
 
   if (method === 'initialize') {
     sendResponse({
@@ -306,7 +318,7 @@ function handleMessage(msg) {
     return;
   }
 
-  if (method === 'notifications/initialized') {
+  if (isNotification || method === 'notifications/initialized') {
     // No response needed for notifications
     return;
   }

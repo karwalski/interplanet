@@ -28,9 +28,16 @@ PORT=8080 node server.js
 |--------|------|-------------|
 | GET | `/relay/health` | Server status |
 | POST | `/relay/session` | Register a session |
-| DELETE | `/relay/session/{id}` | Remove a session |
+| DELETE | `/relay/session/{id}` | Remove a session (needs `Authorization: Bearer <tls_fingerprint>`) |
 | POST | `/relay/{id}/send` | Queue a frame |
 | GET | `/relay/{id}/receive?node={n}` | Dequeue ready frames |
+
+`POST /relay/session` returns the session's `tls_fingerprint`, the bearer
+token that `send`, `receive` and `DELETE` require. Registering a plan whose
+session is already live returns 409 unless the request carries that token
+(as a bearer token, or as the plan's `relay.tls_fingerprint`); the owner
+re-registering keeps its token. The PHP relay (`demo/relay-server.php`)
+behaves the same.
 
 The session `{id}` (`sessionId`, also returned as `planId`) is the spec planId
 of the registered plan (docs/LTX-SPECIFICATION.md sections 4.3 and 4.5), the

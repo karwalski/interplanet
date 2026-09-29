@@ -74,6 +74,9 @@ async function main() {
         assert.strictEqual(r.status, 200);
         assert.strictEqual(j.sessionId, v.planId);
         assert.strictEqual(j.planId, v.planId);
+        const del = await fetch(base + '/relay/session/' + encodeURIComponent(j.sessionId),
+          { method: 'DELETE', headers: { Authorization: 'Bearer ' + j.tls_fingerprint } });
+        assert.strictEqual(del.status, 200);
       });
     }
 
@@ -95,8 +98,37 @@ async function main() {
       const frames = (await recv.json()).frames;
       assert.strictEqual(frames.length, 1);
       assert.deepStrictEqual(frames[0].data, { hello: 'mars' });
-      const del = await fetch(base + '/relay/session/' + id, { method: 'DELETE' });
+      const noAuth = await fetch(base + '/relay/session/' + id, { method: 'DELETE' });
+      assert.strictEqual(noAuth.status, 401);
+      const del = await fetch(base + '/relay/session/' + id,
+        { method: 'DELETE', headers: { Authorization: 'Bearer ' + reg.tls_fingerprint } });
       assert.strictEqual(del.status, 200);
+      const gone = await fetch(base + '/relay/session/' + id,
+        { method: 'DELETE', headers: { Authorization: 'Bearer ' + reg.tls_fingerprint } });
+      assert.strictEqual(gone.status, 404);
+    });
+
+    await check('re-registering a live session needs its token (409 otherwise)', async () => {
+      const reg = await (await post('/relay/session', extra)).json();
+      const r1 = await post('/relay/session', extra);
+      assert.strictEqual(r1.status, 409);
+      const j1 = await r1.json();
+      assert.strictEqual(j1.sessionId, reg.sessionId);
+      assert.strictEqual(j1.tls_fingerprint, undefined);
+      const r2 = await post('/relay/session', extra, 'not-the-token');
+      assert.strictEqual(r2.status, 409);
+      const r3 = await post('/relay/session', extra, reg.tls_fingerprint);
+      assert.strictEqual(r3.status, 200);
+      assert.strictEqual((await r3.json()).sessionId, reg.sessionId);
+      const del = await fetch(base + '/relay/session/' + encodeURIComponent(reg.sessionId),
+        { method: 'DELETE', headers: { Authorization: 'Bearer ' + reg.tls_fingerprint } });
+      assert.strictEqual(del.status, 200);
+    });
+
+    await check('GET /relay/health', async () => {
+      const h = await (await fetch(base + '/relay/health')).json();
+      assert.strictEqual(h.status, 'ok');
+      assert.strictEqual(typeof h.sessions, 'number');
     });
   } finally {
     server.close();
