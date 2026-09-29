@@ -4,7 +4,7 @@ Kotlin/JVM port of the InterPlanet LTX (Light-Time eXchange) SDK.
 
 **Package:** `com.interplanet:ltx`
 **Kotlin:** 1.9+
-**JVM:** 11+
+**JVM:** 17 (Ed25519 needs 15+; the Gradle build uses toolchain 17)
 **No external dependencies** (pure stdlib only)
 
 ## Installation
@@ -19,7 +19,8 @@ make build
 ### Run tests
 
 ```bash
-make test
+make test        # kotlinc if installed, else gradle ltxTest
+gradle ltxTest   # Gradle 8.x, JDK 17
 ```
 
 ### Lint (compile library sources only)
@@ -102,3 +103,9 @@ for (nodeUrl in urls) {
 | `generateICS(plan)` | Generate iCalendar (.ics) content |
 | `formatHMS(seconds)` | Format seconds as HH:MM:SS or MM:SS |
 | `formatUTC(epochMs)` | Format epoch ms as HH:MM:SS UTC |
+| `LtxPlans.makePlanId(map)` / `LtxPlans.planHash(map)` | planId and plan hash over a plain JSON plan map (insertion order kept, as ltx-sdk.js); passes `spec/golden/plan-ids.json` |
+| `LtxPlans.validatePlan(value)` | `{ valid, errors[{code, path, message}] }`, including `reserved_streams` / `reserved_branching` (spec §3.5, §7) |
+| `LtxJson.parse` / `stringify` / `canonical` | JSON parse, `JSON.stringify` and canonical JSON equivalents |
+| `LtxV11.createSession(plan, planId)` | Throws `LtxPlanException` (code `reserved_streams` / `reserved_branching`) for reserved fields |
+| `LtxV11.reduceDecisions(entries)` | Decision register (`decision` / `decision_update`, spec §10.3) |
+| `LtxV11.runMergeSegment(...)` | MERGE: verified merge + signed `merge_snapshot` with question, action and decision registers |

@@ -289,6 +289,7 @@ fun main() {
     check("checkSeq gap: GapSize=2", gr5.gapSize == 2)
 
     runV11Tests()
+    runParityTests()
 
     println("\n$passed passed  $failed failed")
     if (failed > 0) kotlin.system.exitProcess(1)

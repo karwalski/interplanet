@@ -40,14 +40,16 @@ data class PlanV11(
     val v: Int = 2,
     val title: String = "",
     val start: String = "",
-    val quantum: Int = 3,
+    val quantum: Int = InterplanetLTX.DEFAULT_QUANTUM,  // 5 minutes (§3.2)
     val mode: String = "LTX",
     val nodes: List<NodeV11> = emptyList(),
     val segments: List<SegmentTemplateV11> = emptyList(),
     /** v3 pair-delay matrix; key "A|B" with node ids sorted. */
     val delays: Map<String, Long>? = null,
     val planVersion: Int? = null,
-    val prevPlanHash: String? = null
+    val prevPlanHash: String? = null,
+    /** v3 streams[]: RESERVED (§3.5), MUST be absent (null) or empty. */
+    val streams: List<Any?>? = null
 ) {
     /** Generic map projection used for canonical JSON hashing. */
     fun toMap(): Map<String, Any?> {
@@ -71,7 +73,36 @@ data class PlanV11(
         if (delays != null) m["delays"] = delays
         if (planVersion != null) m["planVersion"] = planVersion
         if (prevPlanHash != null) m["prevPlanHash"] = prevPlanHash
+        if (streams != null) m["streams"] = streams
         return m
+    }
+
+    companion object {
+        private fun asLong(v: Any?, fallback: Long): Long = (v as? Number)?.toLong() ?: fallback
+
+        /**
+         * Typed view of a plain plan map (for example LtxJson.parse output).
+         * Fields the typed model does not carry (relay, questions, actions,
+         * reserved branch fields) are dropped, so validate the map first.
+         */
+        fun fromMap(m: Map<String, Any?>): PlanV11 = PlanV11(
+            v = asLong(m["v"], 2).toInt(),
+            title = m["title"]?.toString() ?: "",
+            start = m["start"]?.toString() ?: "",
+            quantum = asLong(m["quantum"], InterplanetLTX.DEFAULT_QUANTUM.toLong()).toInt(),
+            mode = m["mode"]?.toString() ?: "LTX",
+            nodes = (m["nodes"] as? List<*>).orEmpty().filterIsInstance<Map<*, *>>().map { n ->
+                NodeV11(n["id"].toString(), n["name"]?.toString() ?: "", n["role"]?.toString() ?: "PARTICIPANT",
+                    asLong(n["delay"], 0), n["location"]?.toString() ?: "earth")
+            },
+            segments = (m["segments"] as? List<*>).orEmpty().filterIsInstance<Map<*, *>>().map { sg ->
+                SegmentTemplateV11(sg["type"].toString(), asLong(sg["q"], 1).toInt(),
+                    sg["speaker"]?.toString(), sg["label"]?.toString())
+            },
+            delays = (m["delays"] as? Map<*, *>)?.entries?.associate { (k, dv) -> k.toString() to asLong(dv, 0) },
+            planVersion = (m["planVersion"] as? Number)?.toInt(),
+            prevPlanHash = m["prevPlanHash"] as? String,
+            streams = m["streams"] as? List<Any?>)
     }
 }
 
@@ -134,7 +165,25 @@ data class ActionStateV11(
     val version: Int = 1
 )
 
+/** Decision register state (LTX-SPECIFICATION.md §10.3). */
+data class DecisionStateV11(
+    val did: String,
+    val text: String,
+    val recordedBy: String,
+    val rationale: String? = null,
+    val originWindow: String? = null,
+    val status: String = "RECORDED",  // RECORDED | RESCINDED
+    val editor: String? = null,
+    val version: Int = 1
+)
+
 data class RegisterReductionV11<T>(val byId: Map<String, T>, val superseded: List<String>)
+
+/** mergeLogs result: verified entries in §8.2 order plus rejected entries with reasons. */
+data class MergeResultV11(val entries: List<RegisterEntryV11>, val rejected: List<Pair<RegisterEntryV11, String>>)
+
+/** runMergeSegment result: the merge plus the HOST-signed merge_snapshot entry (§8.4). */
+data class MergeSegmentV11(val merged: MergeResultV11, val snapshot: RegisterEntryV11)
 
 // ---- session state machine types ----
 
@@ -579,6 +628,136 @@ object LtxV11 {
         return RegisterReductionV11(byId, superseded)
     }
 
+    private val DECISION_STATUSES = setOf("RECORDED", "RESCINDED")
+
+    /** String(x) as JS would render a content value. */
+    private fun jsString(v: Any?): String = when (v) {
+        null -> "null"
+        is Double -> LtxJson.jsNumber(v)
+        is Float -> LtxJson.jsNumber(v.toDouble())
+        else -> v.toString()
+    }
+
+    /**
+     * Reduce decision register state from log entries (§10.3). Pure.
+     * `decision` entries record a decision (did = entryId, version 1);
+     * `decision_update` entries reference content.did and revise text/rationale
+     * or rescind it. Conflicts follow §8.2 exactly as for questions and actions:
+     * higher object version wins, then the lowest editor nodeId; losers are
+     * returned in `superseded`. Mirrors ltx-sdk.js reduceDecisions.
+     */
+    fun reduceDecisions(entries: List<RegisterEntryV11>): RegisterReductionV11<DecisionStateV11> {
+        val byId = LinkedHashMap<String, DecisionStateV11>()
+        val winners = mutableMapOf<String, Versioned>()
+        val superseded = mutableListOf<String>()
+
+        for (e in orderEntries(entries)) {
+            when (e.type) {
+                "decision" -> {
+                    val did = e.entryId
+                    if (byId.containsKey(did)) { superseded.add(e.entryId); continue }
+                    winners[did] = Versioned(1, e.nodeId, e.entryId)
+                    byId[did] = DecisionStateV11(
+                        did = did,
+                        text = e.content["text"]?.let { jsString(it) } ?: "",
+                        recordedBy = e.nodeId,
+                        rationale = if (e.content.containsKey("rationale")) jsString(e.content["rationale"]) else null,
+                        originWindow = if (e.content.containsKey("originWindow")) jsString(e.content["originWindow"]) else null,
+                        status = "RECORDED",
+                        version = 1)
+                }
+                "decision_update" -> {
+                    val did = e.content["did"]?.let { jsString(it) } ?: ""
+                    val d = byId[did]
+                    if (d == null) { superseded.add(e.entryId); continue }
+                    val version = asInt(e.content["version"], d.version + 1)
+                    val incoming = Versioned(version, e.nodeId, e.entryId)
+                    val current = winners[did]
+                    if (current != null) {
+                        if (!wins(incoming, current)) { superseded.add(e.entryId); continue }
+                        if (current.entryId != d.did) superseded.add(current.entryId)
+                    }
+                    winners[did] = incoming
+                    val status = (e.content["status"] as? String)?.takeIf { it in DECISION_STATUSES } ?: d.status
+                    byId[did] = d.copy(
+                        status = status,
+                        text = if (e.content.containsKey("text")) jsString(e.content["text"]) else d.text,
+                        rationale = if (e.content.containsKey("rationale")) jsString(e.content["rationale"]) else d.rationale,
+                        editor = e.nodeId,
+                        version = version)
+                }
+            }
+        }
+        return RegisterReductionV11(byId, superseded)
+    }
+
+    // ---- register state as plain maps (merge_snapshot content, §8.4) ----
+
+    fun questionStateMap(q: QuestionStateV11): Map<String, Any?> = linkedMapOf<String, Any?>(
+        "qid" to q.qid, "text" to q.text, "submitter" to q.submitter).apply {
+        if (q.urgency != null) put("urgency", q.urgency)
+        if (q.intendedWindow != null) put("intendedWindow", q.intendedWindow)
+        put("status", q.status)
+        put("version", q.version)
+        if (q.response != null) put("response", q.response)
+        if (q.responder != null) put("responder", q.responder)
+    }
+
+    fun actionStateMap(a: ActionStateV11): Map<String, Any?> = linkedMapOf<String, Any?>(
+        "aid" to a.aid, "description" to a.description).apply {
+        if (a.owner != null) put("owner", a.owner)
+        if (a.dueTimeUTC != null) put("dueTimeUTC", a.dueTimeUTC)
+        if (a.originWindow != null) put("originWindow", a.originWindow)
+        put("status", a.status)
+        put("version", a.version)
+    }
+
+    fun decisionStateMap(d: DecisionStateV11): Map<String, Any?> = linkedMapOf<String, Any?>(
+        "did" to d.did, "text" to d.text, "recordedBy" to d.recordedBy).apply {
+        if (d.rationale != null) put("rationale", d.rationale)
+        if (d.originWindow != null) put("originWindow", d.originWindow)
+        put("status", d.status)
+        put("version", d.version)
+        if (d.editor != null) put("editor", d.editor)
+    }
+
+    // ---- signed register entries (LTX-SECURITY.md §9.5) ----
+
+    /** Entry id prefixes per entry type (ltx-sdk.js ENTRY_PREFIX). */
+    val ENTRY_PREFIX: Map<String, String> = mapOf(
+        "question" to "QST", "question_response" to "QST",
+        "action" to "ACT", "action_update" to "ACT",
+        "amendment" to "AMD", "state_transition" to "STA",
+        "merge_snapshot" to "MRG", "decision" to "DEC", "decision_update" to "DEC")
+
+    private val PKCS8_HEADER = byteArrayOf(0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x04, 0x22, 0x04, 0x20)
+
+    private fun signBytes(data: ByteArray, privateKeyB64: String): String {
+        // Accept the 32-byte seed (ltx-sdk.js) or seed || rawPub (LtxSecurity.generateNik).
+        val seed = LtxSecurity.fromBase64Url(privateKeyB64).copyOfRange(0, 32)
+        val key = KeyFactory.getInstance("Ed25519")
+            .generatePrivate(java.security.spec.PKCS8EncodedKeySpec(PKCS8_HEADER + seed))
+        val signer = Signature.getInstance("Ed25519")
+        signer.initSign(key)
+        signer.update(data)
+        return LtxSecurity.toBase64Url(signer.sign())
+    }
+
+    /**
+     * Create a signed register entry. entryId defaults to PREFIX-nodeId-seq
+     * (for example DEC-N0-1 for a decision).
+     */
+    fun createRegisterEntry(
+        type: String, content: Map<String, Any?>,
+        sessionId: String, nodeId: String, seq: Int, timestamp: String,
+        privateKeyB64: String, entryId: String? = null
+    ): RegisterEntryV11 {
+        val id = entryId ?: "${ENTRY_PREFIX[type]}-$nodeId-$seq"
+        val unsigned = RegisterEntryV11(id, sessionId, nodeId, seq, type, content, timestamp, "")
+        val canon = LtxSecurity.canonicalJson(entryMap(unsigned, false))
+        return unsigned.copy(sig = signBytes(canon.toByteArray(Charsets.UTF_8), privateKeyB64))
+    }
+
     // ---- Merkle root over ordered entries (merkle.ts / merge.ts) ----
 
     private fun leafHash(entryBytes: ByteArray): ByteArray =
@@ -604,6 +783,49 @@ object LtxV11 {
             leafHash(LtxSecurity.canonicalJson(entryMap(it, true)).toByteArray(Charsets.UTF_8))
         }
         return hex(rootOf(leaves))
+    }
+
+    // ---- merge (LTX-SPECIFICATION.md §8.2 / §8.4) ----
+
+    /**
+     * Deterministic merge of two entry logs (§8.2): verify, union de-duplicated
+     * by (nodeId, seq), order totally. Symmetric by construction.
+     */
+    fun mergeLogs(entriesA: List<RegisterEntryV11>, entriesB: List<RegisterEntryV11>,
+                  keyCache: Map<String, NikV11>): MergeResultV11 {
+        val rejected = mutableListOf<Pair<RegisterEntryV11, String>>()
+        val verified = mutableListOf<RegisterEntryV11>()
+        for (e in entriesA + entriesB) {
+            val v = verifyRegisterEntry(e, keyCache)
+            if (v.valid) verified.add(e) else rejected.add(e to (v.reason ?: "invalid"))
+        }
+        return MergeResultV11(orderEntries(verified), rejected)
+    }
+
+    /**
+     * MERGE segment (§8.4): merge + HOST-signed merge_snapshot entry carrying
+     * the question, action and decision registers and every superseded entry id.
+     */
+    fun runMergeSegment(
+        localEntries: List<RegisterEntryV11>, remoteEntries: List<RegisterEntryV11>,
+        keyCache: Map<String, NikV11>,
+        sessionId: String, nodeId: String, seq: Int, timestamp: String, privateKeyB64: String
+    ): MergeSegmentV11 {
+        val merged = mergeLogs(localEntries, remoteEntries, keyCache)
+        val questions = reduceQuestions(merged.entries)
+        val actions = reduceActions(merged.entries)
+        val decisions = reduceDecisions(merged.entries)
+        val content = linkedMapOf<String, Any?>(
+            "mergedRoot" to entriesRoot(merged.entries),
+            "entryCount" to merged.entries.size,
+            "rejectedCount" to merged.rejected.size,
+            "questionRegister" to questions.byId.mapValues { questionStateMap(it.value) },
+            "actionRegister" to actions.byId.mapValues { actionStateMap(it.value) },
+            "decisionRegister" to decisions.byId.mapValues { decisionStateMap(it.value) },
+            "superseded" to questions.superseded + actions.superseded + decisions.superseded)
+        val snapshot = createRegisterEntry("merge_snapshot", content,
+            sessionId, nodeId, seq, timestamp, privateKeyB64)
+        return MergeSegmentV11(merged, snapshot)
     }
 
     // ---- 5. CBOR decode (RFC 8949 deterministic subset, cbor.ts) ----
@@ -784,8 +1006,28 @@ object LtxV11 {
         }
     }
 
-    /** Create a session context in DRAFT state (§5). */
-    fun createSession(plan: PlanV11, planId: String, quorum: Any? = null): SessionCtxV11 =
+    /**
+     * Create a session context in DRAFT state (§5).
+     * @throws LtxPlanException code reserved_streams if plan.streams is non-empty (§3.5)
+     */
+    fun createSession(plan: PlanV11, planId: String, quorum: Any? = null): SessionCtxV11 {
+        LtxPlans.assertNoReservedFields(plan.toMap(), "createSession")
+        return newSession(plan, planId, quorum)
+    }
+
+    /**
+     * Create a session from a plain plan map (LtxJson.parse output), as
+     * ltx-sdk.js createSession does. Rejects reserved fields the typed model
+     * cannot carry: non-empty streams[], segment stream, branches, branching,
+     * segment branch.
+     * @throws LtxPlanException code reserved_streams | reserved_branching (§3.5, §7)
+     */
+    fun createSession(plan: Map<String, Any?>, planId: String, quorum: Any? = null): SessionCtxV11 {
+        LtxPlans.assertNoReservedFields(plan, "createSession")
+        return newSession(PlanV11.fromMap(plan), planId, quorum)
+    }
+
+    private fun newSession(plan: PlanV11, planId: String, quorum: Any?): SessionCtxV11 =
         SessionCtxV11(
             state = "DRAFT",
             plan = plan,
