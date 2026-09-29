@@ -24,11 +24,11 @@ extern "C" {
 #define ITX_MAX_NODES     8      /**< Max nodes per plan */
 #define ITX_MAX_SEGMENTS  32     /**< Max segment templates per plan */
 #define ITX_MAX_STR       256    /**< Max string field length */
-#define ITX_PLAN_ID_LEN   80     /**< Plan ID buffer size */
-#define ITX_HASH_BUF      4096   /**< encodeHash output buffer size */
+#define ITX_PLAN_ID_LEN   128    /**< Plan ID buffer size (non-ASCII names take up to 3 bytes per UTF-16 unit) */
+#define ITX_HASH_BUF      21856  /**< encodeHash output buffer size ("#l=" + base64 of ITX_JSON_BUF bytes) */
 #define ITX_ICS_BUF       8192   /**< generateICS output buffer size */
 #define ITX_URL_BUF       1024   /**< Per-node URL buffer size */
-#define ITX_JSON_BUF      2048   /**< Internal JSON serialiser buffer */
+#define ITX_JSON_BUF      16384  /**< Largest wire JSON encoded or decoded */
 
 /* ── Structs ─────────────────────────────────────────────────────────────── */
 
@@ -41,10 +41,17 @@ typedef struct {
     char location[32];      /**< "earth", "mars", "moon" */
 } itx_node_t;
 
-/** A segment type+quantum entry in a plan's template list. */
+/**
+ * A segment type+quantum entry in a plan's template list, with optional
+ * attribution (LTX-SPECIFICATION.md 3.4.1). An empty speaker or label is
+ * absent and is not serialised; set ones are written as
+ * {type, q, speaker?, label?}, the ltx-sdk.js key order.
+ */
 typedef struct {
-    char type[32];  /**< "PLAN_CONFIRM", "TX", "RX", "CAUCUS", "BUFFER", "MERGE" */
-    int  q;         /**< Duration in quanta */
+    char type[32];            /**< "PLAN_CONFIRM", "TX", "RX", "CAUCUS", "BUFFER", "MERGE" */
+    int  q;                   /**< Duration in quanta */
+    char speaker[32];         /**< Presenting node id, e.g. "N1" ("" = absent) */
+    char label[ITX_MAX_STR];  /**< Agenda title (UTF-8, "" = absent) */
 } itx_seg_tmpl_t;
 
 /** A computed, timed segment with absolute UTC epoch milliseconds. */
@@ -226,6 +233,21 @@ char *itx_json_stringify(const itx_json_t *v);
 char *itx_json_canonical(const itx_json_t *v);
 /** Canonical JSON of JSON text. malloc'd; NULL on a parse error. */
 char *itx_canonical_json(const char *json);
+
+/**
+ * JSON.stringify of a UTF-8 string: \b \t \n \f \r, other C0 controls as
+ * \u00xx, a lone UTF-16 surrogate held as WTF-8 (ED A0..BF xx) as \udxxx.
+ * malloc'd; caller frees. NULL on allocation failure.
+ */
+char *itx_json_quote(const char *utf8);
+
+/**
+ * makePlanId HOSTSTR and NODESTR from node names (names[0] is the HOST):
+ * name.replace(/\s+/g, '').toUpperCase() with JavaScript's \s, ASCII case
+ * mapping, and slices counted in UTF-16 code units. host needs 32 bytes,
+ * nodes 64.
+ */
+void itx_plan_id_name_strs(const char *const *names, size_t count, char *host, char *nodes);
 
 /** SHA-256 (FIPS 180-4). */
 void itx_sha256(const void *data, size_t len, unsigned char out[32]);

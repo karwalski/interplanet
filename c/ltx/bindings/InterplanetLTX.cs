@@ -37,6 +37,10 @@ internal struct NativeSegTmpl
     [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
     public string Type;
     public int Q;
+    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
+    public string Speaker;
+    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)]
+    public string Label;
 }
 
 [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
@@ -145,7 +149,7 @@ internal static class Native
 public record LtxNode(string Id, string Name, string Role, int Delay, string Location);
 
 /// <summary>Managed view of a segment template entry.</summary>
-public record LtxSegmentTemplate(string Type, int Q);
+public record LtxSegmentTemplate(string Type, int Q, string? Speaker = null, string? Label = null);
 
 /// <summary>Managed view of a computed, timed segment.</summary>
 public record LtxSegment(string Type, int Q, long StartMs, long EndMs, int DurMin);
@@ -198,7 +202,9 @@ public sealed class LtxPlan
         {
             var out_ = new LtxSegmentTemplate[_native.SegCount];
             for (int i = 0; i < _native.SegCount; i++)
-                out_[i] = new LtxSegmentTemplate(_native.Segments[i].Type, _native.Segments[i].Q);
+                out_[i] = new LtxSegmentTemplate(_native.Segments[i].Type, _native.Segments[i].Q,
+                    string.IsNullOrEmpty(_native.Segments[i].Speaker) ? null : _native.Segments[i].Speaker,
+                    string.IsNullOrEmpty(_native.Segments[i].Label) ? null : _native.Segments[i].Label);
             return out_;
         }
     }
@@ -221,7 +227,7 @@ public sealed class LtxPlan
     /// <summary>Deterministic plan ID string (e.g. "LTX-20260315-EARTHHQ-MARS-v2-a3b2c1d0").</summary>
     public string MakePlanId()
     {
-        var sb = new StringBuilder(80);
+        var sb = new StringBuilder(128);   // ITX_PLAN_ID_LEN
         Native.itx_make_plan_id(ref _native, sb);
         return sb.ToString();
     }
@@ -229,7 +235,7 @@ public sealed class LtxPlan
     /// <summary>Encode the plan as a URL hash fragment ("#l=…").</summary>
     public string EncodeHash()
     {
-        var sb = new StringBuilder(4096);
+        var sb = new StringBuilder(21856); // ITX_HASH_BUF
         Native.itx_encode_hash(ref _native, sb);
         return sb.ToString();
     }

@@ -64,15 +64,21 @@ int main(int argc, char **argv) {
     set_node(&plan.nodes[0], "N0", "Earth HQ", "HOST", 0, "earth");
     set_node(&plan.nodes[1], "N1", "Mars Hab-01", "PARTICIPANT", 840, "mars");
     set_node(&plan.nodes[2], "N2", "L-1 Gateway", "PARTICIPANT", 2, "moon");
-    /* itx_seg_tmpl_t is (type, q) only: no speaker/label. */
-    static const struct { const char *t; int q; } segs[] = {
-        {"PLAN_CONFIRM", 2}, {"TX", 3}, {"RX", 3}, {"TX", 2}, {"BUFFER", 1}};
+    /* speaker/label: "" is absent */
+    static const struct { const char *t; int q; const char *speaker; const char *label; } segs[] = {
+        {"PLAN_CONFIRM", 2, "", ""},
+        {"TX", 3, "N0", "Ouverture: \xc3\xa9tat de la mission"},
+        {"RX", 3, "", ""},
+        {"TX", 2, "N1", "R\xc3\xa9ponse \xf0\x9f\x94\xb4"},
+        {"BUFFER", 1, "", ""}};
     plan.seg_count = 5;
     for (int i = 0; i < 5; i++) {
         snprintf(plan.segments[i].type, sizeof plan.segments[i].type, "%s", segs[i].t);
         plan.segments[i].q = segs[i].q;
+        snprintf(plan.segments[i].speaker, sizeof plan.segments[i].speaker, "%s", segs[i].speaker);
+        snprintf(plan.segments[i].label, sizeof plan.segments[i].label, "%s", segs[i].label);
     }
-    printf("NOTE itx_plan_t: no speaker/label, no v3 (the C port builds no v3 plans)\n");
+    printf("NOTE itx_plan_t: no v3 (the C port builds no v3 plans)\n");
 
     char hash[ITX_HASH_BUF];
     itx_encode_hash(&plan, hash);

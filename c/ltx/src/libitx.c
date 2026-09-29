@@ -18,13 +18,13 @@ const int  ITX_DEFAULT_SEG_COUNT = 7;
 const char ITX_DEFAULT_API_BASE[] = "https://interplanet.live/api/ltx.php";
 
 const itx_seg_tmpl_t ITX_DEFAULT_SEGMENTS[7] = {
-    { "PLAN_CONFIRM", 2 },
-    { "TX",           2 },
-    { "RX",           2 },
-    { "CAUCUS",       2 },
-    { "TX",           2 },
-    { "RX",           2 },
-    { "BUFFER",       1 },
+    { "PLAN_CONFIRM", 2, "", "" },
+    { "TX",           2, "", "" },
+    { "RX",           2, "", "" },
+    { "CAUCUS",       2, "", "" },
+    { "TX",           2, "", "" },
+    { "RX",           2, "", "" },
+    { "BUFFER",       1, "", "" },
 };
 
 /* ── Internal helpers ────────────────────────────────────────────────────── */
@@ -110,79 +110,86 @@ static int _b64url_decode(const char *in, size_t in_len,
     return (int)o;
 }
 
-/** Append a string to buf at position *pos, quoted as JSON.stringify does. */
-static void _json_str(char *buf, size_t *pos, size_t max, const char *s) {
-    if (*pos + 2 >= max) return;
-    buf[(*pos)++] = '"';
-    while (*s && *pos + 8 < max) {
-        unsigned char c = (unsigned char)*s++;
-        const char *esc = c == '"' ? "\\\"" : c == '\\' ? "\\\\" : c == '\b' ? "\\b" :
-                          c == '\f' ? "\\f" : c == '\n' ? "\\n" : c == '\r' ? "\\r" :
-                          c == '\t' ? "\\t" : NULL;
-        if (esc) { buf[(*pos)++] = esc[0]; buf[(*pos)++] = esc[1]; }
-        else if (c < 0x20) *pos += (size_t)snprintf(buf + *pos, max - *pos, "\\u%04x", c);
-        else buf[(*pos)++] = (char)c;
+/* Growable JSON text buffer. */
+typedef struct { char *b; size_t n, cap; int err; } _jbuf_t;
+
+static void _jput(_jbuf_t *j, const char *s) {
+    size_t n = strlen(s);
+    if (j->err) return;
+    if (j->n + n + 1 > j->cap) {
+        size_t nc = j->cap ? j->cap * 2 : 1024;
+        while (nc < j->n + n + 1) nc *= 2;
+        char *nb = (char *)realloc(j->b, nc);
+        if (!nb) { j->err = 1; return; }
+        j->b = nb; j->cap = nc;
     }
-    buf[(*pos)++] = '"';
+    memcpy(j->b + j->n, s, n + 1);
+    j->n += n;
 }
 
-/** Serialise a plan to compact JSON (matches JS JSON.stringify key order). */
-static void _plan_to_json(const itx_plan_t *p, char *buf, size_t max) {
-    size_t pos = 0;
-    buf[pos++] = '{';
-    /* v */
-    _json_str(buf, &pos, max, "v"); buf[pos++] = ':';
-    pos += snprintf(buf + pos, max - pos, "%d", p->v);
-    buf[pos++] = ',';
-    /* title */
-    _json_str(buf, &pos, max, "title"); buf[pos++] = ':';
-    _json_str(buf, &pos, max, p->title);
-    buf[pos++] = ',';
-    /* start */
-    _json_str(buf, &pos, max, "start"); buf[pos++] = ':';
-    _json_str(buf, &pos, max, p->start);
-    buf[pos++] = ',';
-    /* quantum */
-    _json_str(buf, &pos, max, "quantum"); buf[pos++] = ':';
-    pos += snprintf(buf + pos, max - pos, "%d", p->quantum);
-    buf[pos++] = ',';
-    /* mode */
-    _json_str(buf, &pos, max, "mode"); buf[pos++] = ':';
-    _json_str(buf, &pos, max, p->mode);
-    buf[pos++] = ',';
-    /* nodes */
-    _json_str(buf, &pos, max, "nodes"); buf[pos++] = ':'; buf[pos++] = '[';
-    for (int i = 0; i < p->node_count; i++) {
-        if (i > 0) buf[pos++] = ',';
+/** Append s quoted as JSON.stringify does (itx_json_quote). */
+static void _jstr(_jbuf_t *j, const char *s) {
+    char *q = itx_json_quote(s);
+    if (!q) { j->err = 1; return; }
+    _jput(j, q);
+    free(q);
+}
+
+static void _jint(_jbuf_t *j, int v) {
+    char num[16];
+    snprintf(num, sizeof(num), "%d", v);
+    _jput(j, num);
+}
+
+/**
+ * Serialise a plan to compact JSON: {v, title, start, quantum, mode, nodes,
+ * segments}, segments as {type, q, speaker?, label?} (speaker and label only
+ * when non-empty, in ltx-sdk.js order). This is both the wire JSON and the
+ * JSON the v2 planId hashes. malloc'd; NULL on allocation failure.
+ */
+static char *_plan_to_json(const itx_plan_t *p) {
+    _jbuf_t j = { NULL, 0, 0, 0 };
+    _jput(&j, "{\"v\":");        _jint(&j, p->v);
+    _jput(&j, ",\"title\":");    _jstr(&j, p->title);
+    _jput(&j, ",\"start\":");    _jstr(&j, p->start);
+    _jput(&j, ",\"quantum\":");  _jint(&j, p->quantum);
+    _jput(&j, ",\"mode\":");     _jstr(&j, p->mode);
+    _jput(&j, ",\"nodes\":[");
+    for (int i = 0; i < p->node_count && i < ITX_MAX_NODES; i++) {
         const itx_node_t *n = &p->nodes[i];
-        buf[pos++] = '{';
-        _json_str(buf, &pos, max, "id"); buf[pos++] = ':'; _json_str(buf, &pos, max, n->id);
-        buf[pos++] = ',';
-        _json_str(buf, &pos, max, "name"); buf[pos++] = ':'; _json_str(buf, &pos, max, n->name);
-        buf[pos++] = ',';
-        _json_str(buf, &pos, max, "role"); buf[pos++] = ':'; _json_str(buf, &pos, max, n->role);
-        buf[pos++] = ',';
-        _json_str(buf, &pos, max, "delay"); buf[pos++] = ':';
-        pos += snprintf(buf + pos, max - pos, "%d", n->delay);
-        buf[pos++] = ',';
-        _json_str(buf, &pos, max, "location"); buf[pos++] = ':'; _json_str(buf, &pos, max, n->location);
-        buf[pos++] = '}';
+        _jput(&j, i > 0 ? ",{\"id\":" : "{\"id\":"); _jstr(&j, n->id);
+        _jput(&j, ",\"name\":");     _jstr(&j, n->name);
+        _jput(&j, ",\"role\":");     _jstr(&j, n->role);
+        _jput(&j, ",\"delay\":");    _jint(&j, n->delay);
+        _jput(&j, ",\"location\":"); _jstr(&j, n->location);
+        _jput(&j, "}");
     }
-    buf[pos++] = ']'; buf[pos++] = ',';
-    /* segments */
-    _json_str(buf, &pos, max, "segments"); buf[pos++] = ':'; buf[pos++] = '[';
-    for (int i = 0; i < p->seg_count; i++) {
-        if (i > 0) buf[pos++] = ',';
+    _jput(&j, "],\"segments\":[");
+    for (int i = 0; i < p->seg_count && i < ITX_MAX_SEGMENTS; i++) {
         const itx_seg_tmpl_t *s = &p->segments[i];
-        buf[pos++] = '{';
-        _json_str(buf, &pos, max, "type"); buf[pos++] = ':'; _json_str(buf, &pos, max, s->type);
-        buf[pos++] = ',';
-        _json_str(buf, &pos, max, "q"); buf[pos++] = ':';
-        pos += snprintf(buf + pos, max - pos, "%d", s->q);
-        buf[pos++] = '}';
+        _jput(&j, i > 0 ? ",{\"type\":" : "{\"type\":"); _jstr(&j, s->type);
+        _jput(&j, ",\"q\":"); _jint(&j, s->q);
+        if (s->speaker[0]) { _jput(&j, ",\"speaker\":"); _jstr(&j, s->speaker); }
+        if (s->label[0])   { _jput(&j, ",\"label\":");   _jstr(&j, s->label); }
+        _jput(&j, "}");
     }
-    buf[pos++] = ']'; buf[pos++] = '}';
-    if (pos < max) buf[pos] = '\0';
+    _jput(&j, "]}");
+    if (j.err) { free(j.b); return NULL; }
+    return j.b;
+}
+
+/** Byte length of the JavaScript \s character (WhiteSpace or
+ *  LineTerminator, UTF-8) at p, or 0 if p does not start with one. */
+static size_t _js_space_len(const unsigned char *p) {
+    if (*p == ' ' || (*p >= 0x09 && *p <= 0x0D)) return 1;
+    if (p[0] == 0xC2 && p[1] == 0xA0) return 2;                           /* U+00A0 */
+    if (p[0] == 0xE1 && p[1] == 0x9A && p[2] == 0x80) return 3;           /* U+1680 */
+    if (p[0] == 0xE2 && p[1] == 0x80 && ((p[2] >= 0x80 && p[2] <= 0x8A) || /* U+2000..200A */
+        p[2] == 0xA8 || p[2] == 0xA9 || p[2] == 0xAF)) return 3;           /* U+2028 2029 202F */
+    if (p[0] == 0xE2 && p[1] == 0x81 && p[2] == 0x9F) return 3;           /* U+205F */
+    if (p[0] == 0xE3 && p[1] == 0x80 && p[2] == 0x80) return 3;           /* U+3000 */
+    if (p[0] == 0xEF && p[1] == 0xBB && p[2] == 0xBF) return 3;           /* U+FEFF */
+    return 0;
 }
 
 /** Parse ISO-8601 UTC string to epoch milliseconds. */
@@ -230,13 +237,20 @@ static void _fmt_ical_dt(long long ms, char *buf) {
     snprintf(buf, 20, "%04d%02d%02dT%02d%02d%02dZ", yr, mo, dy, hr, mn, sc);
 }
 
-/** Convert node name to uppercase ID (spaces → hyphens). */
+/** ICS node id: name.replace(/\s+/g, '-').toUpperCase() (ltx-sdk.js toId),
+ *  with JavaScript's \s and ASCII case mapping. */
 static void _to_id(const char *name, char *buf, size_t max) {
-    size_t i;
-    for (i = 0; i < max - 1 && name[i]; i++) {
-        buf[i] = (name[i] == ' ' || name[i] == '\t') ? '-'
-               : (name[i] >= 'a' && name[i] <= 'z') ? name[i] - 32
-               : name[i];
+    const unsigned char *p = (const unsigned char *)name;
+    size_t i = 0;
+    while (*p && i < max - 1) {
+        size_t ws = _js_space_len(p);
+        if (ws) {
+            buf[i++] = '-';
+            while ((ws = _js_space_len(p)) > 0) p += ws;
+            continue;
+        }
+        buf[i++] = (*p >= 'a' && *p <= 'z') ? (char)(*p - 32) : (char)*p;
+        p++;
     }
     buf[i] = '\0';
 }
@@ -314,42 +328,18 @@ void itx_make_plan_id(const itx_plan_t *plan, char *buf) {
         snprintf(date, sizeof(date), "%04d%02d%02d", yr, mo, dy);
     }
 
-    /* Host string: remove spaces, uppercase, max 8 chars */
-    char host_str[16] = "HOST";
-    if (plan->node_count > 0) {
-        const char *nm = plan->nodes[0].name;
-        size_t j = 0;
-        for (size_t k = 0; nm[k] && j < 8; k++) {
-            char c = nm[k];
-            if (c == ' ' || c == '\t') continue;
-            host_str[j++] = (c >= 'a' && c <= 'z') ? c - 32 : c;
-        }
-        host_str[j] = '\0';
-    }
-
-    /* Node string: first 4 chars of each remote name, separated by - */
-    char node_str[32] = "RX";
-    if (plan->node_count > 1) {
-        size_t np = 0;
-        for (int i = 1; i < plan->node_count && np < 16; i++) {
-            if (np > 0 && np < 15) node_str[np++] = '-';
-            const char *nm = plan->nodes[i].name;
-            size_t cnt = 0;
-            for (size_t k = 0; nm[k] && cnt < 4 && np < 16; k++) {
-                char c = nm[k];
-                if (c == ' ' || c == '\t') continue;
-                node_str[np++] = (c >= 'a' && c <= 'z') ? c - 32 : c;
-                cnt++;
-            }
-        }
-        node_str[np] = '\0';
-    }
+    /* HOSTSTR / NODESTR: JavaScript \s stripped, upper case, UTF-16 slices */
+    const char *names[ITX_MAX_NODES];
+    int n = plan->node_count < ITX_MAX_NODES ? plan->node_count : ITX_MAX_NODES;
+    for (int i = 0; i < n; i++) names[i] = plan->nodes[i].name;
+    char host_str[32], node_str[64];
+    itx_plan_id_name_strs(names, n > 0 ? (size_t)n : 0, host_str, node_str);
 
     /* Polynomial hash matching Math.imul(31, h) + charCodeAt(i) in
-     * ltx-sdk.js: over UTF-16 code units, so non-ASCII titles match JS. */
-    char json_buf[ITX_JSON_BUF];
-    _plan_to_json(plan, json_buf, sizeof(json_buf));
-    unsigned int h = itx_imul31_utf16(json_buf);
+     * ltx-sdk.js: over UTF-16 code units of the wire JSON. */
+    char *json = _plan_to_json(plan);
+    unsigned int h = json ? itx_imul31_utf16(json) : 0;
+    free(json);
 
     snprintf(buf, ITX_PLAN_ID_LEN, "LTX-%s-%s-%s-v2-%08x",
              date, host_str, node_str, h);
@@ -357,12 +347,24 @@ void itx_make_plan_id(const itx_plan_t *plan, char *buf) {
 
 void itx_encode_hash(const itx_plan_t *plan, char *buf) {
     if (!plan || !buf) return;
-    char json_buf[ITX_JSON_BUF];
-    _plan_to_json(plan, json_buf, sizeof(json_buf));
-
     buf[0] = '#'; buf[1] = 'l'; buf[2] = '='; buf[3] = '\0';
-    _b64url_encode((const unsigned char *)json_buf, strlen(json_buf),
+    char *json = _plan_to_json(plan);
+    if (!json) return;
+    _b64url_encode((const unsigned char *)json, strlen(json),
                    buf + 3, ITX_HASH_BUF - 3);
+    free(json);
+}
+
+/** Copy a string member of a parsed JSON object, if present. */
+static void _json_copy(const itx_json_t *obj, const char *key, char *dst, size_t n) {
+    const char *s = itx_json_str(itx_json_get(obj, key));
+    if (s) _strlcpy(dst, s, n);
+}
+
+/** Read a number member of a parsed JSON object as int, if present. */
+static void _json_int(const itx_json_t *obj, const char *key, int *dst) {
+    double d;
+    if (itx_json_num(itx_json_get(obj, key), &d)) *dst = (int)d;
 }
 
 int itx_decode_hash(const char *hash, itx_plan_t *plan) {
@@ -373,101 +375,52 @@ int itx_decode_hash(const char *hash, itx_plan_t *plan) {
     if (token[0] == '#') token++;
     if (token[0] == 'l' && token[1] == '=') token += 2;
 
-    unsigned char decoded[ITX_JSON_BUF];
-    int len = _b64url_decode(token, strlen(token), decoded, sizeof(decoded));
+    unsigned char decoded[ITX_JSON_BUF + 1];
+    int len = _b64url_decode(token, strlen(token), decoded, ITX_JSON_BUF);
     if (len <= 0) return -1;
+    decoded[len] = '\0';
 
-    /* Parse JSON fields from decoded string */
-    char *json = (char *)decoded;
-
-    /* Helper lambdas (as inline code): extract "key":value fields */
-    #define _STRFIELD(key, dst, dsz) do { \
-        char *p = strstr(json, "\"" key "\":\""); \
-        if (p) { p += strlen("\"" key "\":\""); size_t i = 0; \
-            while (*p && *p != '"' && i < (dsz)-1) (dst)[i++] = *p++; \
-            (dst)[i] = '\0'; } \
-    } while (0)
-
-    #define _NUMFIELD(key, dst) do { \
-        char *p = strstr(json, "\"" key "\":"); \
-        if (p) { p += strlen("\"" key "\":"); dst = atoi(p); } \
-    } while (0)
+    itx_json_t *root = itx_json_parse((const char *)decoded);
+    if (!root || itx_json_kind(root) != ITX_JSON_OBJECT) { itx_json_free(root); return -1; }
 
     memset(plan, 0, sizeof(*plan));
     plan->v = 2; plan->quantum = ITX_DEFAULT_QUANTUM;
     _strlcpy(plan->mode, "LTX", 32);
 
-    _NUMFIELD("v",       plan->v);
-    _STRFIELD("title",   plan->title,  ITX_MAX_STR);
-    _STRFIELD("start",   plan->start,  64);
-    _NUMFIELD("quantum", plan->quantum);
-    _STRFIELD("mode",    plan->mode,   32);
+    _json_int(root,  "v",       &plan->v);
+    _json_copy(root, "title",   plan->title, ITX_MAX_STR);
+    _json_copy(root, "start",   plan->start, 64);
+    _json_int(root,  "quantum", &plan->quantum);
+    _json_copy(root, "mode",    plan->mode,  32);
 
-    /* Parse nodes array */
-    char *nodes_arr = strstr(json, "\"nodes\":[");
-    if (nodes_arr) {
-        nodes_arr += strlen("\"nodes\":[");
-        char *p = nodes_arr;
-        while (*p && *p != ']' && plan->node_count < ITX_MAX_NODES) {
-            char *obj_start = strchr(p, '{');
-            char *obj_end   = obj_start ? strchr(obj_start, '}') : NULL;
-            if (!obj_start || !obj_end) break;
-            /* Null-terminate temporarily for field extraction */
-            char save = obj_end[1]; obj_end[1] = '\0';
-            char *obj = obj_start;
-
-            #define _NF(key, dst, dsz) do { \
-                char *fp = strstr(obj, "\"" key "\":\""); \
-                if (fp) { fp += strlen("\"" key "\":\""); size_t i = 0; \
-                    while (*fp && *fp != '"' && i < (dsz)-1) (dst)[i++] = *fp++; \
-                    (dst)[i] = '\0'; } \
-            } while (0)
-
-            itx_node_t *n = &plan->nodes[plan->node_count];
-            _NF("id",       n->id,       32);
-            _NF("name",     n->name,     ITX_MAX_STR);
-            _NF("role",     n->role,     32);
-            _NF("location", n->location, 32);
-            { char *fp = strstr(obj, "\"delay\":"); if (fp) n->delay = atoi(fp + 8); }
-
-            #undef _NF
-
-            obj_end[1] = save;
-            if (n->id[0]) plan->node_count++;
-            p = obj_end + 1;
-        }
+    const itx_json_t *nodes = itx_json_get(root, "nodes");
+    for (size_t i = 0; i < itx_json_len(nodes) && plan->node_count < ITX_MAX_NODES; i++) {
+        const itx_json_t *o = itx_json_at(nodes, i);
+        if (itx_json_kind(o) != ITX_JSON_OBJECT) continue;
+        itx_node_t *n = &plan->nodes[plan->node_count];
+        _json_copy(o, "id",       n->id,       32);
+        _json_copy(o, "name",     n->name,     ITX_MAX_STR);
+        _json_copy(o, "role",     n->role,     32);
+        _json_int(o,  "delay",    &n->delay);
+        _json_copy(o, "location", n->location, 32);
+        if (n->id[0]) plan->node_count++;
+        else memset(n, 0, sizeof(*n));
     }
 
-    /* Parse segments array */
-    char *segs_arr = strstr(json, "\"segments\":[");
-    if (segs_arr) {
-        segs_arr += strlen("\"segments\":[");
-        char *p = segs_arr;
-        while (*p && *p != ']' && plan->seg_count < ITX_MAX_SEGMENTS) {
-            char *obj_start = strchr(p, '{');
-            char *obj_end   = obj_start ? strchr(obj_start, '}') : NULL;
-            if (!obj_start || !obj_end) break;
-            char save = obj_end[1]; obj_end[1] = '\0';
-            char *obj = obj_start;
-
-            itx_seg_tmpl_t *s = &plan->segments[plan->seg_count];
-            char *fp = strstr(obj, "\"type\":\"");
-            if (fp) {
-                fp += 8;
-                size_t i = 0;
-                while (*fp && *fp != '"' && i < 31) s->type[i++] = *fp++;
-                s->type[i] = '\0';
-            }
-            fp = strstr(obj, "\"q\":"); if (fp) s->q = atoi(fp + 4);
-
-            obj_end[1] = save;
-            if (s->type[0]) plan->seg_count++;
-            p = obj_end + 1;
-        }
+    const itx_json_t *segs = itx_json_get(root, "segments");
+    for (size_t i = 0; i < itx_json_len(segs) && plan->seg_count < ITX_MAX_SEGMENTS; i++) {
+        const itx_json_t *o = itx_json_at(segs, i);
+        if (itx_json_kind(o) != ITX_JSON_OBJECT) continue;
+        itx_seg_tmpl_t *s = &plan->segments[plan->seg_count];
+        _json_copy(o, "type",    s->type,    32);
+        _json_int(o,  "q",       &s->q);
+        _json_copy(o, "speaker", s->speaker, 32);
+        _json_copy(o, "label",   s->label,   ITX_MAX_STR);
+        if (s->type[0]) plan->seg_count++;
+        else memset(s, 0, sizeof(*s));
     }
 
-    #undef _STRFIELD
-    #undef _NUMFIELD
+    itx_json_free(root);
     return (plan->seg_count > 0) ? 0 : -1;
 }
 
