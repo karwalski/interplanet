@@ -3,8 +3,18 @@
  * Story 33.13 - Scala LTX library
  */
 
-/** A segment template entry specifying type and number of quanta. */
-case class LtxSegmentTemplate(segType: String, q: Int)
+/**
+ * A segment template entry specifying type and number of quanta, and
+ * optionally the presenting node id (speaker) and an agenda title (label):
+ * the attributed segments of LTX-SPECIFICATION.md section 3.4.1. None means
+ * absent; absent fields are not serialised.
+ */
+case class LtxSegmentTemplate(
+  segType: String,
+  q:       Int,
+  speaker: Option[String] = None,
+  label:   Option[String] = None
+)
 
 /** A node (participant) in an LTX session. */
 case class LtxNode(
@@ -54,8 +64,12 @@ case class LtxPlan(
       "\",\"role\":\"" + jsonEsc(n.role) + "\",\"delay\":" + n.delay +
       ",\"location\":\"" + jsonEsc(n.location) + "\"}"
     }.mkString(",")
+    // Attributed segments (section 3.4.1): speaker and label follow type and
+    // q, only when present, as ltx-sdk.js writes them.
     val segsJson = segments.map { s =>
-      "{\"type\":\"" + jsonEsc(s.segType) + "\",\"q\":" + s.q + "}"
+      "{\"type\":\"" + jsonEsc(s.segType) + "\",\"q\":" + s.q +
+      s.speaker.map(sp => ",\"speaker\":\"" + jsonEsc(sp) + "\"").getOrElse("") +
+      s.label.map(lb => ",\"label\":\"" + jsonEsc(lb) + "\"").getOrElse("") + "}"
     }.mkString(",")
     val sb = new java.lang.StringBuilder
     sb.append("{\"v\":").append(v)
@@ -68,8 +82,17 @@ case class LtxPlan(
     sb.append("}")
     sb.toString
 
+  /**
+   * The inside of a JSON string exactly as JSON.stringify writes it: quote,
+   * backslash, \b \f \n \r \t, other control characters and lone surrogates
+   * as lowercase \\u00XX / \\uXXXX.
+   */
   private def jsonEsc(s: String): String =
-    if s == null then "" else s.replace("\\", "\\\\").replace("\"", "\\\"")
+    if s == null then ""
+    else
+      val sb = new StringBuilder
+      LtxJson.quote(sb, s)
+      sb.substring(1, sb.length - 1)
 
 object LtxPlan:
   /** Parse an LtxPlan from a JSON string. Returns None on any parse error. */
@@ -81,97 +104,31 @@ object LtxPlan:
     catch case _: Exception => None
 
   private def parseJson(json: String): LtxPlan =
-    val v       = numField(json, "v").toInt
-    val title   = strField(json, "title")
-    val start   = strField(json, "start")
-    val quantum = numField(json, "quantum").toInt
-    val mode    = strField(json, "mode")
+    val m = LtxJson.parse(json) match
+      case o: Map[?, ?] => o.asInstanceOf[Map[String, Any]]
+      case _            => throw new IllegalArgumentException("plan JSON is not an object")
+    def str(o: Map[String, Any], k: String): String = o.get(k) match
+      case Some(s: String) => s
+      case _               => ""
+    def num(o: Map[String, Any], k: String): Int = o.get(k) match
+      case Some(n: Long)   => n.toInt
+      case Some(n: Double) => n.toInt
+      case _               => 0
+    def opt(o: Map[String, Any], k: String): Option[String] = o.get(k) match
+      case Some(s: String) => Some(s)
+      case _               => None
+    def objs(k: String): List[Map[String, Any]] = m.get(k) match
+      case Some(xs: Seq[?]) => xs.toList.collect { case o: Map[?, ?] => o.asInstanceOf[Map[String, Any]] }
+      case _                => Nil
 
-    val nodes: List[LtxNode] =
-      val nIdx = json.indexOf("\"nodes\"")
-      if nIdx < 0 then Nil
-      else
-        val arrOpen  = json.indexOf('[', nIdx)
-        val arrClose = findMatchingBracket(json, arrOpen, '[', ']')
-        if arrOpen < 0 || arrClose <= arrOpen then Nil
-        else
-          splitObjects(json.substring(arrOpen + 1, arrClose)).flatMap { obj =>
-            val id  = strField(obj, "id")
-            val nm  = strField(obj, "name")
-            val rl  = strField(obj, "role")
-            val dl  = numField(obj, "delay").toInt
-            val loc = strField(obj, "location")
-            if id.nonEmpty then Some(LtxNode(id, nm, rl, dl, loc)) else None
-          }
-
-    val segs: List[LtxSegmentTemplate] =
-      val sIdx = json.indexOf("\"segments\"")
-      if sIdx < 0 then Nil
-      else
-        val arrOpen  = json.indexOf('[', sIdx)
-        val arrClose = findMatchingBracket(json, arrOpen, '[', ']')
-        if arrOpen < 0 || arrClose <= arrOpen then Nil
-        else
-          splitObjects(json.substring(arrOpen + 1, arrClose)).flatMap { obj =>
-            val t = strField(obj, "type")
-            val q = numField(obj, "q").toInt
-            if t.nonEmpty then Some(LtxSegmentTemplate(t, q)) else None
-          }
-
-    LtxPlan(v, title, start, quantum, mode, nodes, segs)
-
-  /** Extract a quoted string field from JSON. */
-  private def strField(json: String, key: String): String =
-    val pat = "\"" + key + "\":\""
-    val i = json.indexOf(pat)
-    if i < 0 then return ""
-    var s = i + pat.length
-    var e = s
-    while e < json.length && json.charAt(e) != '"' do
-      if json.charAt(e) == '\\' then e += 1
-      e += 1
-    json.substring(s, e)
-
-  /** Extract a numeric field from JSON. */
-  private def numField(json: String, key: String): Double =
-    val pat = "\"" + key + "\":"
-    val i = json.indexOf(pat)
-    if i < 0 then return 0.0
-    var s = i + pat.length
-    while s < json.length && json.charAt(s) == ' ' do s += 1
-    var e = s
-    while e < json.length && (json.charAt(e).isDigit || json.charAt(e) == '.' || json.charAt(e) == '-') do
-      e += 1
-    if s == e then 0.0
-    else
-      try json.substring(s, e).toDouble
-      catch case _: NumberFormatException => 0.0
-
-  private def findMatchingBracket(s: String, open: Int, openCh: Char, closeCh: Char): Int =
-    var depth = 0
-    var i = open
-    while i < s.length do
-      if s.charAt(i) == openCh then depth += 1
-      else if s.charAt(i) == closeCh then
-        depth -= 1
-        if depth == 0 then return i
-      i += 1
-    -1
-
-  private def splitObjects(arr: String): List[String] =
-    val result = scala.collection.mutable.ListBuffer[String]()
-    var depth = 0
-    var start = -1
-    var i = 0
-    while i < arr.length do
-      val c = arr.charAt(i)
-      if c == '{' then
-        if depth == 0 then start = i
-        depth += 1
-      else if c == '}' then
-        depth -= 1
-        if depth == 0 && start >= 0 then
-          result += arr.substring(start, i + 1)
-          start = -1
-      i += 1
-    result.toList
+    val nodes = objs("nodes").flatMap { n =>
+      val id = str(n, "id")
+      if id.nonEmpty then Some(LtxNode(id, str(n, "name"), str(n, "role"), num(n, "delay"), str(n, "location")))
+      else None
+    }
+    val segs = objs("segments").flatMap { sg =>
+      val t = str(sg, "type")
+      if t.nonEmpty then Some(LtxSegmentTemplate(t, num(sg, "q"), opt(sg, "speaker"), opt(sg, "label")))
+      else None
+    }
+    LtxPlan(num(m, "v"), str(m, "title"), str(m, "start"), num(m, "quantum"), str(m, "mode"), nodes, segs)

@@ -268,12 +268,12 @@ object LtxPlans:
     case xs: Seq[?]   => Some(xs.asInstanceOf[Seq[Any]])
     case _            => None
 
-  /** JS \s */
+  /** JS \s (WhiteSpace and LineTerminator). */
   private def isJsSpace(c: Char): Boolean =
     "\t\n\u000b\u000c\r       　﻿".indexOf(c) >= 0 ||
       (c >= ' ' && c <= ' ')
 
-  private def stripSpaceUpper(s: String): String =
+  def stripSpaceUpper(s: String): String =
     s.filterNot(isJsSpace).toUpperCase(java.util.Locale.ROOT)
 
   /** Date.parse; None when JS would return NaN (subset: ISO 8601 forms). */

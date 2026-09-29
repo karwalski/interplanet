@@ -73,7 +73,9 @@ object InterplanetLtx:
             q       = mm.getOrElse("q", 2) match
               case i: Int => i
               case d: Double => d.toInt
-              case _ => 2
+              case _ => 2,
+            speaker = mm.get("speaker").collect { case s: String => s },
+            label   = mm.get("label").collect { case s: String => s }
           )
         }
       case _ => DEFAULT_SEGMENTS
@@ -145,15 +147,18 @@ object InterplanetLtx:
     val c    = upgradeConfig(plan)
     val date = c.start.take(10).replace("-", "")
 
+    // Whitespace is stripped as JS /\s+/g does: every Unicode space and line
+    // terminator (NBSP, U+2028, U+3000, BOM, ...), not only ASCII.
     val hostStr =
-      val raw = if c.nodes.isEmpty then "HOST"
-                else c.nodes.head.name.replaceAll("\\s+", "").toUpperCase
+      val raw = LtxPlans.stripSpaceUpper(
+        if c.nodes.isEmpty || c.nodes.head.name == null || c.nodes.head.name.isEmpty then "HOST"
+        else c.nodes.head.name)
       if raw.length > 8 then raw.take(8) else raw
 
     val nodeStr =
       if c.nodes.size > 1 then
         val parts = c.nodes.tail.map { n =>
-          val raw = n.name.replaceAll("\\s+", "").toUpperCase
+          val raw = LtxPlans.stripSpaceUpper(n.name)
           if raw.length > 4 then raw.take(4) else raw
         }
         val joined = parts.mkString("-")
