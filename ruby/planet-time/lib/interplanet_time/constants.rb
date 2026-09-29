@@ -56,7 +56,7 @@ module InterplanetTime
         days_per_period:        2.5, periods_per_week: 7, work_periods_per_week: 5,
       },
       'saturn'  => {
-        solar_day_ms:           (10.5606 * 3_600_000).round,
+        solar_day_ms:           (10.578  * 3_600_000).round,
         sidereal_yr_ms:         (10_759.22 * EARTH_DAY_MS).round,
         epoch_ms:               J2000_MS,
         work_start:             8,  work_end: 16,
