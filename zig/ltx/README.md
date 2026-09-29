@@ -4,7 +4,7 @@ Zig port of the LTX (Light-Time eXchange) session planning library for the Inter
 
 ## Requirements
 
-- Zig 0.12 or 0.13
+- Zig 0.15 (CI uses 0.15.1)
 
 ## Build
 
@@ -31,7 +31,7 @@ make lint
 ### Constants
 
 ```zig
-pub const VERSION        = "1.0.0";
+pub const VERSION        = "1.1.0";
 pub const DEFAULT_QUANTUM: u32 = 5;        // minutes per quantum
 pub const DEFAULT_API_BASE = "https://api.interplanettime.net/ltx/v1";
 pub const SEG_TYPES      = [_][]const u8{ "TX", "RX", "BUFFER", "HOLD", "PREP" };
@@ -87,12 +87,29 @@ pub const Plan = struct {
 | `encodeHash(allocator, plan)` | Base64url encode plan as `#l=…` fragment |
 | `decodeHash(allocator, encoded)` | Decode `#l=…` or raw base64url back to JSON |
 | `buildNodeUrls(allocator, plan, base_url)` | Per-node session URLs |
-| `buildDelayMatrix(allocator, plan)` | N×N delay matrix (u32 minutes) |
+| `buildDelayMatrix(allocator, plan)` | Legacy N×N placeholder matrix from the quantum only (the struct `Node` carries no delay). Not the spec §3.7 matrix: use `ltx_v11.buildDelayMatrixJson` |
 | `generateIcs(allocator, plan)` | iCalendar (.ics) string with CRLF endings |
 | `formatHms(allocator, total_minutes)` | Format minutes as "Xh Ym" / "Xh" / "Ym" / "0m" |
 | `planToJson(allocator, plan)` | Serialise Plan to canonical JSON |
 
 All allocating functions take an `std.mem.Allocator` and return `!T`. The caller owns all returned memory.
+
+### Wire-format plans (`src/ltx_v11.zig`)
+
+These operate on plans and register entries as parsed `std.json.Value`
+trees (object maps keep key insertion order, which the frozen v2 planId hash
+depends on) and mirror `javascript/ltx/ltx-sdk.js`.
+
+| Function | Description |
+|---|---|
+| `makePlanIdJson(alloc, plan)` / `planHashJson(alloc, plan)` | planId (v2 imul31 over UTF-16 code units of the insertion-order JSON; v3 SHA-256 of canonical JSON) and planHash. Checked against `spec/golden/plan-ids.json` |
+| `validatePlanJson(alloc, plan)` | `validatePlan`: schema checks plus `reserved_streams` / `reserved_branching` (LTX-SPECIFICATION §3.5, §7) |
+| `reservedFieldCode(plan)` / `assertNoReservedFields(plan)` | Reserved-field check; `createSession` refuses such plans with `error.ReservedStreams` / `error.ReservedBranching` |
+| `pairDelayJson(alloc, plan, a, b)` | One-way pair delay (§3.7): v3 `delays` entry, else HOST-relative delay, else the sum of both |
+| `buildDelayMatrixJson(alloc, plan)` | `buildDelayMatrix`: `pairDelayJson` over all ordered node pairs (sum, never max; symmetric) |
+| `reduceQuestionsJson` / `reduceActionsJson` / `reduceDecisionsJson` | Register reducers (§9.4, §10.2, §10.3) with the §8.2 conflict rule |
+| `createRegisterEntryJson(arena, type, content, opts)` | Signed register entry (`decision_update` uses the `DEC-` prefix) |
+| `mergeLogsJson` / `runMergeSegmentJson` | §8.2 merge and the §8.4 `merge_snapshot` (question, action and decision registers) |
 
 ## Conformance vector v001
 

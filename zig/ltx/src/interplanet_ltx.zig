@@ -517,9 +517,13 @@ pub fn buildNodeUrls(allocator: Allocator, plan: Plan, base_url: []const u8) ![]
     return urls;
 }
 
-/// Build an N×N delay matrix (in quantum multiples converted to seconds).
-/// Same node = 0; host ↔ remote = quantum * 4 (round-trip equivalent);
-/// between two non-host nodes = quantum * 2.
+/// LEGACY placeholder: an N×N matrix derived from the quantum only, because
+/// the struct Node carries no light-time delay. Same node = 0;
+/// host <-> remote = quantum * 4; between two non-host nodes = quantum * 2.
+/// This is NOT the LTX-SPECIFICATION.md §3.7.3 delay matrix. For that, use
+/// ltx_v11.buildDelayMatrixJson on the wire-format plan, which is
+/// pairDelayJson over every ordered node pair (v3 delays entry first, else
+/// the HOST-relative delay, else the SUM of both delays), as ltx-sdk.js does.
 pub fn buildDelayMatrix(allocator: Allocator, plan: Plan) ![][]u32 {
     const n = plan.nodes.len;
     var matrix = try allocator.alloc([]u32, n);
