@@ -2303,24 +2303,21 @@ function renderDelayMatrix(cfg) {
   const nodes = cfg.nodes || [];
   if (nodes.length < 3) return '';
 
-  // Build matrix data
+  // Build matrix data. Mirrors SDK buildDelayMatrix(): every entry is
+  // pairDelay() (LTX-SPECIFICATION.md §3.7.3), so a v3 `delays` pair wins and
+  // other pairs use the conservative fallback (HOST pairs: the node's delay;
+  // non-HOST pairs: the sum of both HOST-relative delays).
   const rows = [];
   for (let i = 0; i < nodes.length; i++) {
     for (let j = 0; j < nodes.length; j++) {
       if (i === j) continue;
       const from = nodes[i];
       const to   = nodes[j];
-      let delaySeconds;
-      if (from.delay === 0 || i === 0) {
-        delaySeconds = to.delay || 0;
-      } else if (to.delay === 0 || j === 0) {
-        delaySeconds = from.delay || 0;
-      } else {
-        delaySeconds = (from.delay || 0) + (to.delay || 0);
-      }
-      rows.push({ from: from.name, to: to.name, delaySec: delaySeconds });
+      rows.push({ from: from.name, to: to.name, delaySec: pairDelaySecs(cfg, from.id, to.id) });
     }
   }
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
+    ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 
   const fmtDelay = s => {
     if (s === 0) return '0 s';
@@ -2331,7 +2328,7 @@ function renderDelayMatrix(cfg) {
   let html = '<table class="delay-matrix-table" aria-label="Signal delay matrix"><thead><tr>' +
     '<th>From</th><th>To</th><th>One-way delay</th></tr></thead><tbody>';
   rows.forEach(r => {
-    html += '<tr><td>' + r.from + '</td><td>' + r.to + '</td><td>' + fmtDelay(r.delaySec) + '</td></tr>';
+    html += '<tr><td>' + esc(r.from) + '</td><td>' + esc(r.to) + '</td><td>' + fmtDelay(r.delaySec) + '</td></tr>';
   });
   html += '</tbody></table>';
   return html;
