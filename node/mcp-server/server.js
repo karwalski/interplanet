@@ -11,7 +11,7 @@
  * Handles: initialize, tools/list, tools/call
  */
 
-const PT = require('../../js/planet-time.js');
+const PT = require('../../javascript/planet-time/planet-time.js');
 const readline = require('readline');
 
 // ── Planet name → key mapping ─────────────────────────────────────────────────
