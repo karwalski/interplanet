@@ -98,15 +98,16 @@ public extension InterplanetTime {
         )
     }
 
+    /// Mars Coordinated Time: the Mars clock at the prime meridian (AMT+0), in
+    /// Mars hours (1/24 sol), matching getMTC in planet-time.js.
     static func getMTC(_ utcMs: Int64) -> MTC {
-        let ms     = Double(utcMs - marsEpochMs)
-        let sol    = Int64(floor(ms / Double(marsSolMs)))
-        var fracMs = ms.truncatingRemainder(dividingBy: Double(marsSolMs))
-        if fracMs < 0 { fracMs += Double(marsSolMs) }
-        let totalSec = fracMs / 1000.0
-        let hour   = Int(totalSec / 3600.0)
-        let minute = Int(totalSec.truncatingRemainder(dividingBy: 3600.0) / 60.0)
-        let second = Int(totalSec.truncatingRemainder(dividingBy: 60.0))
+        let totalSols = Double(utcMs - marsEpochMs) / Double(marsSolMs)
+        let solF   = floor(totalSols)
+        let sol    = Int64(solF)
+        let frac   = totalSols - solF
+        let hour   = Int(floor(frac * 24))
+        let minute = Int(floor((frac * 24 - Double(hour)) * 60))
+        let second = Int(floor(((frac * 24 - Double(hour)) * 60 - Double(minute)) * 60))
         return MTC(sol: sol, hour: hour, minute: minute, second: second,
                    mtcStr: String(format: "%02d:%02d", hour, minute))
     }

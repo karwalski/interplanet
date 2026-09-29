@@ -1,4 +1,4 @@
-.PHONY: test lint build clean
+.PHONY: test lint build release clean
 
 SRC  = $(wildcard Sources/InterplanetLTX/*.swift)
 TEST = Tests/InterplanetLTXTests/main.swift
@@ -40,6 +40,12 @@ lint:
 build:
 	swift build 2>&1
 endif
+
+# Release build of the library target. A plain `swift build -c release`
+# also builds the InterplanetLTXTests runner, which uses @testable import
+# and so only compiles in debug.
+release:
+	swift build -c release --target InterplanetLTX
 
 clean:
 	rm -f $(BIN)
