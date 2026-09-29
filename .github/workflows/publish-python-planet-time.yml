@@ -1,0 +1,23 @@
+# Builds and publishes python/planet-time, whose pyproject.toml name is
+# "interplanet-time". Runs only on a tag such as python/planet-time/v0.1.0.
+# See docs/RELEASING.md. python/ltx ("interplanet-ltx") has no publish workflow yet.
+name: Publish interplanet-time (python/planet-time) to PyPI
+
+on:
+  push:
+    tags: ['python/planet-time/v*']
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install build twine && cd python/planet-time && python -m build
+      # Each step starts at the repository root, so upload from the package directory.
+      - run: cd python/planet-time && twine upload dist/* --non-interactive
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}

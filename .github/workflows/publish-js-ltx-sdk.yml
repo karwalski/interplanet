@@ -1,4 +1,8 @@
-name: Publish interplanet-ltx to npm
+# Publishes javascript/ltx, whose package.json name is "interplanet-ltx"
+# (not "@interplanet/ltx", which is the TypeScript package in typescript/ltx
+# and has no publish workflow yet).
+# Runs only on a tag such as javascript/ltx/v1.1.0. See docs/RELEASING.md.
+name: Publish interplanet-ltx (javascript/ltx) to npm
 
 on:
   push:

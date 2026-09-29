@@ -6,12 +6,19 @@ Mirrors the [JavaScript LTX SDK](../../javascript/ltx/README.md) API. Optionally
 
 ## Installation
 
-```bash
-pip install interplanet-ltx
+`interplanet-ltx` and `interplanet-time` are **not yet published** to PyPI, so
+`pip install interplanet-ltx` and `pip install "interplanet-ltx[time]"` do not work
+yet. Install from source instead (tested 29 Sep 2026 with Python 3.11):
 
-# With interplanet-time integration for automatic delay lookup:
-pip install "interplanet-ltx[time]"
+```bash
+pip install "git+https://github.com/karwalski/interplanet.git#subdirectory=python/ltx"
+
+# With interplanet-time integration for automatic delay lookup, install
+# interplanet-time from source as well:
+pip install "git+https://github.com/karwalski/interplanet.git#subdirectory=python/planet-time"
 ```
+
+Or from a clone of the repository: `pip install ./python/planet-time ./python/ltx`.
 
 ## Quick start
 
@@ -45,7 +52,7 @@ with open('meeting.ics', 'w') as f:
 ```python
 from interplanet_ltx import delay_from_planets
 
-# Requires: pip install "interplanet-ltx[time]"
+# Requires interplanet-time (not yet on PyPI; install from source as above)
 delay_sec = delay_from_planets('earth', 'mars')  # current one-way light delay
 plan = create_plan(host_name='Earth HQ', remote_name='Mars Hab-01', delay=delay_sec)
 ```

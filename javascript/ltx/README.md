@@ -4,20 +4,29 @@ JavaScript SDK for the **LTX (Light-Time eXchange)** protocol — a deterministi
 
 ## Installation
 
+`interplanet-ltx` is **not yet published** to npm, so `npm install interplanet-ltx`
+and the jsDelivr CDN URL below do not work yet. Install from a clone instead
+(tested 29 Sep 2026 with Node 22):
+
 ```bash
-npm install interplanet-ltx
+git clone https://github.com/karwalski/interplanet.git
+cd /path/to/your-project
+npm install /path/to/interplanet/javascript/ltx
 ```
+
+Or load `ltx-sdk.js` directly with a `<script>` tag or `require('./path/to/ltx-sdk.js')`.
 
 ## Quick start
 
 ```js
-// ESM
-import { createPlan, encodeHash, buildNodeUrls, generateICS } from 'interplanet-ltx';
+// ESM (the package is CommonJS, so use the default import)
+import LtxSdk from 'interplanet-ltx';
+const { createPlan, encodeHash, buildNodeUrls, generateICS } = LtxSdk;
 
 // CJS
 const { createPlan, encodeHash, buildNodeUrls, generateICS } = require('interplanet-ltx');
 
-// Browser CDN
+// Browser CDN (not available until the package is published to npm)
 // <script src="https://cdn.jsdelivr.net/npm/interplanet-ltx/ltx-sdk.js"></script>
 // window.LtxSdk.createPlan(...)
 ```

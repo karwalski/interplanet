@@ -16,27 +16,43 @@ If a language has one, it must have both. Any gap is a tracked backlog item.
 |---|:---:|:---:|---|:---:|---|
 | **JavaScript** | ✓ 1.1.0 | ✓ 1.1.0 | Node ≥ 16 | ✅ 54 | `javascript/planet-time/`, `javascript/ltx/` |
 | **TypeScript** | ✓ 1.1.0 | ✓ 1.0.0 | Node ≥ 16 | ✅ 54 | Native TS types; `typescript/planet-time/`, `typescript/ltx/` |
-| **Python** | ✓ 0.1.0 | ✓ 1.0.0 | Python ≥ 3.10 | ✅ 54 | PyPI: `interplanet-time` / `interplanet-ltx` |
+| **Python** | ✓ 0.1.0 | ✓ 1.0.0 | Python ≥ 3.10 | ✅ 54 | PyPI names `interplanet-time` / `interplanet-ltx` (not yet published) |
 | **Java** | ✓ 1.0.0 | ✓ 1.0.0 | Java 16+ | ✅ 54 | stdlib-only; `java/planet-time/`, `java/ltx/` |
 | **C** | ✓ 1.0.0 | ✓ 1.0.0 | C99 | ✅ 54 | `libinterplanet`; no external deps |
-| **PHP** | ✓ 1.0.0 | ✓ 1.0.0 | PHP 8.1+ | ✅ 54 | Packagist; PSR-4; stdlib-only |
-| **Ruby** | ✓ 1.0.0 | ✓ 1.0.0 | Ruby 2.6+ | ✅ 54 | RubyGems; stdlib-only |
-| **Go** | ✓ 1.0.0 | ✓ 1.0.0 | Go 1.21+ | ✅ 54 | Go modules; stdlib-only |
-| **Swift** | ✓ 1.0.0 | ✓ 1.0.0 | Swift 5.9+ | ✅ 54 | Swift Package Index; Foundation-only |
-| **Rust** | ✓ 1.0.0 | ✓ 1.0.0 | Rust 1.70+ | ✅ 54 | Crates.io; stdlib-only |
+| **PHP** | ✓ 1.0.0 | ✓ 1.0.0 | PHP 8.1+ | ✅ 54 | Packagist (not yet published); PSR-4; stdlib-only |
+| **Ruby** | ✓ 1.0.0 | ✓ 1.0.0 | Ruby 2.6+ | ✅ 54 | RubyGems (not yet published); stdlib-only |
+| **Go** | ✓ 1.0.0 | ✓ 1.0.0 | Go 1.21+ | ✅ 54 | Go modules (module path not yet fetchable); stdlib-only |
+| **Swift** | ✓ 1.0.0 | ✓ 1.0.0 | Swift 5.9+ | ✅ 54 | Swift Package Index (not yet listed); Foundation-only |
+| **Rust** | ✓ 1.0.0 | ✓ 1.0.0 | Rust 1.70+ | ✅ 54 | crates.io (not yet published); stdlib-only |
 | **R** | ✓ 0.1.0 | ✓ 0.1.0 | R 4.1+ | ✅ 54 | base R only; `r/planet-time/`, `r/ltx/` |
-| **C#** | ✓ 1.0.0 | ✓ 1.0.0 | .NET 8+ | ✅ 54 | NuGet; `csharp/planet-time/`, `csharp/ltx/` |
-| **Dart** | ✓ 1.0.0 | ✓ 1.0.0 | Dart 3+ | ✅ 54 | pub.dev; `dart/planet-time/`, `dart/ltx/` |
-| **Elixir** | ✓ 1.0.0 | ✓ 1.0.0 | Elixir 1.14+ | ✅ 54 | Hex; Mix; `elixir/planet-time/`, `elixir/ltx/` |
-| **F#** | ✓ 1.0.0 | ✓ 1.0.0 | .NET 8+ | ✅ 54 | NuGet; `fsharp/planet-time/`, `fsharp/ltx/` |
-| **Kotlin** | ✓ 1.0.0 | ✓ 1.0.0 | Kotlin 1.9+ JVM | ✅ 54 | Maven Central; `kotlin/planet-time/`, `kotlin/ltx/` |
-| **Scala** | ✓ 1.0.0 | ✓ 1.0.0 | Scala 3 JVM | ✅ 54 | Maven Central; `scala/planet-time/`, `scala/ltx/` |
+| **C#** | ✓ 1.0.0 | ✓ 1.0.0 | .NET 8+ | ✅ 54 | NuGet (not yet published); `csharp/planet-time/`, `csharp/ltx/` |
+| **Dart** | ✓ 1.0.0 | ✓ 1.0.0 | Dart 3+ | ✅ 54 | pub.dev (not yet published); `dart/planet-time/`, `dart/ltx/` |
+| **Elixir** | ✓ 1.0.0 | ✓ 1.0.0 | Elixir 1.14+ | ✅ 54 | Hex (not yet published); Mix; `elixir/planet-time/`, `elixir/ltx/` |
+| **F#** | ✓ 1.0.0 | ✓ 1.0.0 | .NET 8+ | ✅ 54 | NuGet (not yet published); `fsharp/planet-time/`, `fsharp/ltx/` |
+| **Kotlin** | ✓ 1.0.0 | ✓ 1.0.0 | Kotlin 1.9+ JVM | ✅ 54 | Maven Central (not yet published); `kotlin/planet-time/`, `kotlin/ltx/` |
+| **Scala** | ✓ 1.0.0 | ✓ 1.0.0 | Scala 3 JVM | ✅ 54 | Maven Central (not yet published); `scala/planet-time/`, `scala/ltx/` |
 | **Lua** | ✓ 1.0.0 | ✓ 1.0.0 | Lua 5.3+ | ✅ 54 | stdlib-only; `lua/planet-time/`, `lua/ltx/` |
 | **OCaml** | ✓ 1.0.0 | ✓ 1.0.0 | OCaml 4.13+ | ✅ 54 | ocamlfind; `ocaml/planet-time/`, `ocaml/ltx/` |
 | **Zig** | ✓ 1.0.0 | ✓ 1.0.0 | Zig 0.12+ | ✅ 54 | stdlib-only; `zig/planet-time/`, `zig/ltx/` |
 | **Julia** | ✓ 1.0.0 | ✓ 1.0.0 | Julia 1.9+ | ✅ 54 | stdlib-only; `julia/planet-time/`, `julia/ltx/` |
 
 **Legend:** ✓ = implemented · ✅ 54 = all 54 cross-language fixture entries pass · — = not yet implemented
+
+## Package registry status
+
+**No port is published to a package registry yet.** Registry names in this
+document are the names declared in each port's manifest, not packages you can
+install. On 29 September 2026 these lookups all returned 404: PyPI
+`interplanet-time`, `interplanet-ltx`; npm `@interplanet/time`, `@interplanet/ltx`,
+`interplanet-ltx`, `interplanet-planet-time`, `interplanet-time-cli`; crates.io
+`interplanet-time`, `interplanet-ltx`; RubyGems `interplanet_time`, `interplanet_ltx`.
+The repository had no git tags, so the tag-triggered publish workflows had never run.
+
+Install from source instead. Tested commands for JavaScript, TypeScript,
+Python, Go, Rust and the CLI are in the
+[README Installation section](README.md#installation); the other ports build
+from their own directories with the commands in each port's `Makefile`.
+The release process and tag convention are in [docs/RELEASING.md](docs/RELEASING.md).
 
 ---
 
