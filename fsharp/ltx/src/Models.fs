@@ -11,10 +11,19 @@ type LtxNode = {
     location: string
 }
 
+/// A segment in a plan's segment list. speaker (a node id) and label (an
+/// agenda title) are the optional attribution fields of LTX-SPECIFICATION.md
+/// section 3.4.1; None means absent, and absent fields are not serialised.
 type LtxSegmentTemplate = {
     segType: string
     q:       int
+    speaker: string option
+    label:   string option
 }
+
+/// An unattributed segment template (no speaker, no label).
+let segment (segType: string) (q: int) : LtxSegmentTemplate =
+    { segType = segType; q = q; speaker = None; label = None }
 
 type LtxSegment = {
     segType:    string

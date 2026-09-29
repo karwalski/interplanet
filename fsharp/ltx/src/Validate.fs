@@ -67,7 +67,7 @@ let private isInteger (v: JsonElement option) =
 
 let private str (v: JsonElement option) : string option =
     match v with
-    | Some e when e.ValueKind = JsonValueKind.String -> Some (e.GetString())
+    | Some e when e.ValueKind = JsonValueKind.String -> Some (unquoteJson (e.GetRawText()))
     | _ -> None
 
 let private parse (json: string) : JsonElement =
@@ -89,7 +89,7 @@ let rec stringify (e: JsonElement) : string =
     | JsonValueKind.Object ->
         "{" + (e.EnumerateObject() |> Seq.map (fun p -> jsonStr p.Name + ":" + stringify p.Value) |> String.concat ",") + "}"
     | JsonValueKind.Array -> "[" + (e.EnumerateArray() |> Seq.map stringify |> String.concat ",") + "]"
-    | JsonValueKind.String -> jsonStr (e.GetString())
+    | JsonValueKind.String -> jsonStr (unquoteJson (e.GetRawText()))
     | JsonValueKind.Number -> jsNumber e
     | JsonValueKind.True -> "true"
     | JsonValueKind.False -> "false"
@@ -103,7 +103,7 @@ let rec toObj (e: JsonElement) : obj =
         for p in e.EnumerateObject() do d.[p.Name] <- toObj p.Value
         box (d :> IDictionary<string, obj>)
     | JsonValueKind.Array -> box (e.EnumerateArray() |> Seq.map toObj |> List.ofSeq |> List<obj>)
-    | JsonValueKind.String -> box (e.GetString())
+    | JsonValueKind.String -> box (unquoteJson (e.GetRawText()))
     | JsonValueKind.Number ->
         match e.TryGetInt64() with
         | true, l -> box l
@@ -284,8 +284,7 @@ let validatePlanJson (json: string) : PlanValidation =
 
 // ---- planId over the wire form ----
 
-let private compactUpper (s: string) =
-    String(s.ToCharArray() |> Array.filter (Char.IsWhiteSpace >> not)).ToUpperInvariant()
+let private compactUpper (s: string) = stripJsSpaceUpper s
 
 let private slice (s: string) (n: int) = if s.Length > n then s.Substring(0, n) else s
 

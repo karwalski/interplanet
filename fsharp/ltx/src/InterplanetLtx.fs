@@ -47,19 +47,63 @@ let private b64Dec (token: string) : string option =
 
 // ── JSON helpers ─────────────────────────────────────────────────────────────
 
+/// JSON.stringify string quoting: quote, backslash, \b \f \n \r \t, other
+/// control characters and lone surrogates as lowercase \u00XX / \uXXXX;
+/// everything else (including valid surrogate pairs) raw.
 let private jsonString (s: string) : string =
     let sb = StringBuilder("\"")
-    for c in s do
+    let mutable i = 0
+    while i < s.Length do
+        let c = s.[i]
         match c with
         | '"'  -> sb.Append("\\\"") |> ignore
         | '\\' -> sb.Append("\\\\") |> ignore
+        | '\b' -> sb.Append("\\b")  |> ignore
+        | '\f' -> sb.Append("\\f")  |> ignore
         | '\n' -> sb.Append("\\n")  |> ignore
         | '\r' -> sb.Append("\\r")  |> ignore
         | '\t' -> sb.Append("\\t")  |> ignore
         | c when int c < 0x20 -> sb.Append(sprintf "\\u%04x" (int c)) |> ignore
+        | c when Char.IsHighSurrogate c && i + 1 < s.Length && Char.IsLowSurrogate s.[i + 1] ->
+            sb.Append(c).Append(s.[i + 1]) |> ignore
+            i <- i + 1
+        | c when Char.IsSurrogate c -> sb.Append(sprintf "\\u%04x" (int c)) |> ignore
         | c    -> sb.Append(c) |> ignore
+        i <- i + 1
     sb.Append('"') |> ignore
     sb.ToString()
+
+/// The value of a JSON string element, decoding every escape and keeping
+/// lone surrogates (JsonElement.GetString throws on "\ud800").
+let private jsonStringValue (e: Json.JsonElement) : string =
+    let raw = e.GetRawText()
+    let sb = StringBuilder(raw.Length)
+    let mutable i = 1
+    while i < raw.Length - 1 do
+        let c = raw.[i]
+        if c <> '\\' then sb.Append(c) |> ignore
+        else
+            i <- i + 1
+            match raw.[i] with
+            | 'b' -> sb.Append('\b') |> ignore
+            | 'f' -> sb.Append('\f') |> ignore
+            | 'n' -> sb.Append('\n') |> ignore
+            | 'r' -> sb.Append('\r') |> ignore
+            | 't' -> sb.Append('\t') |> ignore
+            | 'u' ->
+                sb.Append(char (Convert.ToInt32(raw.Substring(i + 1, 4), 16))) |> ignore
+                i <- i + 4
+            | n -> sb.Append(n) |> ignore
+        i <- i + 1
+    sb.ToString()
+
+/// JavaScript \s: ECMAScript WhiteSpace and LineTerminator. (Char.IsWhiteSpace
+/// differs: it includes U+0085 and not U+FEFF.)
+let isJsSpace (c: char) : bool =
+    match c with
+    | '\t' | '\n' | '\v' | '\f' | '\r' | ' ' | '\u00a0' | '\u1680' | '\u2028' | '\u2029'
+    | '\u202f' | '\u205f' | '\u3000' | '\ufeff' -> true
+    | c -> c >= '\u2000' && c <= '\u200a'
 
 // ── toJson / fromJson ─────────────────────────────────────────────────────────
 // Key order: v, title, start, quantum, mode, nodes, segments
@@ -78,144 +122,67 @@ let toJson (plan: LtxPlan) : string =
     let segsJson =
         plan.segments
         |> List.map (fun s ->
-            sprintf "{\"type\":%s,\"q\":%d}" (jsonString s.segType) s.q)
+            // Attributed segments (section 3.4.1): speaker and label follow
+            // type and q, only when present, as ltx-sdk.js writes them.
+            sprintf "{\"type\":%s,\"q\":%d%s%s}" (jsonString s.segType) s.q
+                (match s.speaker with Some sp -> ",\"speaker\":" + jsonString sp | None -> "")
+                (match s.label with Some lb -> ",\"label\":" + jsonString lb | None -> ""))
         |> String.concat ","
 
     sprintf "{\"v\":%d,\"title\":%s,\"start\":%s,\"quantum\":%d,\"mode\":%s,\"nodes\":[%s],\"segments\":[%s]}"
         plan.v (jsonString plan.title) (jsonString plan.start) plan.quantum (jsonString plan.mode)
         nodesJson segsJson
 
-// ── Manual JSON parser ────────────────────────────────────────────────────────
-
-let private parseStringField (json: string) (key: string) : string option =
-    let pattern = sprintf "\"%s\":\"" key
-    let idx = json.IndexOf(pattern, StringComparison.Ordinal)
-    if idx < 0 then None
-    else
-        let mutable i = idx + pattern.Length
-        let sb = StringBuilder()
-        let mutable escaped = false
-        let mutable stop = false
-        while i < json.Length && not stop do
-            let c = json.[i]
-            if escaped then
-                match c with
-                | '"'  -> sb.Append('"')  |> ignore
-                | '\\' -> sb.Append('\\') |> ignore
-                | 'n'  -> sb.Append('\n') |> ignore
-                | 'r'  -> sb.Append('\r') |> ignore
-                | 't'  -> sb.Append('\t') |> ignore
-                | _    -> sb.Append(c)    |> ignore
-                escaped <- false
-            elif c = '\\' then escaped <- true
-            elif c = '"'  then stop <- true
-            else sb.Append(c) |> ignore
-            i <- i + 1
-        Some(sb.ToString())
-
-let private parseIntField (json: string) (key: string) : int option =
-    let pattern = sprintf "\"%s\":" key
-    let idx = json.IndexOf(pattern, StringComparison.Ordinal)
-    if idx < 0 then None
-    else
-        let mutable i = idx + pattern.Length
-        while i < json.Length && json.[i] = ' ' do i <- i + 1
-        let start = i
-        while i < json.Length && (Char.IsDigit(json.[i]) || json.[i] = '-') do i <- i + 1
-        if i = start then None
-        else
-            match Int32.TryParse(json.Substring(start, i - start)) with
-            | true, v -> Some v
-            | _       -> None
-
-let private splitObjects (arr: string) : string list =
-    let result = ResizeArray<string>()
-    let mutable depth = 0
-    let mutable start = 0
-    let mutable inStr = false
-    let mutable escaped = false
-    let mutable i = 0
-    while i < arr.Length do
-        let c = arr.[i]
-        if escaped then escaped <- false
-        elif c = '\\' && inStr then escaped <- true
-        elif c = '"'  then inStr <- not inStr
-        elif not inStr then
-            if c = '{' then
-                if depth = 0 then start <- i + 1
-                depth <- depth + 1
-            elif c = '}' then
-                depth <- depth - 1
-                if depth = 0 then
-                    result.Add(arr.Substring(start, i - start))
-        i <- i + 1
-    result |> Seq.toList
-
-let private parseNodes (json: string) : LtxNode list =
-    let marker = "\"nodes\":["
-    let idx = json.IndexOf(marker, StringComparison.Ordinal)
-    if idx < 0 then []
-    else
-        let mutable i = idx + marker.Length
-        let mutable depth = 1
-        let sb = StringBuilder("[")
-        while i < json.Length && depth > 0 do
-            let c = json.[i]
-            sb.Append(c) |> ignore
-            if c = '[' then depth <- depth + 1
-            elif c = ']' then depth <- depth - 1
-            i <- i + 1
-        let arr = sb.ToString().TrimEnd(']').TrimStart('[')
-        splitObjects arr
-        |> List.choose (fun item ->
-            let w = "{" + item + "}"
-            match parseStringField w "id", parseStringField w "name",
-                  parseStringField w "role", parseStringField w "location" with
-            | Some id, Some name, Some role, Some location ->
-                let delay = parseIntField w "delay" |> Option.defaultValue 0
-                Some { id = id; name = name; role = role; delay = delay; location = location }
-            | _ -> None)
-
-let private parseSegments (json: string) : LtxSegmentTemplate list =
-    let marker = "\"segments\":["
-    let idx = json.IndexOf(marker, StringComparison.Ordinal)
-    if idx < 0 then []
-    else
-        let mutable i = idx + marker.Length
-        let mutable depth = 1
-        let sb = StringBuilder("[")
-        while i < json.Length && depth > 0 do
-            let c = json.[i]
-            sb.Append(c) |> ignore
-            if c = '[' then depth <- depth + 1
-            elif c = ']' then depth <- depth - 1
-            i <- i + 1
-        let arr = sb.ToString().TrimEnd(']').TrimStart('[')
-        splitObjects arr
-        |> List.choose (fun item ->
-            let w = "{" + item + "}"
-            match parseStringField w "type", parseIntField w "q" with
-            | Some t, Some q -> Some { segType = t; q = q }
-            | _ -> None)
+// ── JSON parser ───────────────────────────────────────────────────────────────
 
 let fromJson (json: string) : LtxPlan option =
     if String.IsNullOrEmpty(json) then None
-    elif not (json.Contains("{")) then None
     else
     try
-        let v       = parseIntField    json "v"       |> Option.defaultValue 2
-        let title   = parseStringField json "title"   |> Option.defaultValue ""
-        let start   = parseStringField json "start"   |> Option.defaultValue ""
-        let quantum = parseIntField    json "quantum"  |> Option.defaultValue DEFAULT_QUANTUM
-        let mode    = parseStringField json "mode"    |> Option.defaultValue "LTX"
-        let nodes    = parseNodes    json
-        let segments = parseSegments json
+        use doc = Json.JsonDocument.Parse(json)
+        let root = doc.RootElement
+        let prop (o: Json.JsonElement) (k: string) =
+            match o.ValueKind with
+            | Json.JsonValueKind.Object ->
+                match o.TryGetProperty k with
+                | true, v -> Some v
+                | _ -> None
+            | _ -> None
+        let str o k =
+            match prop o k with
+            | Some v when v.ValueKind = Json.JsonValueKind.String -> Some (jsonStringValue v)
+            | _ -> None
+        let int o k =
+            match prop o k with
+            | Some v when v.ValueKind = Json.JsonValueKind.Number ->
+                match v.TryGetInt32() with
+                | true, i -> Some i
+                | _ -> None
+            | _ -> None
+        let arr k =
+            match prop root k with
+            | Some v when v.ValueKind = Json.JsonValueKind.Array -> v.EnumerateArray() |> List.ofSeq
+            | _ -> []
+        let nodes =
+            arr "nodes" |> List.choose (fun n ->
+                match str n "id", str n "name", str n "role", str n "location" with
+                | Some id, Some name, Some role, Some location ->
+                    Some { id = id; name = name; role = role; delay = defaultArg (int n "delay") 0; location = location }
+                | _ -> None)
+        let segments =
+            arr "segments" |> List.choose (fun sg ->
+                match str sg "type", int sg "q" with
+                | Some t, Some q -> Some { segType = t; q = q; speaker = str sg "speaker"; label = str sg "label" }
+                | _ -> None)
+        let title = defaultArg (str root "title") ""
+        let start = defaultArg (str root "start") ""
         // Require at least one valid field to distinguish from truly invalid input
         if start = "" && title = "" && nodes.IsEmpty then None
         else
         Some {
-            v = v; title = title; start = start
-            quantum = quantum; mode = mode
+            v = defaultArg (int root "v") 2; title = title; start = start
+            quantum = defaultArg (int root "quantum") DEFAULT_QUANTUM
+            mode = defaultArg (str root "mode") "LTX"
             nodes = nodes; segments = segments
             planId = None
         }
@@ -310,7 +277,7 @@ let createPlanFromConfig (config: {|
 
     let planSegs =
         if config.segments.Length > 0 then
-            config.segments |> List.map (fun s -> { segType = s.segType; q = s.q })
+            config.segments |> List.map (fun s -> segment s.segType s.q)
         else DEFAULT_SEGMENTS
 
     let quantum = if config.quantum = 0 then DEFAULT_QUANTUM else config.quantum
@@ -394,12 +361,13 @@ let makePlanId (plan: LtxPlan) : string =
     let date = plan.start.Substring(0, 10).Replace("-", "")
 
     let nodes = plan.nodes
-    // name.replace(/\s+/g, '').toUpperCase() as in ltx-sdk.js: only
-    // whitespace is removed; punctuation such as '-' is kept (§4.3).
+    // name.replace(/\s+/g, '').toUpperCase() as in ltx-sdk.js: only JS \s
+    // whitespace is removed (tab, NBSP, U+2028, U+3000, BOM, ...);
+    // punctuation such as '-' is kept (§4.3).
     let token (name: string) =
-        System.String(name.ToCharArray() |> Array.filter (Char.IsWhiteSpace >> not)).ToUpper()
+        System.String(name.ToCharArray() |> Array.filter (isJsSpace >> not)).ToUpperInvariant()
     let hostStr =
-        let raw = if nodes.Length > 0 then token nodes.[0].name else "HOST"
+        let raw = if nodes.Length > 0 && nodes.[0].name <> "" then token nodes.[0].name else "HOST"
         if raw.Length > 8 then raw.Substring(0, 8) else raw
 
     let nodeStr =

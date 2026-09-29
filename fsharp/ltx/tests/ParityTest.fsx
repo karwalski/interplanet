@@ -5,6 +5,9 @@
 // Run with: dotnet fsi tests/ParityTest.fsx
 
 #r "nuget: NSec.Cryptography, 24.4.0"
+#load "../src/Models.fs"
+#load "../src/Constants.fs"
+#load "../src/InterplanetLtx.fs"
 #load "../src/Security.fs"
 #load "../src/Validate.fs"
 #load "../src/V11.fs"
@@ -228,6 +231,58 @@ check "snapshot signature verifies" (fst (verifyRegisterEntry snap cache))
 let mergedR, rejectedR = mergeLogs [ dec1 ] [ decRev ] (dict [ "N0", cache.["N0"] ])
 check "mergeLogs rejects unverifiable entries"
     (mergedR.Length = 1 && rejectedR.Length = 1 && snd rejectedR.Head = "key_not_in_cache")
+
+// ---- Issue #36: typed LtxPlan escaping, JS \s whitespace, speaker/label ----
+printfn "-- Issue #36: escaping, whitespace, attribution --"
+module Typed = InterplanetLtx.InterplanetLtx
+let ctlPlan : InterplanetLtx.Models.LtxPlan =
+    { v = 2
+      title = "Ctl\u0001\b\f\n\r\t\"\\\u001f\u007f" + string (char 0xd800) + " \ud83d\ude80" // an F# literal turns a lone surrogate into U+FFFD
+      start = "2026-03-15T14:00:00.000Z"; quantum = 3; mode = "LTX-ASYNC"
+      nodes = [
+        { id = "N0"; name = "Earth\tHQ"; role = "HOST"; delay = 0; location = "earth" }
+        { id = "N1"; name = "Ma\u00a0r\u3000s\u2009Hab-01"; role = "PARTICIPANT"; delay = 840; location = "mars" }
+        { id = "N2"; name = "L-1\u2028Gate\ufeffway\n"; role = "PARTICIPANT"; delay = 2; location = "moon" } ]
+      segments =
+        [ InterplanetLtx.Models.segment "PLAN_CONFIRM" 2
+          { InterplanetLtx.Models.segment "TX" 3 with speaker = Some "N0"; label = Some "Opening\tremarks" }
+          InterplanetLtx.Models.segment "RX" 3
+          { InterplanetLtx.Models.segment "TX" 2 with speaker = Some "N1" }
+          { InterplanetLtx.Models.segment "TX" 1 with label = Some "Q&A \ud83d\udd34" }
+          InterplanetLtx.Models.segment "BUFFER" 1 ]
+      planId = None }
+// JSON.stringify of the same plan object and its makePlanId, from ltx-sdk.js (node 22).
+let ctlJs = "{\"v\":2,\"title\":\"Ctl\\u0001\\b\\f\\n\\r\\t\\\"\\\\\\u001f\u007f\\ud800 \ud83d\ude80\",\"start\":\"2026-03-15T14:00:00.000Z\",\"quantum\":3,\"mode\":\"LTX-ASYNC\",\"nodes\":[{\"id\":\"N0\",\"name\":\"Earth\\tHQ\",\"role\":\"HOST\",\"delay\":0,\"location\":\"earth\"},{\"id\":\"N1\",\"name\":\"Ma\u00a0r\u3000s\u2009Hab-01\",\"role\":\"PARTICIPANT\",\"delay\":840,\"location\":\"mars\"},{\"id\":\"N2\",\"name\":\"L-1\u2028Gate\ufeffway\\n\",\"role\":\"PARTICIPANT\",\"delay\":2,\"location\":\"moon\"}],\"segments\":[{\"type\":\"PLAN_CONFIRM\",\"q\":2},{\"type\":\"TX\",\"q\":3,\"speaker\":\"N0\",\"label\":\"Opening\\tremarks\"},{\"type\":\"RX\",\"q\":3},{\"type\":\"TX\",\"q\":2,\"speaker\":\"N1\"},{\"type\":\"TX\",\"q\":1,\"label\":\"Q&A \ud83d\udd34\"},{\"type\":\"BUFFER\",\"q\":1}]}"
+let ctlJson = Typed.toJson ctlPlan
+check "issue36: toJson == JSON.stringify (control chars, lone surrogate, speaker/label)" (ctlJson = ctlJs)
+check "issue36: toJson has no raw control characters" (ctlJson |> Seq.forall (fun c -> c >= ' '))
+check "issue36: unattributed segment has no speaker/label" (ctlJson.Contains("{\"type\":\"RX\",\"q\":3}"))
+check "issue36: toJson re-stringifies identically (lone surrogate kept)"
+    (stringify (JsonDocument.Parse(ctlJson).RootElement) = ctlJson)
+let ctlId = Typed.makePlanId ctlPlan
+check "issue36: makePlanId == JS makePlanId" (ctlId = "LTX-20260315-EARTHHQ-MARS-L-1G-v2-39d48c2a")
+check "issue36: makePlanId == makePlanIdFromJson(wire JSON)" (makePlanIdFromJson ctlJson = ctlId)
+let ctlBack = Typed.decodeHash (Typed.encodeHash ctlPlan)
+check "issue36: decodeHash round-trips the whole plan" (ctlBack = Some ctlPlan)
+check "issue36: decoded plan has the same planId" (ctlBack |> Option.map Typed.makePlanId = Some ctlId)
+// JS \s is not Char.IsWhiteSpace: U+FEFF is stripped, U+0085 is kept.
+let wsPlan : InterplanetLtx.Models.LtxPlan =
+    { v = 2; title = "t"; start = "2026-03-15T14:00:00.000Z"; quantum = 3; mode = "LTX"
+      nodes = [
+        { id = "N0"; name = "\u00a0Ea\u1680rth\u205fHQ\u202f"; role = "HOST"; delay = 0; location = "earth" }
+        { id = "N1"; name = "\ufeffM\va\fr\u3000s"; role = "PARTICIPANT"; delay = 0; location = "mars" }
+        { id = "N2"; name = "X\u0085Y"; role = "PARTICIPANT"; delay = 0; location = "moon" } ]
+      segments = [ InterplanetLtx.Models.segment "TX" 1 ]
+      planId = None }
+let wsJsId = "LTX-20260315-EARTHHQ-MARS-X\u0085Y-v2-aa92073b"
+check "issue36: makePlanId strips JS \\s whitespace only" (Typed.makePlanId wsPlan = wsJsId)
+check "issue36: makePlanIdFromJson strips JS \\s whitespace only" (makePlanIdFromJson (Typed.toJson wsPlan) = wsJsId)
+let wsV11 : PlanV11 =
+    { v = 2; title = "t"; start = "2026-03-15T14:00:00.000Z"; quantum = 3; mode = "LTX"
+      nodes = wsPlan.nodes |> List.map (fun n -> ({ id = n.id; name = n.name; role = n.role; delay = int64 n.delay; location = n.location } : NodeV11))
+      segments = [ ({ segType = "TX"; q = 1; speaker = None; label = None } : SegV11) ]
+      delays = None; planVersion = None; prevPlanHash = None }
+check "issue36: PlanV11 makePlanId strips JS \\s whitespace only" (makePlanId wsV11 = wsJsId)
 
 printfn "\n%d passed  %d failed" passed failed
 if failed > 0 then exit 1
