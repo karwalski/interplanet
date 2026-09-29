@@ -11,6 +11,8 @@ test:
 	$(LUA) test/security_test.lua
 	@echo '==> LTX v1.1 conformance tests (Epic 72)'
 	$(LUA) test/v11_test.lua
+	@echo '==> JS reference parity tests (issue #27)'
+	$(LUA) test/parity_test.lua
 
 lint:
 	@command -v luacheck >/dev/null 2>&1 && luacheck src/ test/ || echo "luacheck not installed, skipping lint"

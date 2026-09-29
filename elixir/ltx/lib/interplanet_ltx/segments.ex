@@ -11,6 +11,7 @@ defmodule InterplanetLtx.Segments do
   infix so the two id spaces stay disjoint.
   """
 
+  alias InterplanetLtx.Json
   alias InterplanetLtx.Security
   alias InterplanetLtx.Models.LtxPlan
 
@@ -62,6 +63,40 @@ defmodule InterplanetLtx.Segments do
   """
   def make_plan_id(%LtxPlan{} = plan), do: InterplanetLtx.make_plan_id(plan)
 
+  # Ordered plan object (InterplanetLtx.Json.decode_ordered!/1): the v2 hash
+  # is JSON.stringify of the plan in insertion order, exactly as ltx-sdk.js
+  # makePlanId computes it, so every field (relay, speaker, label, ...) and
+  # its position count.
+  def make_plan_id({:object, _} = obj) do
+    c = upgrade_ordered(obj)
+    plain = Json.to_plain(c)
+    v = plain["v"]
+
+    if is_number(v) and v >= 3 do
+      make_plan_id(plain)
+    else
+      nodes = plain["nodes"] || []
+      date = utc_date(plain["start"])
+
+      host_str =
+        case nodes do
+          [first | _] -> short_name(first["name"] || "HOST", 8)
+          [] -> "HOST"
+        end
+
+      node_str =
+        case nodes do
+          [_ | rest] when rest != [] ->
+            rest |> Enum.map_join("-", fn n -> short_name(n["name"] || "", 4) end) |> String.slice(0, 16)
+
+          _ ->
+            "RX"
+        end
+
+      "LTX-#{date}-#{host_str}-#{node_str}-v2-#{Json.imul31_hex(Json.stringify(c))}"
+    end
+  end
+
   def make_plan_id(cfg) when is_map(cfg) do
     v = cfg["v"] || cfg[:v] || 1
 
@@ -94,6 +129,75 @@ defmodule InterplanetLtx.Segments do
     else
       InterplanetLtx.make_plan_id(cfg)
     end
+  end
+
+  @doc """
+  planId of a plan given as JSON text, preserving key order (the form in
+  which plans travel; see spec/golden/plan-ids.json).
+  """
+  def plan_id_from_json(json_text) when is_binary(json_text),
+    do: json_text |> Json.decode_ordered!() |> make_plan_id()
+
+  # upgradeConfig on an ordered object: v2+ plans with nodes are unchanged;
+  # v1 configs gain v: 2 and a two-node list (spread semantics: an existing
+  # key keeps its position, new keys are appended).
+  defp upgrade_ordered(obj) do
+    v = Json.get(obj, "v")
+    nodes = Json.get(obj, "nodes")
+
+    if is_number(v) and v >= 2 and is_list(nodes) and nodes != [] do
+      obj
+    else
+      rx = Json.get(obj, "rxName") || ""
+
+      remote_loc =
+        cond do
+          String.contains?(String.downcase(rx), "mars") -> "mars"
+          String.contains?(String.downcase(rx), "moon") -> "moon"
+          true -> "earth"
+        end
+
+      node = fn id, name, role, delay, loc ->
+        {:object, [{"id", id}, {"name", name}, {"role", role}, {"delay", delay}, {"location", loc}]}
+      end
+
+      obj
+      |> Json.put("v", 2)
+      |> Json.put("nodes", [
+        node.("N0", Json.get(obj, "txName") || "Earth HQ", "HOST", 0, "earth"),
+        node.("N1", Json.get(obj, "rxName") || "Mars Hab-01", "PARTICIPANT", Json.get(obj, "delay") || 0, remote_loc)
+      ])
+    end
+  end
+
+  # new Date(start).toISOString().slice(0, 10) without the dashes.
+  defp utc_date(start) when is_binary(start) do
+    case DateTime.from_iso8601(start) do
+      {:ok, dt, _} -> dt |> DateTime.to_date() |> Date.to_iso8601(:basic)
+      _ -> start |> String.slice(0, 10) |> String.replace("-", "")
+    end
+  end
+
+  defp utc_date(_), do: ""
+
+  # ── upgrade_plan_to_v3 (LTX-SPECIFICATION.md §4.4) ──────────────────────────
+
+  @doc """
+  Explicitly upgrade a plan to v3. Never automatic: the result is a NEW plan
+  with a new (v3) planId. `extras` (string-keyed map, e.g. `%{"delays" => ...}`)
+  are merged in; `v` becomes 3 and `planVersion` defaults to 1.
+  Raises `InterplanetLtx.ReservedFieldError` (code "reserved_streams" or
+  "reserved_branching") if the result would carry reserved fields (§3.5, §7).
+  """
+  def upgrade_plan_to_v3(cfg, extras \\ %{}) do
+    plan =
+      plan_map(cfg)
+      |> Map.merge(extras)
+      |> Map.put("v", 3)
+      |> Map.put("planVersion", Map.get(extras, "planVersion", 1))
+
+    InterplanetLtx.Validate.assert_no_reserved_fields!(plan, "upgradePlanToV3")
+    plan
   end
 
   defp short_name(name, len) do

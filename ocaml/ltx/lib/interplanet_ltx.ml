@@ -356,36 +356,61 @@ let total_min (plan : ltx_plan) : int =
 
 (* ── Delay matrix ────────────────────────────────────────────────────────── *)
 
+(* One-way delay in seconds between two nodes (LTX-SPECIFICATION.md §3.7):
+   HOST pairs use the node's declared (HOST-relative) delay; non-HOST pairs
+   the SUM of both HOST-relative delays (a conservative upper bound via the
+   HOST vertex). Mirrors pairDelay in ltx-sdk.js; this struct model has no v3
+   `delays` matrix (V11.pair_delay / V11.build_delay_matrix handle v3 plans). *)
+let pair_delay (plan : ltx_plan) (a : string) (b : string) : int =
+  let open Models in
+  if a = b then 0
+  else
+    let find id =
+      match List.find_opt (fun (n : ltx_node) -> n.id = id) plan.nodes with
+      | Some n -> n
+      | None -> invalid_arg ("pair_delay: unknown node " ^ id)
+    in
+    let na = find a and nb = find b in
+    let host_id = (List.hd plan.nodes).id in
+    if a = host_id then nb.delay
+    else if b = host_id then na.delay
+    else na.delay + nb.delay
+
+(* Delay matrix for all ordered node pairs; every entry is [pair_delay], so it
+   is symmetric and non-HOST pairs are the sum, not the max. *)
 let build_delay_matrix (plan : ltx_plan) : delay_matrix_entry list =
   let open Models in
-  let nodes = Array.of_list plan.nodes in
-  let n     = Array.length nodes in
-  let result = ref [] in
-  for i = 0 to n - 1 do
-    for j = 0 to n - 1 do
-      if i <> j then begin
-        let fn = nodes.(i) and tn = nodes.(j) in
-        let d =
-          if fn.delay = 0 || i = 0 then tn.delay
-          else if tn.delay = 0 || j = 0 then fn.delay
-          else fn.delay + tn.delay
-        in
-        result := { from_id = fn.id; from_name = fn.name
-                  ; to_id   = tn.id; to_name   = tn.name
-                  ; delay_seconds = d } :: !result
-      end
-    done
-  done;
-  List.rev !result
+  List.concat_map
+    (fun (fn : ltx_node) ->
+      List.filter_map
+        (fun (tn : ltx_node) ->
+          if fn.id = tn.id then None
+          else Some { from_id = fn.id; from_name = fn.name
+                    ; to_id   = tn.id; to_name   = tn.name
+                    ; delay_seconds = pair_delay plan fn.id tn.id })
+        plan.nodes)
+    plan.nodes
 
 (* ── Plan ID ─────────────────────────────────────────────────────────────── *)
 
+(* (Math.imul(31, h) + charCodeAt(i)) >>> 0 over the UTF-16 code units of the
+   UTF-8 input, as ltx-sdk.js computes the FROZEN v2 hash (§4.3). *)
 let djb_hash s =
-  String.fold_left
-    (fun h c -> Int32.logand
-      (Int32.add (Int32.mul 31l h) (Int32.of_int (Char.code c)))
-      0xFFFFFFFFl)
-    0l s
+  let h = ref 0 in
+  let add u = h := (!h * 31 + u) land 0xFFFFFFFF in
+  let n = String.length s in
+  let i = ref 0 in
+  while !i < n do
+    let d = String.get_utf_8_uchar s !i in
+    let cp = Uchar.to_int (Uchar.utf_decode_uchar d) in
+    i := !i + Uchar.utf_decode_length d;
+    if cp >= 0x10000 then begin
+      let x = cp - 0x10000 in
+      add (0xD800 + (x lsr 10));
+      add (0xDC00 + (x land 0x3FF))
+    end else add cp
+  done;
+  Int32.of_int !h
 
 let make_plan_id (plan : ltx_plan) : string =
   let open Models in
@@ -393,7 +418,13 @@ let make_plan_id (plan : ltx_plan) : string =
     String.concat ""
       (String.split_on_char '-' (String.sub plan.start 0 (min 10 (String.length plan.start))))
   in
-  let up n = String.map Char.uppercase_ascii (String.map (fun c -> if c = ' ' then '_' else c) n) in
+  (* JS: name.replace(/\s+/g, '').toUpperCase() *)
+  let up n =
+    String.uppercase_ascii
+      (String.concat "" (List.map (String.make 1)
+         (List.filter (fun c -> not (List.mem c [' '; '\t'; '\n'; '\r'; '\012'; '\011']))
+            (List.init (String.length n) (String.get n)))))
+  in
   let host_name = (List.hd plan.nodes).name in
   let host_str =
     let s = up host_name in String.sub s 0 (min 8 (String.length s))

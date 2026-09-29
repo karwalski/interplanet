@@ -402,10 +402,16 @@ end
 
 -- ── Delay matrix ─────────────────────────────────────────────────────────────
 
---- Build a flat delay matrix for all node pairs in a plan.
--- @param plan table  LTX plan config (v1 or v2)
+--- Build a flat delay matrix for all ordered node pairs in a plan.
+-- Every entry is pair_delay(plan, from, to) (LTX-SPECIFICATION.md §3.7.3):
+-- a v3 pair matrix entry (plan.delays) is authoritative where present;
+-- HOST to node is that node's declared delay; node to node (neither is HOST)
+-- is the SUM of both HOST-relative delays (a conservative upper bound via the
+-- HOST vertex), not the max. The matrix is symmetric.
+-- @param plan table  LTX plan config (v1, v2 or v3)
 -- @return table  Array of { from_id, from_name, to_id, to_name, delay_seconds }
 function M.build_delay_matrix(plan)
+  local v11 = require("src.v11")
   local c = M.upgrade_config(plan)
   local nodes = c.nodes or {}
   local matrix = {}
@@ -414,20 +420,12 @@ function M.build_delay_matrix(plan)
       if i ~= j then
         local from = nodes[i]
         local to   = nodes[j]
-        local delay_sec
-        if (from.delay or 0) == 0 or i == 1 then
-          delay_sec = to.delay or 0
-        elseif (to.delay or 0) == 0 or j == 1 then
-          delay_sec = from.delay or 0
-        else
-          delay_sec = (from.delay or 0) + (to.delay or 0)
-        end
         matrix[#matrix + 1] = {
           from_id      = from.id,
           from_name    = from.name,
           to_id        = to.id,
           to_name      = to.name,
-          delay_seconds = delay_sec,
+          delay_seconds = assert(v11.pair_delay(c, from.id, to.id)),
         }
       end
     end
@@ -489,8 +487,32 @@ end
 --
 -- @param cfg table
 -- @return string  e.g. "LTX-20260101-EARTHHQ-MARSHA-v2-a3b2c1d0"
+-- upgradeConfig for an insertion-ordered plan (src/json.lua): v2+ plans with
+-- nodes are unchanged; v1 configs gain v = 2 and a two-node list with JS
+-- spread semantics (existing keys keep their position, new keys append).
+local function upgrade_ordered(cfg)
+  local json = require("src.json")
+  if type(cfg.v) == "number" and cfg.v >= 2 and type(cfg.nodes) == "table" and #cfg.nodes > 0 then
+    return cfg
+  end
+  local rx_name = cfg.rxName or ""
+  local remote_loc = "earth"
+  if rx_name:lower():find("mars") then remote_loc = "mars"
+  elseif rx_name:lower():find("moon") then remote_loc = "moon"
+  end
+  local c = json.with(cfg, "v", 2)
+  return json.with(c, "nodes", json.array({
+    json.object({ { "id", "N0" }, { "name", cfg.txName or "Earth HQ" }, { "role", "HOST" },
+                  { "delay", 0 }, { "location", "earth" } }),
+    json.object({ { "id", "N1" }, { "name", cfg.rxName or "Mars Hab-01" }, { "role", "PARTICIPANT" },
+                  { "delay", cfg.delay or 0 }, { "location", remote_loc } }),
+  }))
+end
+
 function M.make_plan_id(cfg)
-  local c     = M.upgrade_config(cfg)
+  local json  = require("src.json")
+  local ordered = json.key_order(cfg) ~= nil
+  local c     = ordered and upgrade_ordered(cfg) or M.upgrade_config(cfg)
   local date  = (c.start or ""):sub(1, 10):gsub("-", "")
   local nodes = c.nodes or {}
   local host_str = ((nodes[1] and nodes[1].name) or "HOST")
@@ -513,13 +535,23 @@ function M.make_plan_id(cfg)
       digest:sub(1, 8))
   end
 
-  -- FROZEN v2 path: polynomial hash of the schema-order JSON.
-  local raw = M.plan_schema_json(c)
-  local h = 0
-  for k = 1, #raw do
-    h = (31 * h + string.byte(raw, k)) % (2^32)
-  end
-  return string.format("LTX-%s-%s-%s-v2-%08x", date, host_str, node_str, h)
+  -- FROZEN v2 path: imul31 over the UTF-16 code units of the plan JSON. An
+  -- insertion-ordered plan (decoded by src/json.lua) is hashed exactly as
+  -- JSON.stringify emits it; a plain Lua table uses the schema key order.
+  local raw = ordered and json.stringify(c) or M.plan_schema_json(c)
+  return string.format("LTX-%s-%s-%s-v2-%s", date, host_str, node_str, json.imul31_hex(raw))
+end
+
+--- planId of a plan given as JSON text, preserving its key order (the form in
+-- which plans travel; see spec/golden/plan-ids.json).
+function M.plan_id_from_json(text)
+  return M.make_plan_id(require("src.json").decode_ordered(text))
+end
+
+--- Validate a v2 or v3 plan (see src/validate.lua): returns
+-- { valid = bool, errors = { { code, path, message }, ... } }.
+function M.validate_plan(plan)
+  return require("src.validate").validate_plan(plan)
 end
 
 -- ── Hash encoding ────────────────────────────────────────────────────────────

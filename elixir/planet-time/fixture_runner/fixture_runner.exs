@@ -31,9 +31,6 @@ entries = Map.fetch!(data, "entries")
 # String.to_existing_atom/1 is called for the first fixture entry.
 _ = InterplanetTime.Constants.planets()
 
-passed = 0
-failed = 0
-
 {passed, failed} =
   Enum.reduce(entries, {0, 0}, fn entry, {p, f} ->
     utc_ms     = trunc(entry["utc_ms"])

@@ -9,7 +9,7 @@ No external package dependencies — uses Julia stdlib only.
 ## Requirements
 
 - Julia 1.9 or later
-- No external packages required (Base64 is Julia stdlib)
+- No external packages required (Base64 and SHA are Julia stdlib)
 
 ## Quick start
 
@@ -89,6 +89,23 @@ println("Total: $(total_min(plan)) minutes")
 | `format_utc(epoch_ms)` | Format epoch ms as HH:MM:SS UTC |
 | `store_session(plan; api_base)` | Store plan on server (optional) |
 | `get_session(plan_id; api_base)` | Retrieve plan from server (optional) |
+
+### Parity with ltx-sdk.js (issue #27, `src/parity.jl`)
+
+| Function | Description |
+|----------|-------------|
+| `parse_json_ordered(text)` | Decode JSON keeping object key order (`JsonObject`) |
+| `make_plan_id(obj::JsonObject)` | planId of a JSON plan: v2 imul31 over the UTF-16 code units of `JSON.stringify` in the plan's own key order, v3 SHA-256 of canonical JSON; reproduces every vector in `spec/golden/plan-ids.json` |
+| `plan_id_from_json(text)` | Both steps at once |
+| `plan_hash(plan)` | SHA-256 hex of canonical JSON (prevPlanHash) |
+| `validate_plan(plan)` | `(valid, errors)` with the error codes of `validatePlan`, incl. `reserved_streams` / `reserved_branching` |
+| `upgrade_plan_to_v3(plan; extras)` | Explicit v2 to v3 upgrade; throws `ReservedFieldError` (`.code`) on reserved fields |
+| `json_stringify(x; canonical)`, `canonical_json(x)`, `imul31_hex(s)` | Building blocks |
+
+`LtxPlan` serialises nodes before segments (JS `createPlan` emits segments
+first), so `create_plan` output reproduces the `v2-key-order-sensitive` vector.
+`create_plan` defaults to a 5-minute quantum. This port has no sessions,
+amendments or registers.
 
 ## Running tests
 

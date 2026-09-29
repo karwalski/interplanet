@@ -1492,7 +1492,7 @@ loop_exit17:
   %t1016 = load i8*, i8** %title
   %t1017 = load i64, i64* %now
   %t1018 = add i64 0, %t1017
-  %t1019 = add i64 0, 3
+  %t1019 = add i64 0, 5
   %t1020 = getelementptr inbounds [4 x i8], [4 x i8]* @.str.89, i32 0, i32 0
   %t1021 = load i8*, i8** %nodes
   %t1022 = call fastcc i8* @ltxcreateplan( i8* %t1016, i64 %t1018, i64 %t1019, i8* %t1020, i8* %t1021)

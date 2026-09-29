@@ -16,6 +16,10 @@ export create_plan, compute_segments, total_min
 export make_plan_id, encode_hash, decode_hash, build_node_urls
 export generate_ics, format_hms, format_utc
 export store_session, get_session
+# JS reference parity (src/parity.jl, issue #27)
+export JsonObject, parse_json_ordered, json_stringify, canonical_json, imul31_hex
+export plan_hash, plan_id_from_json, validate_plan, reserved_field_errors
+export ReservedFieldError, upgrade_plan_to_v3, PLAN_SEGMENT_TYPES, PLAN_MODES
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -291,9 +295,9 @@ Uses unsigned 32-bit overflow arithmetic (equivalent to Math.imul(31, h) in JS).
 """
 function _plan_hash(json_str::AbstractString)::UInt32
     h = UInt32(0)
-    for c in json_str
-        # h = (31 * h + codepoint(c)) as UInt32 — wraps on overflow
-        h = UInt32(31) * h + UInt32(codepoint(c))
+    # JS iterates UTF-16 code units (charCodeAt), so astral characters count twice
+    for u in transcode(UInt16, String(json_str))
+        h = UInt32(31) * h + UInt32(u)   # wraps on overflow, like Math.imul + >>> 0
     end
     return h
 end
@@ -575,8 +579,7 @@ function make_plan_id(plan::LtxPlan)::String
 
     # Host string: first node name, spaces removed, uppercased, max 8 chars
     host_str = if !isempty(plan.nodes)
-        s = uppercase(replace(plan.nodes[1].name, " " => ""))
-        length(s) > 8 ? s[1:8] : s
+        first(uppercase(replace(plan.nodes[1].name, r"\s+" => "")), 8)
     else
         "HOST"
     end
@@ -584,11 +587,9 @@ function make_plan_id(plan::LtxPlan)::String
     # Node string: remaining nodes abbreviated to 4 chars each, max 16 chars total
     node_str = if length(plan.nodes) > 1
         parts = map(plan.nodes[2:end]) do n
-            s = uppercase(replace(n.name, " " => ""))
-            length(s) > 4 ? s[1:4] : s
+            first(uppercase(replace(n.name, r"\s+" => "")), 4)
         end
-        joined = join(parts, "-")
-        length(joined) > 16 ? joined[1:16] : joined
+        first(join(parts, "-"), 16)
     else
         "RX"
     end
@@ -858,5 +859,7 @@ function _http_get_str(url::String)::String
     dl.download(url, buf)
     return String(take!(buf))
 end
+
+include("parity.jl")
 
 end  # module InterplanetLtx

@@ -529,3 +529,5 @@ end
 end
 
 end  # @testset "InterplanetLtx"
+
+include("parity_tests.jl")

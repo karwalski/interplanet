@@ -181,10 +181,46 @@ defmodule InterplanetLtx.Security do
 
   # ── SequenceTracker ────────────────────────────────────────────────────────
 
-  @doc "Create a new in-memory sequence tracker."
-  def new_sequence_tracker(plan_id) do
-    {:ok, pid} = Agent.start_link(fn -> %{} end)
-    %{plan_id: plan_id, pid: pid, prefix: "ltx_seq_#{plan_id}_"}
+  @doc "Default reorder window for inbound seqs (mirrors SEQ_REORDER_WINDOW in ltx-sdk.js)."
+  def seq_reorder_window, do: 64
+
+  @max_safe_integer 9_007_199_254_740_991
+
+  @doc """
+  Create a sequence tracker (mirrors createSequenceTracker in ltx-sdk.js).
+
+  Inbound seqs are checked against a sliding reorder window below the highest
+  seq seen (the high-water mark). Seqs skipped by a gap are remembered while
+  they remain inside the window, so a delayed but genuine bundle that arrives
+  after a higher seq is accepted and flagged `late: true`, while an exact
+  duplicate of an already-accepted (node_id, seq) is rejected as a replay.
+  Seqs below the window are rejected as replays.
+
+  Options:
+    - `reorder_window:` non-negative integer (default `seq_reorder_window/0`,
+      64); 0 disables late acceptance (strict monotonic).
+    - `storage:` pid of an `Agent` holding a map. Counters and missing-seq
+      markers live there, so passing the same Agent to a new tracker keeps the
+      window across a restart. Default: a fresh in-memory Agent.
+  """
+  def new_sequence_tracker(plan_id, opts \\ []) do
+    window = Keyword.get(opts, :reorder_window, seq_reorder_window())
+
+    unless is_integer(window) and window >= 0 and window <= @max_safe_integer do
+      raise ArgumentError, "createSequenceTracker: reorderWindow must be a non-negative integer"
+    end
+
+    pid =
+      case Keyword.get(opts, :storage) do
+        nil ->
+          {:ok, pid} = Agent.start_link(fn -> %{} end)
+          pid
+
+        pid ->
+          pid
+      end
+
+    %{plan_id: plan_id, pid: pid, prefix: "ltx_seq_#{plan_id}_", reorder_window: window}
   end
 
   @doc "Get next outbound sequence number for node_id."
@@ -201,33 +237,88 @@ defmodule InterplanetLtx.Security do
     Map.put(bundle, :seq, next_seq(tracker, node_id))
   end
 
-  @doc "Check incoming seq from sender."
+  @doc """
+  Check an incoming bundle's seq against the tracker. A bundle without a
+  numeric seq is rejected as "missing_seq"; otherwise see `record_seq/3`.
+  """
   def check_seq(bundle, tracker, sender_node_id) do
     seq = Map.get(bundle, :seq) || Map.get(bundle, "seq")
-    if is_nil(seq) or not is_integer(seq) do
-      %{accepted: false, reason: "missing_seq", gap: false, gap_size: 0}
-    else
+
+    if is_number(seq) do
       record_seq(tracker, sender_node_id, seq)
+    else
+      %{accepted: false, reason: "missing_seq", gap: false, gap_size: 0, late: false}
     end
   end
 
-  defp record_seq(%{pid: pid, prefix: prefix}, node_id, seq) do
-    key = prefix <> node_id <> "_rx"
-    Agent.get_and_update(pid, fn store ->
-      last = Map.get(store, key, 0)
-      {result, new_store} =
-        cond do
-          seq <= last ->
-            {%{accepted: false, reason: "replay", gap: false, gap_size: 0}, store}
-          seq == last + 1 ->
-            {%{accepted: true, reason: nil, gap: false, gap_size: 0}, Map.put(store, key, seq)}
-          true ->
-            gs = seq - last - 1
-            {%{accepted: true, reason: nil, gap: true, gap_size: gs}, Map.put(store, key, seq)}
+  @doc """
+  Record an incoming seq from `node_id`. Returns
+  `%{accepted:, gap:, gap_size:, late:, reason:}` where `reason` is nil when
+  accepted, "replay" for an exact duplicate or a seq below the reorder window,
+  and "invalid_seq" when seq is not a safe integer. `late: true` marks a seq
+  below the high-water mark that was never seen and is inside the window.
+  """
+  def record_seq(%{pid: pid, prefix: prefix, reorder_window: w}, node_id, seq) do
+    if not (is_integer(seq) and abs(seq) <= @max_safe_integer) do
+      %{accepted: false, reason: "invalid_seq", gap: false, gap_size: 0, late: false}
+    else
+      key = prefix <> node_id <> "_rx"
+      miss = fn s -> "#{key}_miss_#{s}" end
+
+      Agent.get_and_update(pid, fn store ->
+        last = Map.get(store, key, 0)
+
+        if seq <= last do
+          mk = miss.(seq)
+
+          if seq > last - w and Map.get(store, mk) == 1 do
+            {%{accepted: true, reason: nil, gap: false, gap_size: 0, late: true}, Map.delete(store, mk)}
+          else
+            {%{accepted: false, reason: "replay", gap: false, gap_size: 0, late: false}, store}
+          end
+        else
+          gap = seq > last + 1
+          gap_size = if gap, do: seq - last - 1, else: 0
+
+          # Remember skipped seqs that stay inside the new window (seq - W, seq].
+          lo = max(last + 1, seq - w + 1)
+          store = if lo <= seq - 1, do: Enum.reduce(lo..(seq - 1), store, &Map.put(&2, miss.(&1), 1)), else: store
+
+          # Forget markers that slide out of the window.
+          from = max(1, last - w + 1)
+          to = min(last, seq - w)
+          store = if from <= to, do: Enum.reduce(from..to, store, &Map.delete(&2, miss.(&1))), else: store
+
+          {%{accepted: true, reason: nil, gap: gap, gap_size: gap_size, late: false}, Map.put(store, key, seq)}
         end
-      {result, new_store}
+      end)
+    end
+  end
+
+  @doc """
+  Seqs below the high-water mark still missing inside the reorder window,
+  ascending (candidates for a retransmission request, LTX-SECURITY §11.3).
+  """
+  def missing_seqs(%{pid: pid, prefix: prefix, reorder_window: w}, node_id) do
+    key = prefix <> node_id <> "_rx"
+
+    Agent.get(pid, fn store ->
+      last = Map.get(store, key, 0)
+      from = max(1, last - w + 1)
+
+      if from <= last - 1,
+        do: Enum.filter(from..(last - 1), fn s -> Map.get(store, "#{key}_miss_#{s}") == 1 end),
+        else: []
     end)
   end
+
+  @doc "Highest inbound seq seen from node_id (0 if none)."
+  def last_seen_seq(%{pid: pid, prefix: prefix}, node_id),
+    do: Agent.get(pid, &Map.get(&1, prefix <> node_id <> "_rx", 0))
+
+  @doc "Current outbound seq for node_id (0 if none)."
+  def current_seq(%{pid: pid, prefix: prefix}, node_id),
+    do: Agent.get(pid, &Map.get(&1, prefix <> node_id, 0))
 
   # ── Private helpers ────────────────────────────────────────────────────────
 

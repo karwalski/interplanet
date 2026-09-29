@@ -9,6 +9,8 @@ ifdef ELIXIR
 	elixir -r test/test_helper.exs test/security_test.exs 2>&1
 	@echo "==> LTX v1.1 core subset tests (Epic 72)"
 	elixir -r test/test_helper.exs test/v11_test.exs 2>&1
+	@echo "==> JS reference parity tests (issue #27)"
+	elixir -r test/test_helper.exs test/parity_test.exs 2>&1
 else
 	@echo "elixir not installed — skipping tests"
 endif

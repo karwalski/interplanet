@@ -1,11 +1,14 @@
 # test/v11_test.exs — LTX v1.1 core subset tests (Epic 72, Story 72.5)
-# Verified against the shared golden vectors: conformance/vectors.json §v11.
+# Verified against the shared golden vectors: conformance/vectors.json §v11
+# (vendored as test/v11.json).
 # Run with: elixir -r test/test_helper.exs test/v11_test.exs
 
 Code.require_file("../lib/interplanet_ltx/constants.ex", __DIR__)
 Code.require_file("../lib/interplanet_ltx/models.ex", __DIR__)
 Code.require_file("../lib/interplanet_ltx/interplanet_ltx.ex", __DIR__)
 Code.require_file("../lib/interplanet_ltx/security.ex", __DIR__)
+Code.require_file("../lib/interplanet_ltx/json.ex", __DIR__)
+Code.require_file("../lib/interplanet_ltx/validate.ex", __DIR__)
 Code.require_file("../lib/interplanet_ltx/segments.ex", __DIR__)
 Code.require_file("../lib/interplanet_ltx/session.ex", __DIR__)
 Code.require_file("../lib/interplanet_ltx/amend.ex", __DIR__)
@@ -25,8 +28,18 @@ alias InterplanetLtx.Session
 
 # ── Load golden vectors ───────────────────────────────────────────────────────
 
-vectors_path = Path.expand("../../../../conformance/vectors.json", __DIR__)
-v11 = File.read!(vectors_path) |> JSON.decode!() |> Map.fetch!("v11")
+# conformance/vectors.json (section "v11") when present; otherwise the vendored
+# copy test/v11.json (identical to go/ltx/testdata/v11.json).
+Code.require_file("../lib/interplanet_ltx/json.ex", __DIR__)
+
+vectors_path = Path.expand("../../../conformance/vectors.json", __DIR__)
+
+v11 =
+  if File.exists?(vectors_path) do
+    File.read!(vectors_path) |> InterplanetLtx.Json.decode!() |> Map.fetch!("v11")
+  else
+    File.read!(Path.expand("v11.json", __DIR__)) |> InterplanetLtx.Json.decode!()
+  end
 
 key = v11["key"]
 nik = key["nik"]

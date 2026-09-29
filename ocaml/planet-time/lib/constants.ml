@@ -2,6 +2,10 @@
    Story 18.18 — OCaml port of planet-time
    All numeric values taken verbatim from planet-time.js / C / Python. *)
 
+(* ── Library version ─────────────────────────────────────────────────────── *)
+
+let version = "1.0.0"
+
 (* ── Astronomical constants ──────────────────────────────────────────────── *)
 
 let au_km       = 149597870.7          (* 1 AU in km, IAU 2012 *)

@@ -1,5 +1,6 @@
 -- v11_test.lua -- LTX v1.1 core subset conformance tests (Epic 72.4)
--- Verifies the five cascade features against conformance/vectors.json (.v11).
+-- Verifies the five cascade features against conformance/vectors.json (.v11),
+-- vendored as test/v11.json.
 
 package.path = package.path .. ';./?.lua;./src/?.lua;../?.lua;../src/?.lua'
 
@@ -26,17 +27,25 @@ end
 
 -- ---- Load the golden vectors ----
 
+-- conformance/vectors.json (section "v11") when present, else the vendored
+-- copy test/v11.json (identical to go/ltx/testdata/v11.json). Each call
+-- returns a freshly decoded table, so tests may mutate it.
 local function load_vectors()
-  local f = io.open('../../../conformance/vectors.json', 'rb')
+  local f = io.open('../../conformance/vectors.json', 'rb')
+  if f then
+    local root = LTX.json_decode(f:read('a'))
+    f:close()
+    return root and root.v11 or nil
+  end
+  f = io.open('test/v11.json', 'rb')
   if not f then return nil end
-  local txt = f:read('a')
+  local root = LTX.json_decode(f:read('a'))
   f:close()
-  local root = LTX.json_decode(txt)
-  return root and root.v11 or nil
+  return root
 end
 
 local v11 = load_vectors()
-ok(v11 ~= nil, 'conformance/vectors.json v11 section loaded')
+ok(v11 ~= nil, 'v11 vectors loaded (conformance/vectors.json or test/v11.json)')
 if not v11 then
   print('\n0 passed, 1 failed')
   os.exit(1)
@@ -119,10 +128,7 @@ local chain_ok, chain_reason = V11.verify_amendment_chain(chain, key_cache)
 ok(chain_ok, 'amendment chain verifies (' .. tostring(chain_reason) .. ')')
 
 -- Tampering the amended link's title must break the chain.
-local f2 = io.open('../../../conformance/vectors.json', 'rb')
-local tampered_root = LTX.json_decode(f2:read('a'))
-f2:close()
-local tampered_chain = tampered_root.v11.amendmentChain.chain
+local tampered_chain = load_vectors().amendmentChain.chain
 tampered_chain[2].plan.title = 'Tampered Summit'
 local tampered_ok, tampered_reason = V11.verify_amendment_chain(tampered_chain, key_cache)
 ok(not tampered_ok, 'tampered amendment chain rejected (' .. tostring(tampered_reason) .. ')')
@@ -149,9 +155,7 @@ for _, entry in ipairs(v11.registerEntries.entries) do
     .. tostring(e_reason) .. ')')
 end
 
-local f3 = io.open('../../../conformance/vectors.json', 'rb')
-local tampered_entries = LTX.json_decode(f3:read('a')).v11.registerEntries.entries
-f3:close()
+local tampered_entries = load_vectors().registerEntries.entries
 tampered_entries[1].content.text = 'Tampered?'
 local te_ok, te_reason = V11.verify_register_entry(tampered_entries[1], reg_cache)
 ok(not te_ok and te_reason == 'signature_invalid', 'tampered register entry rejected')
@@ -240,9 +244,7 @@ ok(float_err ~= nil, 'CBOR floats rejected')
 local _, indef_err = V11.cbor_decode('\159\1\255')
 ok(indef_err ~= nil, 'CBOR indefinite length rejected')
 
-local f4 = io.open('../../../conformance/vectors.json', 'rb')
-local tampered_cose_plan = LTX.json_decode(f4:read('a')).v11.coseSign1.plan
-f4:close()
+local tampered_cose_plan = load_vectors().coseSign1.plan
 tampered_cose_plan.title = 'X'
 local ct_ok, ct_reason = V11.verify_plan_cose({
   plan = tampered_cose_plan,

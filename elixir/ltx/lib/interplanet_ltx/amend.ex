@@ -26,6 +26,9 @@ defmodule InterplanetLtx.Amend do
   Create a signed amendment of `signed_plan` with `changes` merged in.
   The successor is always a v3 plan (LTX-SPECIFICATION.md §4.4); `v`,
   `planVersion` and `prevPlanHash` cannot be overridden via `changes`.
+  Raises `InterplanetLtx.ReservedFieldError` (code "reserved_streams" or
+  "reserved_branching") if the successor would carry reserved fields
+  (LTX-SPECIFICATION.md §3.5, §7).
   """
   def create_amendment(signed_plan, changes, private_key_b64, pub_key_b64 \\ nil) do
     prev = signed_plan[:plan] || signed_plan["plan"]
@@ -38,6 +41,7 @@ defmodule InterplanetLtx.Amend do
       |> Map.put("planVersion", prev_version + 1)
       |> Map.put("prevPlanHash", plan_hash(prev))
 
+    InterplanetLtx.Validate.assert_no_reserved_fields!(successor, "createAmendment")
     Security.sign_plan(successor, private_key_b64, pub_key_b64)
   end
 

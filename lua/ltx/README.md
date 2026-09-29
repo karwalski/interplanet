@@ -79,7 +79,24 @@ Total session duration in minutes.
 
 ### `LTX.make_plan_id(cfg)` → string
 
-Deterministic plan ID: `LTX-{YYYYMMDD}-{HOST}-{DEST}-v2-{HASH8}`.
+Deterministic plan ID: `LTX-{YYYYMMDD}-{HOST}-{DEST}-v2-{HASH8}` (v3 plans: `-v3-`).
+A plan decoded with `require("src.json").decode_ordered(text)` keeps its key
+order and is hashed exactly as `JSON.stringify` emits it; `LTX.plan_id_from_json(text)`
+does both steps. The v2 hash runs over UTF-16 code units, as in ltx-sdk.js.
+
+### `LTX.validate_plan(plan)` → table
+
+`{ valid = bool, errors = { { code, path, message }, ... } }` with the error
+codes of `validatePlan` in `javascript/ltx/ltx-sdk.js`, including
+`reserved_streams` (non-empty `streams`, segment `stream`) and
+`reserved_branching` (`branches`, `branching`, segment `branch`).
+`V11.upgrade_plan_to_v3(cfg, extras)` and `V11.create_session(plan, id, opts)`
+raise `{ code = ..., errors = ..., message = ... }` on reserved fields (use `pcall`).
+
+### `V11.reduce_decisions(entries)` → table
+
+Decision register (`decision` / `decision_update` entries), with the same
+conflict rules as `reduce_questions` / `reduce_actions`.
 
 ### `LTX.encode_hash(cfg)` → string
 
@@ -95,7 +112,9 @@ Builds per-node perspective URLs for sharing.
 
 ### `LTX.build_delay_matrix(plan)` → table
 
-Flat delay matrix for all node pairs.
+Flat delay matrix for all ordered node pairs; every entry is
+`V11.pair_delay(plan, from, to)`: a v3 `delays` entry wins, HOST pairs use the
+node's delay, and non-HOST pairs the sum (not the max) of both HOST-relative delays.
 
 ### `LTX.generate_ics(cfg)` → string
 

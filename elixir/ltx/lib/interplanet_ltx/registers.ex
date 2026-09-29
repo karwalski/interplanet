@@ -24,10 +24,12 @@ defmodule InterplanetLtx.Registers do
     "amendment" => "AMD",
     "state_transition" => "STA",
     "merge_snapshot" => "MRG",
-    "decision" => "DEC"
+    "decision" => "DEC",
+    "decision_update" => "DEC"
   }
 
   @action_statuses ["PROPOSED", "ACCEPTED", "REJECTED", "DONE"]
+  @decision_statuses ["RECORDED", "RESCINDED"]
 
   # ── Entry creation and verification ─────────────────────────────────────────
 
@@ -262,6 +264,85 @@ defmodule InterplanetLtx.Registers do
                     |> put_if(content, "dueTimeUTC")
 
                   {Map.put(by_id, aid, state), Map.put(winners, aid, incoming), sup}
+                end
+            end
+
+          _ ->
+            {by_id, winners, sup}
+        end
+      end)
+
+    %{by_id: by_id, superseded: superseded}
+  end
+
+  @doc """
+  Reduce decision register state from log entries (LTX-SPECIFICATION.md §10.3).
+  `decision` entries record a decision (did = entryId, version 1);
+  `decision_update` entries reference `content["did"]` and revise
+  text/rationale or rescind it (status RECORDED -> RESCINDED). Conflicts
+  follow §8.2 as for questions and actions: higher object version wins, then
+  the lowest editor nodeId; losers (and orphan updates) are in `superseded`.
+  Returns `%{by_id: %{did => state}, superseded: [entryId]}`.
+  """
+  def reduce_decisions(entries) do
+    {by_id, _winners, superseded} =
+      Enum.reduce(order_entries(entries), {%{}, %{}, []}, fn e, {by_id, winners, sup} ->
+        content = e["content"] || %{}
+
+        case e["type"] do
+          "decision" ->
+            did = e["entryId"]
+
+            if Map.has_key?(by_id, did) do
+              {by_id, winners, sup ++ [e["entryId"]]}
+            else
+              state =
+                %{
+                  "did" => did,
+                  "text" => to_string(content["text"] || ""),
+                  "recordedBy" => e["nodeId"],
+                  "status" => "RECORDED",
+                  "version" => 1
+                }
+                |> put_if(content, "rationale")
+                |> put_if(content, "originWindow")
+
+              winner = %{version: 1, editor: e["nodeId"], entry_id: e["entryId"]}
+              {Map.put(by_id, did, state), Map.put(winners, did, winner), sup}
+            end
+
+          "decision_update" ->
+            did = to_string(content["did"] || "")
+
+            case by_id[did] do
+              nil ->
+                {by_id, winners, sup ++ [e["entryId"]]}
+
+              d ->
+                version = content["version"] || d["version"] + 1
+                incoming = %{version: version, editor: e["nodeId"], entry_id: e["entryId"]}
+                current = winners[did]
+
+                if current && not wins?(incoming, current) do
+                  {by_id, winners, sup ++ [e["entryId"]]}
+                else
+                  sup =
+                    if current && current.entry_id != d["did"],
+                      do: sup ++ [current.entry_id],
+                      else: sup
+
+                  status =
+                    if content["status"] in @decision_statuses,
+                      do: content["status"],
+                      else: d["status"]
+
+                  state =
+                    d
+                    |> Map.merge(%{"status" => status, "editor" => e["nodeId"], "version" => version})
+                    |> put_if(content, "text")
+                    |> put_if(content, "rationale")
+
+                  {Map.put(by_id, did, state), Map.put(winners, did, incoming), sup}
                 end
             end
 

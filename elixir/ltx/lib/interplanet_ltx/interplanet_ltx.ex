@@ -26,7 +26,7 @@ defmodule InterplanetLtx do
   Options:
     - title: Session title (default: "LTX Session")
     - start: ISO 8601 UTC start time (default: 5 min from now)
-    - quantum: Minutes per quantum (default: 3)
+    - quantum: Minutes per quantum (default: 5, Constants.default_quantum())
     - mode: Protocol mode (default: "LTX")
     - nodes: Explicit node list (overrides host_name/remote_name)
     - host_name: Host node name (default: "Earth HQ")
@@ -525,13 +525,14 @@ defmodule InterplanetLtx do
     ~s({"v":#{plan.v},"title":#{json_str(plan.title)},"start":#{json_str(plan.start)},"quantum":#{plan.quantum},"mode":#{json_str(plan.mode)},"nodes":[#{nodes_json}],"segments":[#{segs_json}]})
   end
 
-  # Polynomial hash matching Math.imul(31, h) >>> 0 in ltx-sdk.js
+  # Polynomial hash matching Math.imul(31, h) >>> 0 in ltx-sdk.js. JS iterates
+  # UTF-16 code units (charCodeAt), so astral characters count as two units.
   defp djb_hash(str) do
-    str
-    |> String.to_charlist()
-    |> Enum.reduce(0, fn c, h ->
-      band(h * 31 + c, 0xFFFFFFFF)
-    end)
+    utf16 = :unicode.characters_to_binary(str, :utf8, {:utf16, :big})
+
+    for <<unit::16 <- utf16>>, reduce: 0 do
+      h -> band(h * 31 + unit, 0xFFFFFFFF)
+    end
   end
 
   # Compute 8-char lowercase hex hash for plan ID
@@ -540,27 +541,19 @@ defmodule InterplanetLtx do
     h |> Integer.to_string(16) |> String.downcase() |> String.pad_leading(8, "0")
   end
 
-  # Parse a plan from decoded JSON string using Erlang :json (OTP 27+) or fallback
+  # Parse a plan from a decoded JSON string
   defp parse_plan_json(json_str) do
     data = try_json_decode(json_str)
     if is_map(data), do: build_plan_from_map(data), else: nil
   end
 
-  # Try multiple JSON decode approaches
+  # Decode with the dependency-free InterplanetLtx.Json (Elixir 1.14+, any OTP),
+  # falling back to the lenient scanner below.
   defp try_json_decode(json_str) do
-    # OTP 27+ has :json module
     try do
-      :json.decode(json_str)
+      InterplanetLtx.Json.decode!(json_str)
     rescue
       _ ->
-        # Fallback: try manual parse
-        try do
-          parse_json_value(String.trim(json_str))
-        rescue
-          _ -> nil
-        end
-    catch
-      _, _ ->
         try do
           parse_json_value(String.trim(json_str))
         rescue

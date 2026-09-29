@@ -45,6 +45,12 @@ let check_contains label haystack needle =
     Printf.printf "FAIL: %s — expected to contain %S\n%!" label needle
   end
 
+(* ── Section 0: version ─────────────────────────────────────────────────── *)
+
+let () =
+  check "version is 1.0.0" Interplanet_time.version "1.0.0";
+  check "version matches Constants" Interplanet_time.version Constants.version
+
 (* ── Section 1: body_name ────────────────────────────────────────────────── *)
 
 let () =

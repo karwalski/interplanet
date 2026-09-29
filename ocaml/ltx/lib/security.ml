@@ -187,6 +187,11 @@ and json_str s =
     | '\n' -> Buffer.add_string buf "\\n"
     | '\r' -> Buffer.add_string buf "\\r"
     | '\t' -> Buffer.add_string buf "\\t"
+    | '\b' -> Buffer.add_string buf "\\b"
+    | '\012' -> Buffer.add_string buf "\\f"
+    | c when Char.code c < 0x20 ->
+      (* RFC 8785 / JSON.stringify: other control characters as \u00xx *)
+      Buffer.add_string buf (Printf.sprintf "\\u%04x" (Char.code c))
     | c    -> Buffer.add_char buf c) s;
   Buffer.add_char buf '"';
   Buffer.contents buf
