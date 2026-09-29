@@ -35,6 +35,8 @@ from ._core import (
     delay_from_planets,
 )
 
+from ._validate import validate_plan, ReservedFieldError
+
 from ._conference import build_conference_agenda, prime_time_report
 
 from ._ics import generate_ics
@@ -46,7 +48,7 @@ from ._rest import store_session, get_session, download_ics, submit_feedback
 from ._security import (
     canonical_json, generate_nik, nik_fingerprint, is_nik_expired,
     sign_plan, verify_plan,
-    SequenceTracker, add_seq, check_seq,
+    SequenceTracker, SEQ_REORDER_WINDOW, add_seq, check_seq,
     GlobalSequenceTracker, check_issued_at, ISSUED_AT_MAX_AGE_DAYS,
 )
 
@@ -119,6 +121,7 @@ from ._registers import (
     order_entries,
     reduce_questions,
     reduce_actions,
+    reduce_decisions,
     emit_question_seeds,
 )
 
@@ -153,7 +156,7 @@ __all__ = [
     'canonical_json', 'generate_nik', 'nik_fingerprint', 'is_nik_expired',
     'sign_plan', 'verify_plan',
     # Sequence tracking
-    'SequenceTracker', 'add_seq', 'check_seq',
+    'SequenceTracker', 'SEQ_REORDER_WINDOW', 'add_seq', 'check_seq',
     # Global freshness scope (Story 70.5)
     'GlobalSequenceTracker', 'check_issued_at', 'ISSUED_AT_MAX_AGE_DAYS',
     # Deterministic CBOR (Story 70.5)
@@ -189,7 +192,9 @@ __all__ = [
     'insert_buffer_via_amendment',
     # Registers (Epic 69)
     'create_register_entry', 'verify_register_entry', 'order_entries',
-    'reduce_questions', 'reduce_actions', 'emit_question_seeds',
+    'reduce_questions', 'reduce_actions', 'reduce_decisions', 'emit_question_seeds',
+    # Plan validation (reserved streams / branching)
+    'validate_plan', 'ReservedFieldError',
     # Merge + partition recovery (Epic 69)
     'merge_logs', 'entries_root', 'run_merge_segment', 'recover_partition',
 ]

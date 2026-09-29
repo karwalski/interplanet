@@ -13,6 +13,8 @@ plus EMERGENCY_HOLD (verified EOK override) and ABORTED.
 
 from typing import Any, Dict, List, Optional, Tuple
 
+from ._validate import assert_no_reserved_fields
+
 # Delay-matrix violation thresholds in seconds (LTX-SPECIFICATION.md §5.4)
 DELAY_VIOLATION_WARN_S = 120
 DELAY_VIOLATION_DEGRADE_S = 300
@@ -76,7 +78,11 @@ def _declared_delay_s(plan: Dict[str, Any], node_id: str) -> Optional[float]:
 
 def create_session(plan: Dict[str, Any], plan_id: str,
                    quorum: Any = 'all') -> Dict[str, Any]:
-    """Create a session context in DRAFT state. plan_id from make_plan_id()."""
+    """Create a session context in DRAFT state. plan_id from make_plan_id().
+
+    Raises ReservedFieldError if the plan carries reserved fields (§3.5, §7).
+    """
+    assert_no_reserved_fields(plan, 'create_session')
     return {
         'state': 'DRAFT',
         'plan': plan,

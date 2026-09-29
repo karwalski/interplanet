@@ -19,10 +19,11 @@ ENTRY_PREFIX = {
     'question': 'QST', 'question_response': 'QST',
     'action': 'ACT', 'action_update': 'ACT',
     'amendment': 'AMD', 'state_transition': 'STA',
-    'merge_snapshot': 'MRG', 'decision': 'DEC',
+    'merge_snapshot': 'MRG', 'decision': 'DEC', 'decision_update': 'DEC',
 }
 
 _ACTION_STATUSES = ('PROPOSED', 'ACCEPTED', 'REJECTED', 'DONE')
+_DECISION_STATUSES = ('RECORDED', 'RESCINDED')
 
 # Ed25519 DER wrapping constants (same idiom as _merkle.py / _security.py)
 _PKCS8_HEADER = bytes.fromhex('302e020100300506032b657004220420')
@@ -202,6 +203,73 @@ def reduce_actions(entries: List[Dict[str, Any]]) -> Dict[str, Any]:
             a['version'] = version
             by_id[aid] = a
     return {'byId': by_id, 'superseded': superseded}
+
+
+def reduce_decisions(entries: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Reduce decision register state (LTX-SPECIFICATION.md §10.3). Pure.
+
+    ``decision`` entries record a decision (did = entryId, version 1);
+    ``decision_update`` entries reference content['did'] and revise
+    text/rationale or rescind it. Conflicts follow §8.2 exactly as for
+    questions and actions: higher object version wins, then the lowest
+    editor nodeId; losers are returned in ``superseded``.
+    Mirrors reduceDecisions() in ltx-sdk.js.
+    """
+    by_id: Dict[str, Dict[str, Any]] = {}
+    winners: Dict[str, Dict[str, Any]] = {}
+    superseded: List[str] = []
+
+    for e in order_entries(entries):
+        c = e.get('content', {})
+        if e.get('type') == 'decision':
+            did = e['entryId']
+            if did in by_id:
+                superseded.append(e['entryId'])
+                continue
+            winners[did] = {'version': 1, 'editor': e['nodeId'], 'entryId': e['entryId']}
+            d: Dict[str, Any] = {'did': did, 'text': _js_str(c.get('text'), ''),
+                                 'recordedBy': e['nodeId']}
+            if 'rationale' in c:
+                d['rationale'] = _js_str(c['rationale'])
+            if 'originWindow' in c:
+                d['originWindow'] = _js_str(c['originWindow'])
+            d['status'] = 'RECORDED'
+            d['version'] = 1
+            by_id[did] = d
+        elif e.get('type') == 'decision_update':
+            did = _js_str(c.get('did'), '')
+            d = by_id.get(did)
+            if d is None:
+                superseded.append(e['entryId'])
+                continue
+            version = c.get('version')
+            version = d['version'] + 1 if version is None else int(version)
+            current = winners.get(did)
+            if current and not _wins(version, e['nodeId'], current['version'], current['editor']):
+                superseded.append(e['entryId'])
+                continue
+            if current and current['entryId'] != d['did']:
+                superseded.append(current['entryId'])
+            winners[did] = {'version': version, 'editor': e['nodeId'], 'entryId': e['entryId']}
+            d = dict(d)
+            d['status'] = c['status'] if c.get('status') in _DECISION_STATUSES else d['status']
+            if 'text' in c:
+                d['text'] = _js_str(c['text'])
+            if 'rationale' in c:
+                d['rationale'] = _js_str(c['rationale'])
+            d['editor'] = e['nodeId']
+            d['version'] = version
+            by_id[did] = d
+    return {'byId': by_id, 'superseded': superseded}
+
+
+def _js_str(v: Any, default: Optional[str] = None) -> str:
+    """String(v) as in JavaScript (None -> default or 'null'; bools lower-case)."""
+    if v is None:
+        return default if default is not None else 'null'
+    if isinstance(v, bool):
+        return 'true' if v else 'false'
+    return str(v)
 
 
 def emit_question_seeds(seeds: List[Dict[str, Any]], session_id: str,

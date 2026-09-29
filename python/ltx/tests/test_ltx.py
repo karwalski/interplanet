@@ -2807,5 +2807,352 @@ class TestConferenceModeEpic71(unittest.TestCase):
         self.assertIn('LTX-DELAY;PAIR=N1|N3:ONEWAY-ASSUMED=700', ics)
 
 
+# ── Issue #27: LTX parity cascade (mirrors javascript/ltx/tests/run.js) ────────
+
+_GOLDEN_PATH = os.path.join(os.path.dirname(__file__), '..', '..', '..',
+                            'spec', 'golden', 'plan-ids.json')
+
+
+def _load_golden():
+    with open(_GOLDEN_PATH, encoding='utf-8') as f:
+        return json.load(f)
+
+
+class TestGoldenPlanIds(unittest.TestCase):
+    """Conformance: spec/golden/plan-ids.json (LTX-SPECIFICATION.md §4.3, §4.5)."""
+
+    def setUp(self):
+        self.golden = _load_golden()
+        self.by_name = {v['name']: v for v in self.golden['vectors']}
+
+    def test_vector_count(self):
+        self.assertGreaterEqual(len(self.golden['vectors']), 9)
+
+    def test_every_plan_id(self):
+        for gv in self.golden['vectors']:
+            with self.subTest(gv['name']):
+                self.assertEqual(make_plan_id(gv['plan']), gv['planId'])
+
+    def test_every_plan_hash(self):
+        for gv in self.golden['vectors']:
+            if 'planHash' in gv:
+                with self.subTest(gv['name']):
+                    self.assertEqual(ltx.plan_hash(gv['plan']), gv['planHash'])
+
+    def test_anchors(self):
+        self.assertEqual(self.by_name['v2-createPlan-default']['planId'],
+                         'LTX-20260315-EARTHHQ-MARS-v2-2596ffe8')
+        self.assertEqual(self.by_name['v2-unicode-title']['planId'],
+                         'LTX-20261231-EARTHHQ-MARS-v2-7bc93af8')
+
+    def test_v2_key_order_sensitive(self):
+        self.assertNotEqual(self.by_name['v2-createPlan-default']['planId'],
+                            self.by_name['v2-key-order-sensitive']['planId'])
+
+    def test_v3_key_order_insensitive(self):
+        self.assertEqual(self.by_name['v3-upgrade-delays']['planId'],
+                         self.by_name['v3-key-order-insensitive']['planId'])
+
+    def test_v3_amendment_chain_hash(self):
+        self.assertEqual(self.by_name['v3-amendment']['plan']['prevPlanHash'],
+                         self.by_name['v3-upgrade-delays']['planHash'])
+
+    def test_integral_float_hashes_like_js(self):
+        # JSON.stringify(840.0) is "840"; the v2 hash must not see "840.0".
+        plan = json.loads(json.dumps(self.by_name['v2-freeze-check']['plan']))
+        plan['nodes'][1]['delay'] = float(plan['nodes'][1]['delay'])
+        self.assertEqual(make_plan_id(plan), self.by_name['v2-freeze-check']['planId'])
+
+
+class TestValidatePlan(unittest.TestCase):
+    """validate_plan: reserved streams / branching (§3.5, §7) and wire format."""
+
+    def setUp(self):
+        golden = _load_golden()
+        self.vectors = golden['vectors']
+        by_name = {v['name']: v for v in golden['vectors']}
+        self.base = by_name['v3-upgrade-delays']['plan']
+        self.v2 = by_name['v2-freeze-check']['plan']
+
+    @staticmethod
+    def codes(result):
+        return [e['code'] for e in result['errors']]
+
+    def test_accepts_golden(self):
+        for gv in self.vectors:
+            with self.subTest(gv['name']):
+                self.assertTrue(ltx.validate_plan(gv['plan'])['valid'])
+
+    def test_v3_empty_streams_ok(self):
+        self.assertTrue(ltx.validate_plan({**self.base, 'streams': []})['valid'])
+
+    def test_non_empty_streams(self):
+        r = ltx.validate_plan({**self.base, 'streams': [{'id': 'S1'}]})
+        self.assertFalse(r['valid'])
+        self.assertIn('reserved_streams', self.codes(r))
+        err = next(e for e in r['errors'] if e['code'] == 'reserved_streams')
+        self.assertEqual(err['path'], 'streams')
+
+    def test_streams_non_array(self):
+        self.assertIn('reserved_streams',
+                      self.codes(ltx.validate_plan({**self.base, 'streams': 'S1'})))
+
+    def test_segment_stream(self):
+        r = ltx.validate_plan({**self.base, 'segments': [{'type': 'TX', 'q': 1, 'stream': 'S1'}]})
+        self.assertIn('reserved_streams', self.codes(r))
+
+    def test_branches(self):
+        self.assertIn('reserved_branching',
+                      self.codes(ltx.validate_plan({**self.base, 'branches': []})))
+
+    def test_branching(self):
+        self.assertIn('reserved_branching',
+                      self.codes(ltx.validate_plan({**self.base, 'branching': {'mode': 'local'}})))
+
+    def test_segment_branch(self):
+        r = ltx.validate_plan({**self.base,
+                               'segments': [{'type': 'CAUCUS', 'q': 1, 'branch': 'B1'}]})
+        self.assertIn('reserved_branching', self.codes(r))
+        self.assertEqual(r['errors'][0]['path'], 'segments[0].branch')
+
+    def test_v2_streams_is_v3_field(self):
+        self.assertIn('v3_field_in_v2', self.codes(ltx.validate_plan({**self.v2, 'streams': []})))
+
+    def test_v2_branching(self):
+        self.assertIn('reserved_branching',
+                      self.codes(ltx.validate_plan({**self.v2, 'branching': True})))
+
+    def test_structural(self):
+        self.assertIn('not_an_object', self.codes(ltx.validate_plan(None)))
+        self.assertIn('invalid_version', self.codes(ltx.validate_plan({**self.v2, 'v': 7})))
+        self.assertIn('invalid_host', self.codes(ltx.validate_plan(
+            {**self.v2, 'nodes': list(reversed(self.v2['nodes']))})))
+        self.assertIn('invalid_delays', self.codes(ltx.validate_plan(
+            {**self.base, 'delays': {'N1|N0': 860}})))
+        self.assertIn('unknown_speaker', self.codes(ltx.validate_plan(
+            {**self.v2, 'segments': [{'type': 'TX', 'q': 1, 'speaker': 'N9'}]})))
+        self.assertIn('invalid_quantum', self.codes(ltx.validate_plan({**self.v2, 'quantum': 0})))
+
+    @staticmethod
+    def throws_code(fn):
+        try:
+            fn()
+        except ltx.ReservedFieldError as e:
+            return e.code
+        return None
+
+    def test_upgrade_plan_to_v3_enforced(self):
+        self.assertEqual(self.throws_code(
+            lambda: ltx.upgrade_plan_to_v3(self.v2, streams=[{'id': 'S1'}])), 'reserved_streams')
+        self.assertIsNone(self.throws_code(lambda: ltx.upgrade_plan_to_v3(self.v2, streams=[])))
+        self.assertEqual(self.throws_code(
+            lambda: ltx.upgrade_plan_to_v3(self.v2, branches=[])), 'reserved_branching')
+
+    def test_create_session_enforced(self):
+        self.assertEqual(self.throws_code(
+            lambda: ltx.create_session({**self.base, 'streams': [1]}, 'id')), 'reserved_streams')
+        self.assertIsNone(self.throws_code(lambda: ltx.create_session(self.base, 'id')))
+
+    def test_create_amendment_enforced(self):
+        try:
+            nik = ltx.generate_nik(node_label='Earth HQ')
+        except ImportError:
+            self.skipTest('cryptography/PyNaCl not installed')
+        priv = nik['private_key_b64']
+        signed = ltx.sign_plan(self.base, priv)
+        self.assertEqual(self.throws_code(
+            lambda: ltx.create_amendment(signed, {'branching': {}}, priv)), 'reserved_branching')
+        self.assertIsNone(self.throws_code(
+            lambda: ltx.create_amendment(signed, {'title': 'x'}, priv)))
+
+    def test_error_is_value_error(self):
+        with self.assertRaises(ValueError) as cm:
+            ltx.upgrade_plan_to_v3(self.v2, streams=[1])
+        self.assertEqual(cm.exception.errors[0]['path'], 'streams')
+
+
+class TestSequenceReorderWindow(unittest.TestCase):
+    """Late vs replay (LTX-SECURITY.md §11.2), mirroring createSequenceTracker."""
+
+    def setUp(self):
+        self.t = ltx.SequenceTracker('plan-abc-123')
+        self.t.record_seq('N0', 1)
+        self.t.record_seq('N0', 2)
+        self.t.record_seq('N0', 5)
+        self.t.record_seq('N0', 6)
+
+    def test_default_window(self):
+        self.assertEqual(ltx.SEQ_REORDER_WINDOW, 64)
+
+    def test_missing_seqs_lists_gap(self):
+        self.assertEqual(self.t.missing_seqs('N0'), [3, 4])
+
+    def test_late_then_duplicate(self):
+        late = self.t.record_seq('N0', 4)
+        self.assertTrue(late['accepted'])
+        self.assertTrue(late['late'])
+        self.assertFalse(late['gap'])
+        self.assertEqual(late['gap_size'], 0)
+        self.assertNotIn('reason', late)
+        self.assertEqual(self.t.last_seen_seq('N0'), 6)
+        dup = self.t.record_seq('N0', 4)
+        self.assertFalse(dup['accepted'])
+        self.assertEqual(dup['reason'], 'replay')
+        self.assertFalse(dup['late'])
+        self.assertFalse(self.t.record_seq('N0', 7)['late'])
+        self.assertEqual(self.t.record_seq('N0', 6)['reason'], 'replay')
+        self.assertEqual(self.t.missing_seqs('N0'), [3])
+
+    def test_invalid_seq(self):
+        self.assertEqual(self.t.record_seq('N0', 1.5)['reason'], 'invalid_seq')
+        self.assertFalse(self.t.record_seq('N0', float('nan'))['accepted'])
+        self.assertEqual(self.t.record_seq('N0', '7')['reason'], 'invalid_seq')
+        self.assertEqual(self.t.record_seq('N0', True)['reason'], 'invalid_seq')
+
+    def test_window_slides(self):
+        w = ltx.SequenceTracker('plan-window', reorder_window=4)
+        w.record_seq('N1', 1)
+        big = w.record_seq('N1', 10)
+        self.assertTrue(big['gap'])
+        self.assertEqual(big['gap_size'], 8)
+        self.assertEqual(w.missing_seqs('N1'), [7, 8, 9])
+        self.assertEqual(w.record_seq('N1', 5)['reason'], 'replay')
+        self.assertTrue(w.record_seq('N1', 8)['late'])
+        w.record_seq('N1', 12)
+        self.assertFalse(w.record_seq('N1', 7)['accepted'])
+        self.assertTrue(w.record_seq('N1', 11)['late'])
+
+    def test_window_zero_strict(self):
+        t0 = ltx.SequenceTracker('plan-strict', reorder_window=0)
+        t0.record_seq('N0', 1)
+        t0.record_seq('N0', 3)
+        self.assertEqual(t0.record_seq('N0', 2)['reason'], 'replay')
+
+    def test_bad_window_raises(self):
+        with self.assertRaises(ValueError):
+            ltx.SequenceTracker('p', reorder_window=float('inf'))
+        with self.assertRaises(ValueError):
+            ltx.SequenceTracker('p', reorder_window=-1)
+
+    def test_persistent_adapter_without_delete(self):
+        class Adapter:
+            def __init__(self):
+                self.d = {}
+
+            def get(self, k, default=None):
+                return self.d.get(k, default)
+
+            def set(self, k, v):
+                self.d[k] = v
+
+        store = Adapter()
+        ta = ltx.SequenceTracker('plan-persist', store)
+        ta.record_seq('N2', 1)
+        ta.record_seq('N2', 4)
+        tb = ltx.SequenceTracker('plan-persist', store)  # "restart"
+        self.assertTrue(tb.record_seq('N2', 3)['late'])
+        self.assertEqual(tb.record_seq('N2', 3)['reason'], 'replay')
+        self.assertEqual(tb.record_seq('N2', 4)['reason'], 'replay')
+
+    def test_check_seq_non_numeric(self):
+        self.assertEqual(ltx.check_seq({'seq': 'x'}, self.t, 'N0')['reason'], 'missing_seq')
+
+
+class TestReduceDecisions(unittest.TestCase):
+    """Decision register (§10.3): same §8.2 conflict rules as questions/actions."""
+
+    SID = 'LTX-DEC-TEST'
+
+    def setUp(self):
+        try:
+            host = ltx.generate_nik(node_label='HOST')
+            mars = ltx.generate_nik(node_label='MARS')
+        except ImportError:
+            self.skipTest('cryptography/PyNaCl not installed')
+        self.hp = host['private_key_b64']
+        self.mp = mars['private_key_b64']
+        self.cache = {'N0': host['nik'], 'N1': mars['nik']}
+        self.dec1 = self._mk('decision', {'text': 'Proceed with EVA-3',
+                                          'rationale': 'Weather window', 'originWindow': 'W2'},
+                             'N0', 1, '2026-08-01T12:00:00.000Z', self.hp)
+        self.rev = self._mk('decision_update', {'did': 'DEC-N0-1',
+                                                'text': 'Proceed with EVA-3 at 14:00', 'version': 2},
+                            'N1', 1, '2026-08-01T12:10:00.000Z', self.mp)
+
+    def _mk(self, etype, content, node_id, seq, ts, priv, entry_id=None):
+        return ltx.create_register_entry(etype, content, self.SID, node_id, seq, ts, priv,
+                                         entry_id=entry_id)
+
+    def test_record(self):
+        self.assertEqual(self.dec1['entryId'], 'DEC-N0-1')
+        self.assertTrue(ltx.verify_register_entry(self.dec1, self.cache)['valid'])
+        d = ltx.reduce_decisions([self.dec1])['byId']['DEC-N0-1']
+        self.assertEqual(d['status'], 'RECORDED')
+        self.assertEqual(d['version'], 1)
+        self.assertEqual(d['text'], 'Proceed with EVA-3')
+        self.assertEqual(d['recordedBy'], 'N0')
+        self.assertEqual(d['rationale'], 'Weather window')
+
+    def test_update_and_rescind(self):
+        res = self._mk('decision_update', {'did': 'DEC-N0-1', 'status': 'RESCINDED', 'version': 3},
+                       'N0', 2, '2026-08-01T12:20:00.000Z', self.hp)
+        reg = ltx.reduce_decisions([res, self.dec1, self.rev])
+        d = reg['byId']['DEC-N0-1']
+        self.assertEqual(d['text'], 'Proceed with EVA-3 at 14:00')
+        self.assertEqual(d['status'], 'RESCINDED')
+        self.assertEqual(d['version'], 3)
+        self.assertEqual(d['editor'], 'N0')
+        self.assertIn(self.rev['entryId'], reg['superseded'])
+
+    def test_tie_and_order_independence(self):
+        a = self._mk('decision_update', {'did': 'DEC-N0-1', 'text': 'From N0', 'version': 5},
+                     'N0', 7, '2026-08-01T13:00:00.000Z', self.hp)
+        b = self._mk('decision_update', {'did': 'DEC-N0-1', 'text': 'From N1', 'version': 5},
+                     'N1', 7, '2026-08-01T13:00:00.000Z', self.mp)
+        c1 = ltx.reduce_decisions([self.dec1, b, a])
+        c2 = ltx.reduce_decisions([a, self.dec1, b])
+        self.assertEqual(c1['byId']['DEC-N0-1']['text'], 'From N0')
+        self.assertIn(b['entryId'], c1['superseded'])
+        self.assertNotIn(a['entryId'], c1['superseded'])
+        self.assertEqual(json.dumps(c1), json.dumps(c2))
+        hi = self._mk('decision_update', {'did': 'DEC-N0-1', 'text': 'N1 v6', 'version': 6},
+                      'N1', 8, '2026-08-01T12:30:00.000Z', self.mp)
+        self.assertEqual(ltx.reduce_decisions([self.dec1, a, hi])['byId']['DEC-N0-1']['text'],
+                         'N1 v6')
+
+    def test_orphan_and_duplicate(self):
+        orphan = self._mk('decision_update', {'did': 'DEC-NOPE-1', 'version': 2},
+                          'N1', 9, '2026-08-01T12:40:00.000Z', self.mp)
+        dup = self._mk('decision', {'text': 'dup'}, 'N1', 10, '2026-08-01T12:50:00.000Z',
+                       self.mp, entry_id='DEC-N0-1')
+        reg = ltx.reduce_decisions([self.dec1, orphan, dup])
+        self.assertIn('DEC-N1-9', reg['superseded'])
+        self.assertEqual(reg['byId']['DEC-N0-1']['text'], 'Proceed with EVA-3')
+        self.assertEqual(reg['byId']['DEC-N0-1']['recordedBy'], 'N0')
+        self.assertEqual(len(ltx.reduce_decisions([self.dec1, self.rev])['byId']), 1)
+        self.assertEqual(len(ltx.reduce_actions([self.dec1])['byId']), 0)
+
+    def test_update_entry_prefix(self):
+        self.assertEqual(self.rev['entryId'], 'DEC-N1-1')
+
+    def test_merge_snapshot_carries_decisions(self):
+        res = ltx.run_merge_segment([self.dec1], [self.rev], self.cache, self.SID, 'N0', 99,
+                                    '2026-08-01T15:00:00.000Z', self.hp)
+        content = res['snapshot']['content']
+        self.assertEqual(content['decisionRegister']['DEC-N0-1']['version'], 2)
+
+
+class TestCanonicalJsonJsParity(unittest.TestCase):
+    """canonical_json serialises scalars exactly like JSON.stringify."""
+
+    def test_non_ascii_raw(self):
+        self.assertEqual(ltx.canonical_json({'t': 'Café \U0001F680'}),
+                         '{"t":"Café \U0001F680"}')
+
+    def test_integral_float(self):
+        self.assertEqual(ltx.canonical_json({'d': 840.0, 'x': 0.1, 'e': 1e21}),
+                         '{"d":840,"e":1e+21,"x":0.1}')
+
+
 if __name__ == '__main__':
     unittest.main()

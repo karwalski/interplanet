@@ -1,9 +1,11 @@
 """Core LTX plan operations — Python port of ltx-sdk.js."""
 
 import json
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
+from ._jsjson import js_stringify, utf16_slice, utf16_units
 from ._models import LtxNode, LtxPlan, LtxSegment, LtxSegmentSpec, LtxNodeUrl
 
 # ── Constants ──────────────────────────────────────────────────────────────────
@@ -116,11 +118,16 @@ def upgrade_plan_to_v3(plan, **extras) -> dict:
     Accepts an LtxPlan dataclass or a plan dict (v1/v2); returns a new plan
     dict with ``v=3`` and ``planVersion`` (default 1), merged with **extras
     (e.g. ``delays={'N1|N2': 500}``).
+
+    Raises ReservedFieldError (``.code`` 'reserved_streams' or
+    'reserved_branching') if the result would carry reserved fields (§3.5, §7).
     """
+    from ._validate import assert_no_reserved_fields
     c = _as_plan_dict(plan)
     out = {**c, **extras}
     out['v'] = 3
     out['planVersion'] = extras.get('planVersion', 1)
+    assert_no_reserved_fields(out, 'upgrade_plan_to_v3')
     return out
 
 
@@ -274,40 +281,54 @@ def make_plan_id(plan) -> str:
     Accepts an LtxPlan dataclass (v2) or a plain plan dict (v2 or v3).
     v2 uses the FROZEN legacy polynomial hash (LTX-SPECIFICATION.md §4.3);
     v3 dicts use SHA-256 over RFC 8785 canonical JSON (§4.5).
-    """
-    if isinstance(plan, dict):
-        c = plan
-        nodes_d = c.get('nodes', [])
-        date = c.get('start', '')[:10].replace('-', '')
-        host_str = (nodes_d[0].get('name', 'HOST').replace(' ', '').upper()[:8]
-                    if nodes_d else 'HOST')
-        if len(nodes_d) > 1:
-            node_str = '-'.join(n.get('name', '').replace(' ', '').upper()[:4]
-                                for n in nodes_d[1:])[:16]
-        else:
-            node_str = 'RX'
-        if c.get('v', 2) >= 3:
-            import hashlib
-            from ._security import canonical_json
-            digest = hashlib.sha256(canonical_json(c).encode('utf-8')).hexdigest()
-            return f'LTX-{date}-{host_str}-{node_str}-v3-{digest[:8]}'
-        # v2 dict: insertion-order-sensitive by design (frozen legacy rule);
-        # callers must supply the conformance key order.
-        raw = json.dumps(c, separators=(',', ':'))
-        return f'LTX-{date}-{host_str}-{node_str}-v2-{_djb2_hash(raw):08x}'
 
-    c = _plan_as_dict(plan)
-    date = plan.start[:10].replace('-', '')
-    nodes = plan.nodes
-    host_str = nodes[0].name.replace(' ', '').upper()[:8] if nodes else 'HOST'
+    The v2 hash is imul31 over the UTF-16 code units of JSON.stringify(plan)
+    in key insertion order, reproduced exactly (non-ASCII kept raw, astral
+    characters as surrogate pairs, JavaScript number formatting). An LtxPlan
+    dataclass is serialised in _plan_as_dict order (nodes before segments).
+    """
+    c = upgrade_config(plan) if isinstance(plan, dict) else _plan_as_dict(plan)
+    nodes = c.get('nodes') or []
+    date = _plan_id_date(c.get('start', ''))
+    host_str = _id_part(nodes[0].get('name') if nodes else None, 8, 'HOST')
     if len(nodes) > 1:
-        node_str = '-'.join(n.name.replace(' ', '').upper()[:4]
-                            for n in nodes[1:])[:16]
+        node_str = utf16_slice('-'.join(_id_part(n.get('name'), 4, '')
+                                        for n in nodes[1:]), 16)
     else:
         node_str = 'RX'
-    raw = json.dumps(c, separators=(',', ':'))
-    h = _djb2_hash(raw)
+    v = c.get('v', 2)
+    if isinstance(v, (int, float)) and v >= 3:
+        import hashlib
+        from ._security import canonical_json
+        digest = hashlib.sha256(canonical_json(c).encode('utf-8')).hexdigest()
+        return f'LTX-{date}-{host_str}-{node_str}-v3-{digest[:8]}'
+    # FROZEN v2 path (§4.3): insertion-order-sensitive by design.
+    h = _djb2_units(utf16_units(js_stringify(c)))
     return f'LTX-{date}-{host_str}-{node_str}-v2-{h:08x}'
+
+
+def _id_part(name, n: int, default: str) -> str:
+    """(name || default).replace(/\\s+/g, '').toUpperCase().slice(0, n)"""
+    s = name if isinstance(name, str) and name else default
+    return utf16_slice(re.sub(r'\s+', '', s).upper(), n)
+
+
+def _plan_id_date(start: str) -> str:
+    """new Date(start).toISOString().slice(0, 10) without dashes."""
+    try:
+        dt = datetime.fromisoformat(str(start).replace('Z', '+00:00'))
+        if dt.tzinfo is not None:
+            dt = dt.astimezone(timezone.utc)
+        return dt.strftime('%Y%m%d')
+    except ValueError:
+        return str(start)[:10].replace('-', '')
+
+
+def _djb2_units(units) -> int:
+    h = 0
+    for u in units:
+        h = (_imul32(31, h) + u) & 0xFFFFFFFF
+    return h
 
 # ── URL hash encoding ──────────────────────────────────────────────────────────
 

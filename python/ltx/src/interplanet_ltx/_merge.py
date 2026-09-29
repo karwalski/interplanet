@@ -11,6 +11,7 @@ from ._registers import (
     create_register_entry,
     order_entries,
     reduce_actions,
+    reduce_decisions,
     reduce_questions,
     verify_register_entry,
 )
@@ -48,13 +49,16 @@ def run_merge_segment(local_entries: List[Dict[str, Any]],
     merged = merge_logs(local_entries, remote_entries, key_cache)
     questions = reduce_questions(merged['entries'])
     actions = reduce_actions(merged['entries'])
+    decisions = reduce_decisions(merged['entries'])
     snapshot = create_register_entry('merge_snapshot', {
         'mergedRoot': entries_root(merged['entries']),
         'entryCount': len(merged['entries']),
         'rejectedCount': len(merged['rejected']),
         'questionRegister': questions['byId'],
         'actionRegister': actions['byId'],
-        'superseded': questions['superseded'] + actions['superseded'],
+        'decisionRegister': decisions['byId'],
+        'superseded': (questions['superseded'] + actions['superseded']
+                       + decisions['superseded']),
     }, session_id, node_id, seq, timestamp, private_key_b64)
     return {'merged': merged, 'snapshot': snapshot}
 

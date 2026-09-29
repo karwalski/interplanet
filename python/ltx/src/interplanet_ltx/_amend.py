@@ -13,6 +13,7 @@ import hashlib
 from typing import Any, Dict, List, Union
 
 from ._security import canonical_json, sign_plan, verify_plan
+from ._validate import assert_no_reserved_fields
 
 
 def plan_hash(plan: Dict[str, Any]) -> str:
@@ -26,6 +27,8 @@ def create_amendment(signed_plan: Dict[str, Any], changes: Dict[str, Any],
     Create a signed amendment of `signed_plan` with `changes` applied.
     The successor is always a v3 plan; the original dict is not mutated.
     Managed fields (v, planVersion, prevPlanHash) cannot be overridden.
+    Raises ReservedFieldError if the successor would carry reserved fields
+    (§3.5, §7).
     """
     prev = signed_plan['plan']
     prev_version = prev.get('planVersion', 1)
@@ -34,6 +37,7 @@ def create_amendment(signed_plan: Dict[str, Any], changes: Dict[str, Any],
     successor['v'] = 3
     successor['planVersion'] = prev_version + 1
     successor['prevPlanHash'] = plan_hash(prev)
+    assert_no_reserved_fields(successor, 'create_amendment')
     return sign_plan(successor, private_key_b64)
 
 
