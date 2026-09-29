@@ -10,6 +10,7 @@ Port of [ltx-sdk.js](../javascript/ltx/ltx-sdk.js).
 ```r
 source("R/constants.R")
 source("R/ltx.R")
+source("R/parity.R")
 ```
 
 ## Usage
@@ -17,6 +18,7 @@ source("R/ltx.R")
 ```r
 source("R/constants.R")
 source("R/ltx.R")
+source("R/parity.R")
 
 # Create a plan
 plan <- create_plan(
@@ -53,6 +55,28 @@ format_hms(3661)   # "01:01:01"
 format_utc("2026-01-01T14:30:00Z")  # "14:30:00 UTC"
 ```
 
+## Parity with ltx-sdk.js (issue #27)
+
+- `make_plan_id(plan)`: v2 is the frozen imul31 hash over the UTF-16 code units
+  of `json_stringify(plan)` in the plan's own key order, exactly like
+  `makePlanId`; v3 plans (`v >= 3`) use SHA-256 over `canonical_json(plan)`.
+  A plan parsed with `jsonlite::fromJSON(x, simplifyVector = FALSE)` keeps its
+  key order, so `test/test_parity.R` reproduces every vector in
+  `spec/golden/plan-ids.json`. `create_plan()` lists are ordered
+  v, title, start, quantum, mode, nodes, segments (nodes before segments, unlike
+  JS `createPlan`), which matches the `v2-key-order-sensitive` vector.
+- `validate_plan(plan)` returns `list(valid, errors)` with the error codes of
+  `validatePlan`, including `reserved_streams` and `reserved_branching`.
+- `upgrade_plan_to_v3(plan, extras)` stops with an `ltx_reserved_field_error`
+  condition (`$code`, `$errors`) on reserved fields. This port has no sessions
+  or amendments.
+- `build_delay_matrix(plan)` uses `pair_delay()` for every entry: a v3
+  `delays` entry wins, HOST pairs use the node's delay, and non-HOST pairs the
+  sum (not the max) of both HOST-relative delays.
+- `plan_hash(plan)`, `sha256_hex(s)` (base R), `canonical_json(x)`,
+  `json_stringify(x)`, `imul31_hex(s)`.
+- `create_plan()` defaults to a 5-minute quantum (`DEFAULT_QUANTUM`).
+
 ## File Layout
 
 ```
@@ -60,8 +84,11 @@ r/ltx/
   R/
     constants.R   LTX constants (PROTOCOL_VERSION, modes, segment types)
     ltx.R         All core functions
+    parity.R      JSON.stringify/canonical JSON, SHA-256, validate_plan,
+                  upgrade_plan_to_v3, pair_delay
   test/
     test_unit.R   >= 50 check() assertions
+    test_parity.R parity with ltx-sdk.js (needs jsonlite)
   DESCRIPTION
   NAMESPACE
   Makefile

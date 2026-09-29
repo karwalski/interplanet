@@ -4,6 +4,7 @@
 
 source("R/constants.R")
 source("R/ltx.R")
+source("R/parity.R")
 
 pass <- 0L
 fail <- 0L

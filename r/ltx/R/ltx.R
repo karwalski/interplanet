@@ -438,40 +438,31 @@ total_min <- function(plan) {
 
 # ── Plan ID ───────────────────────────────────────────────────────────────────
 
-# DJB2-style hash using double-precision arithmetic to avoid R integer overflow.
-# Keeps the lower 32 bits (mod 2^32) at each step, stored as a double.
-# Deterministic and sufficient for plan ID generation.
-.hash_djb2 <- function(s) {
-  chars <- utf8ToInt(s)
-  h <- 0  # double
-  for (ch in chars) {
-    # h = (31 * h + charCode) mod 2^32
-    h <- (31 * h + ch) %% (2^32)
-  }
-  as.integer(h %% (2^31 - 1))  # keep as non-negative integer for sprintf %08x
-}
-
-#' Compute a deterministic plan ID.
-#' ID format: "LTX-{date}-{host}-{nodes}-v2-{hash8hex}"
+#' Compute a deterministic plan ID (mirrors makePlanId in ltx-sdk.js).
+#'
+#' v2: "LTX-{date}-{host}-{nodes}-v2-{hash8hex}", the FROZEN imul31 hash over
+#' the UTF-16 code units of JSON.stringify(plan) in the plan's own key order
+#' (LTX-SPECIFICATION.md 4.3). R lists keep insertion order, so a plan parsed
+#' with jsonlite::fromJSON(x, simplifyVector = FALSE) hashes as in JS.
+#' v3: "-v3-" and the first 8 hex of SHA-256 over canonical JSON (4.5).
+#' Needs R/parity.R (json_stringify, imul31_hex, sha256_hex).
 #' @param plan LtxPlan list
 #' @return character string e.g. "LTX-20260101-EARTHHQ-MARS-v2-a3b2c1d0"
 make_plan_id <- function(plan) {
   date_str <- gsub("-", "", substr(plan$start, 1L, 10L))
   nodes    <- plan$nodes
-  host_str <- if (length(nodes) >= 1L) {
-    substr(gsub(" ", "", toupper(nodes[[1L]]$name)), 1L, 8L)
-  } else "HOST"
+  short    <- function(name, n) substr(toupper(gsub("[[:space:]]+", "", name)), 1L, n)
+  host_str <- if (length(nodes) >= 1L) short(nodes[[1L]]$name, 8L) else "HOST"
   node_str <- if (length(nodes) > 1L) {
-    parts <- vapply(nodes[-1L], function(n) {
-      substr(gsub(" ", "", toupper(n$name)), 1L, 4L)
-    }, character(1L))
+    parts <- vapply(nodes[-1L], function(n) short(n$name, 4L), character(1L))
     substr(paste(parts, collapse = "-"), 1L, 16L)
   } else "RX"
 
-  raw <- .plan_to_json(plan)
-  h   <- .hash_djb2(raw)
-  hex <- sprintf("%08x", h)
-  sprintf("LTX-%s-%s-%s-v2-%s", date_str, host_str, node_str, hex)
+  if (!is.null(plan$v) && plan$v >= 3) {
+    digest <- sha256_hex(canonical_json(plan))
+    return(sprintf("LTX-%s-%s-%s-v3-%s", date_str, host_str, node_str, substr(digest, 1L, 8L)))
+  }
+  sprintf("LTX-%s-%s-%s-v2-%s", date_str, host_str, node_str, imul31_hex(json_stringify(plan)))
 }
 
 # ── Hash encoding / decoding ──────────────────────────────────────────────────
@@ -624,8 +615,12 @@ generate_ics <- function(plan) {
 
 # ── Delay matrix ──────────────────────────────────────────────────────────────
 
-#' Build a flat delay matrix for all node pairs in a plan.
-#' Matches ltx-sdk.js buildDelayMatrix logic.
+#' Build a flat delay matrix for all ordered node pairs in a plan.
+#' Every entry is pair_delay(plan, from, to) (LTX-SPECIFICATION.md 3.7.3):
+#' a v3 plan$delays entry is authoritative where present; HOST to node is that
+#' node's declared delay; node to node (neither is HOST) is the SUM of both
+#' HOST-relative delays (a conservative upper bound via the HOST vertex), not
+#' the max. The matrix is symmetric. Needs R/parity.R (pair_delay).
 #' @param plan LtxPlan list
 #' @return list of lists, each with from_id, from_name, to_id, to_name, delay_seconds
 build_delay_matrix <- function(plan) {
@@ -635,21 +630,12 @@ build_delay_matrix <- function(plan) {
     for (j in seq_along(nodes)) {
       if (i == j) next
       from <- nodes[[i]]; to <- nodes[[j]]
-      fd   <- if (is.null(from$delay)) 0 else from$delay
-      td   <- if (is.null(to$delay))   0 else to$delay
-      delay_seconds <- if (fd == 0 || i == 1L) {
-        td
-      } else if (td == 0 || j == 1L) {
-        fd
-      } else {
-        fd + td
-      }
       result <- c(result, list(list(
         from_id       = from$id,
         from_name     = from$name,
         to_id         = to$id,
         to_name       = to$name,
-        delay_seconds = delay_seconds
+        delay_seconds = pair_delay(plan, from$id, to$id)
       )))
     }
   }
