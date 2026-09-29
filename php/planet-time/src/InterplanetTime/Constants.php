@@ -39,15 +39,47 @@ final class Constants
      * Moon uses Earth values.
      */
     public const ORBITAL_ELEMENTS = [
-        'mercury' => ['L0' => 252.2509, 'dL' =>  149474.0722, 'om0' =>  77.4561, 'e0' => 0.20563, 'a' => 0.38710],
+        'mercury' => ['L0' => 252.2507, 'dL' =>  149474.0722, 'om0' =>  77.4561, 'e0' => 0.20564, 'a' => 0.38710],
         'venus'   => ['L0' => 181.9798, 'dL' =>   58519.2130, 'om0' => 131.5637, 'e0' => 0.00677, 'a' => 0.72333],
         'earth'   => ['L0' => 100.4664, 'dL' =>   36000.7698, 'om0' => 102.9373, 'e0' => 0.01671, 'a' => 1.00000],
-        'mars'    => ['L0' => 355.4330, 'dL' =>   19141.6964, 'om0' => 336.0602, 'e0' => 0.09341, 'a' => 1.52366],
-        'jupiter' => ['L0' =>  34.3515, 'dL' =>    3036.3027, 'om0' =>  14.3320, 'e0' => 0.04854, 'a' => 5.20260],
-        'saturn'  => ['L0' =>  50.0774, 'dL' =>    1223.5110, 'om0' =>  93.0568, 'e0' => 0.05560, 'a' => 9.55491],
-        'uranus'  => ['L0' => 314.0550, 'dL' =>     428.4748, 'om0' => 173.0052, 'e0' => 0.04638, 'a' => 19.2184],
-        'neptune' => ['L0' => 304.3487, 'dL' =>     218.4862, 'om0' =>  48.1209, 'e0' => 0.00946, 'a' => 30.0700],
+        'mars'    => ['L0' => 355.4330, 'dL' =>   19141.6964, 'om0' => 336.0600, 'e0' => 0.09341, 'a' => 1.52366],
+        'jupiter' => ['L0' =>  34.3515, 'dL' =>    3036.3027, 'om0' =>  14.3320, 'e0' => 0.04849, 'a' => 5.20336],
+        'saturn'  => ['L0' =>  50.0775, 'dL' =>    1223.5093, 'om0' =>  93.0572, 'e0' => 0.05551, 'a' => 9.53707],
+        'uranus'  => ['L0' => 314.0550, 'dL' =>     429.8633, 'om0' => 173.0052, 'e0' => 0.04630, 'a' => 19.1912],
+        'neptune' => ['L0' => 304.3480, 'dL' =>     219.8997, 'om0' =>  48.1234, 'e0' => 0.00899, 'a' => 30.0690],
         'moon'    => ['L0' => 100.4664, 'dL' =>   36000.7698, 'om0' => 102.9373, 'e0' => 0.01671, 'a' => 1.00000],
+    ];
+
+    /**
+     * Planet calendar data, mirroring the PLANETS table in planet-time.js.
+     * solarDayMs / siderealYrMs are floats (JS computes them as products).
+     * The Moon uses Earth's entry (see Time::getPlanetTime).
+     */
+    public const PLANET_DATA = [
+        'mercury' => ['solarDayMs' => 175.9408 * self::EARTH_DAY_MS, 'siderealYrMs' => 87.9691 * self::EARTH_DAY_MS,
+                      'epochMs' => self::J2000_MS, 'daysPerPeriod' => 1.0, 'periodsPerWeek' => 7, 'workPeriodsPerWeek' => 5,
+                      'workHoursStart' => 9, 'workHoursEnd' => 17, 'earthClockSchedule' => true],
+        'venus'   => ['solarDayMs' => 116.7500 * self::EARTH_DAY_MS, 'siderealYrMs' => 224.701 * self::EARTH_DAY_MS,
+                      'epochMs' => self::J2000_MS, 'daysPerPeriod' => 1.0, 'periodsPerWeek' => 7, 'workPeriodsPerWeek' => 5,
+                      'workHoursStart' => 9, 'workHoursEnd' => 17, 'earthClockSchedule' => true],
+        'earth'   => ['solarDayMs' => 86400000.0, 'siderealYrMs' => 365.25636 * self::EARTH_DAY_MS,
+                      'epochMs' => self::J2000_MS, 'daysPerPeriod' => 1.0, 'periodsPerWeek' => 7, 'workPeriodsPerWeek' => 5,
+                      'workHoursStart' => 9, 'workHoursEnd' => 17, 'earthClockSchedule' => false],
+        'mars'    => ['solarDayMs' => 88775244.0, 'siderealYrMs' => 686.9957 * self::EARTH_DAY_MS,
+                      'epochMs' => self::MARS_EPOCH_MS, 'daysPerPeriod' => 1.0, 'periodsPerWeek' => 7, 'workPeriodsPerWeek' => 5,
+                      'workHoursStart' => 9, 'workHoursEnd' => 17, 'earthClockSchedule' => false],
+        'jupiter' => ['solarDayMs' => 9.9250 * 3600000, 'siderealYrMs' => 4332.589 * self::EARTH_DAY_MS,
+                      'epochMs' => self::J2000_MS, 'daysPerPeriod' => 2.5, 'periodsPerWeek' => 7, 'workPeriodsPerWeek' => 5,
+                      'workHoursStart' => 8, 'workHoursEnd' => 16, 'earthClockSchedule' => false],
+        'saturn'  => ['solarDayMs' => 10.578 * 3600000, 'siderealYrMs' => 10759.22 * self::EARTH_DAY_MS,
+                      'epochMs' => self::J2000_MS, 'daysPerPeriod' => 2.25, 'periodsPerWeek' => 7, 'workPeriodsPerWeek' => 5,
+                      'workHoursStart' => 8, 'workHoursEnd' => 16, 'earthClockSchedule' => false],
+        'uranus'  => ['solarDayMs' => 17.2479 * 3600000, 'siderealYrMs' => 30688.5 * self::EARTH_DAY_MS,
+                      'epochMs' => self::J2000_MS, 'daysPerPeriod' => 1.0, 'periodsPerWeek' => 7, 'workPeriodsPerWeek' => 5,
+                      'workHoursStart' => 8, 'workHoursEnd' => 16, 'earthClockSchedule' => false],
+        'neptune' => ['solarDayMs' => 16.1100 * 3600000, 'siderealYrMs' => 60195.0 * self::EARTH_DAY_MS,
+                      'epochMs' => self::J2000_MS, 'daysPerPeriod' => 1.0, 'periodsPerWeek' => 7, 'workPeriodsPerWeek' => 5,
+                      'workHoursStart' => 8, 'workHoursEnd' => 16, 'earthClockSchedule' => false],
     ];
 
     /**

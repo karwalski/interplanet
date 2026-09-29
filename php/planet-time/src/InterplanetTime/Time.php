@@ -37,61 +37,59 @@ final class Time
         int    $utcMs,
         float  $tzOffset = 0.0,
     ): PlanetTimeResult {
-        // Moon uses Earth's sidereal day for display purposes
-        $effectivePlanet = ($planet === 'moon') ? 'earth' : $planet;
+        // Mirrors getPlanetTime() in planet-time.js.
+        // Moon uses Earth's solar day (tidally locked; work schedules run on Earth time)
+        $key = ($planet === 'moon') ? 'earth' : $planet;
+        $p   = Constants::PLANET_DATA[$key] ?? null;
+        if ($p === null) {
+            throw new \InvalidArgumentException("Unknown planet: $planet");
+        }
+        $solarDayMs = (float)$p['solarDayMs'];
 
-        // Epoch reference = J2000_MS for all planets except Mars
-        $epochMs = ($effectivePlanet === 'mars')
-            ? Constants::MARS_EPOCH_MS
-            : Constants::J2000_MS;
+        $elapsedMs   = $utcMs - $p['epochMs'] + $tzOffset / 24.0 * $solarDayMs;
+        $totalDays   = $elapsedMs / $solarDayMs;
+        $dayNumber   = (int)floor($totalDays);
+        $dayFrac     = $totalDays - $dayNumber;
 
-        // Day length in milliseconds
-        $dayMs = self::dayLengthMs($effectivePlanet);
+        $localHour = $dayFrac * 24.0;
+        $hour      = (int)floor($localHour);
+        $minute    = (int)floor(($localHour - $hour) * 60.0);
+        $second    = (int)floor((($localHour - $hour) * 60.0 - $minute) * 60.0);
 
-        $elapsedMs  = $utcMs - $epochMs;
-        $dayFrac    = fmod($elapsedMs / $dayMs, 1.0);
-        if ($dayFrac < 0.0) $dayFrac += 1.0;
+        if ($p['earthClockSchedule']) {
+            // Mercury/Venus: Earth-standard work week (0=Mon..6=Sun), UTC work hours.
+            $msOfDay      = self::floorMod($utcMs, Constants::EARTH_DAY_MS);
+            $secOfDay     = intdiv($msOfDay, 1000);
+            $daysSince    = intdiv($utcMs - $msOfDay, Constants::EARTH_DAY_MS);
+            $utcDay       = self::floorMod($daysSince + 4, 7);   // 1970-01-01 was a Thursday (0=Sun)
+            $periodInWeek = ($utcDay + 6) % 7;
+            $isWorkPeriod = $periodInWeek < $p['workPeriodsPerWeek'];
+            $utcHour      = intdiv($secOfDay, 3600) + intdiv($secOfDay % 3600, 60) / 60.0 + ($secOfDay % 60) / 3600.0;
+            $isWorkHour   = $isWorkPeriod && $utcHour >= $p['workHoursStart'] && $utcHour < $p['workHoursEnd'];
+        } else {
+            $totalPeriods = $totalDays / $p['daysPerPeriod'];
+            $periodInWeek = self::floorMod((int)floor($totalPeriods), $p['periodsPerWeek']);
+            $isWorkPeriod = $periodInWeek < $p['workPeriodsPerWeek'];
+            $isWorkHour   = $isWorkPeriod && $localHour >= $p['workHoursStart'] && $localHour < $p['workHoursEnd'];
+        }
 
-        $localHour  = ($dayFrac * 24.0 + $tzOffset + 24.0);
-        $localHour  = fmod($localHour, 24.0);
+        $yearLenDays = $p['siderealYrMs'] / $solarDayMs;
+        $yearNumber  = (int)floor($totalDays / $yearLenDays);
+        $dayInYear   = $totalDays - $yearNumber * $yearLenDays;
 
-        $hour   = (int)$localHour;
-        $minF   = ($localHour - $hour) * 60.0;
-        $minute = (int)$minF;
-        $second = (int)(($minF - $minute) * 60.0);
+        $solInYear   = ($key === 'mars') ? (int)floor($dayInYear) : null;
+        $solsPerYear = ($key === 'mars') ? (int)round($yearLenDays) : null;
 
-        // Day number (0-indexed from epoch)
-        $dayNumber = (int)floor($elapsedMs / $dayMs);
-
-        // Work period (0=sleep, 1=morning, 2=work, 3=evening — split into 3 even periods)
-        $periodInWeek = (int)floor($localHour / self::PERIOD_LEN);
-        $isWorkPeriod = ($periodInWeek === 1); // period 1 = 08:00-16:00 (loose)
-        $isWorkHour   = ($localHour >= self::WORK_START && $localHour < self::WORK_END);
-
-        // Day in year / year number
-        $totalDays  = (int)floor(abs($elapsedMs) / $dayMs) * ($elapsedMs < 0 ? -1 : 1);
-        $daysPerYear = self::daysPerYear($effectivePlanet);
-        $yearNumber  = (int)floor($dayNumber / $daysPerYear);
-        $dayInYear   = (($dayNumber % $daysPerYear) + $daysPerYear) % $daysPerYear;
-
-        // Mars sol-in-year
-        $solInYear   = ($effectivePlanet === 'mars') ? $dayInYear % self::MARS_SOLS_PER_YEAR : null;
-        $solsPerYear = ($effectivePlanet === 'mars') ? self::MARS_SOLS_PER_YEAR : null;
-
-        // Zone ID — null for Earth, PREFIX+N or PREFIX-N for all others
+        // Zone ID: null for Earth, otherwise PREFIX + sign + trunc(offset), as in JS
         $zonePrefixes = [
             'mercury' => 'MMT', 'venus'   => 'VMT', 'mars'    => 'AMT',
             'jupiter' => 'JMT', 'saturn'  => 'SMT', 'uranus'  => 'UMT',
             'neptune' => 'NMT', 'moon'    => 'LMT',
         ];
-        if ($planet === 'earth') {
-            $zoneId = null;
-        } else {
-            $prefix  = $zonePrefixes[$planet] ?? 'XMT';
-            $absOff  = (int)abs($tzOffset);
-            $sign    = $tzOffset >= 0.0 ? '+' : '-';
-            $zoneId  = $prefix . $sign . $absOff;
-        }
+        $prefix = $zonePrefixes[$planet] ?? null;
+        $zoneId = ($prefix === null)
+            ? null
+            : $prefix . ($tzOffset >= 0.0 ? '+' : '') . (string)(int)$tzOffset;
 
         $h2 = str_pad((string)$hour,   2, '0', STR_PAD_LEFT);
         $m2 = str_pad((string)$minute, 2, '0', STR_PAD_LEFT);
@@ -104,7 +102,7 @@ final class Time
             localHour:    $localHour,
             dayFraction:  $dayFrac,
             dayNumber:    $dayNumber,
-            dayInYear:    $dayInYear,
+            dayInYear:    (int)floor($dayInYear),
             yearNumber:   $yearNumber,
             periodInWeek: $periodInWeek,
             isWorkPeriod: $isWorkPeriod,
@@ -115,6 +113,11 @@ final class Time
             solsPerYear:  $solsPerYear,
             zoneId:       $zoneId,
         );
+    }
+
+    private static function floorMod(int $a, int $b): int
+    {
+        return (($a % $b) + $b) % $b;
     }
 
     // ── Mars Time Convention ──────────────────────────────────────────────────
@@ -147,41 +150,5 @@ final class Time
     public static function getMarsTimeAtOffset(int $utcMs, float $offsetHours): PlanetTimeResult
     {
         return self::getPlanetTime('mars', $utcMs, $offsetHours);
-    }
-
-    // ── Internal helpers ──────────────────────────────────────────────────────
-
-    /**
-     * Sidereal day length in milliseconds for each planet.
-     * Values from JS planet-time.js PLANETS table.
-     */
-    private static function dayLengthMs(string $planet): int
-    {
-        return match ($planet) {
-            'mercury' => 5067840000,
-            'venus'   => 20996640000,
-            'earth'   => 86400000,
-            'mars'    => 88775244,
-            'jupiter' => 35730000,
-            'saturn'  => 38361600000,
-            'uranus'  => 62054400000,
-            'neptune' => 57996000000,
-            default   => 86400000,  // moon → earth
-        };
-    }
-
-    private static function daysPerYear(string $planet): int
-    {
-        return match ($planet) {
-            'mercury' => 2,
-            'venus'   => 1,
-            'earth'   => 365,
-            'mars'    => 669,
-            'jupiter' => 10476,
-            'saturn'  => 24491,
-            'uranus'  => 42718,
-            'neptune' => 89666,
-            default   => 365,
-        };
     }
 }

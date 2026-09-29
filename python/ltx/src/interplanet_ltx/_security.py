@@ -17,7 +17,9 @@ import base64
 import hashlib
 import json
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
+
+from ._jsjson import js_number, js_string, utf16_sort_key
 
 
 # ── Canonical JSON (RFC 8785 / JCS) ──────────────────────────────────────────
@@ -27,9 +29,13 @@ def canonical_json(obj: Any) -> str:
     """
     Produce RFC 8785 / JCS canonical JSON.
 
-    - Object keys are sorted lexicographically (Unicode code-point order).
+    - Object keys are sorted lexicographically (UTF-16 code-unit order, as
+      RFC 8785 section 3.2.3 and JavaScript's Array.prototype.sort).
     - Array element order is preserved.
     - No optional whitespace.
+    - Strings and numbers are serialised as JavaScript's JSON.stringify does
+      (raw UTF-8, integral floats without ".0"), matching canonicalJSON() in
+      ltx-sdk.js byte for byte.
 
     Returns a str (UTF-8 content — encode to bytes if a bytes payload is needed).
     """
@@ -38,14 +44,15 @@ def canonical_json(obj: Any) -> str:
     if isinstance(obj, bool):
         return 'true' if obj else 'false'
     if isinstance(obj, (int, float)):
-        return json.dumps(obj)
+        return js_number(obj)
     if isinstance(obj, str):
-        return json.dumps(obj)
-    if isinstance(obj, list):
+        return js_string(obj)
+    if isinstance(obj, (list, tuple)):
         return '[' + ','.join(canonical_json(v) for v in obj) + ']'
     if isinstance(obj, dict):
-        keys = sorted(obj.keys())
-        return '{' + ','.join(json.dumps(k) + ':' + canonical_json(obj[k]) for k in keys) + '}'
+        # Same order as JavaScript's Object.keys(obj).sort() (UTF-16 code units)
+        keys = sorted(obj.keys(), key=utf16_sort_key)
+        return '{' + ','.join(js_string(k) + ':' + canonical_json(obj[k]) for k in keys) + '}'
     raise TypeError(f'canonical_json: unsupported type {type(obj).__name__!r}')
 
 
@@ -330,30 +337,64 @@ def verify_plan(
 # ── Sequence Tracking ─────────────────────────────────────────────────────────
 
 
+#: Default reorder window for inbound seqs (LTX-SECURITY.md §11.2): a seq up to
+#: this far below the highest seen, never seen before, is accepted as late.
+SEQ_REORDER_WINDOW = 64
+
+_MAX_SAFE_INTEGER = 2 ** 53 - 1
+
+
+def _safe_integer(v: Any) -> Optional[int]:
+    """Return v as int if JavaScript's Number.isSafeInteger(v) holds, else None."""
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return None
+    if isinstance(v, float) and not (v == v and v not in (float('inf'), float('-inf'))
+                                     and v.is_integer()):
+        return None
+    iv = int(v)
+    return iv if abs(iv) <= _MAX_SAFE_INTEGER else None
+
+
 class SequenceTracker:
     """
-    Per-(plan_id, node_id) monotonic sequence tracker for replay protection.
+    Per-(plan_id, node_id) sequence tracker for replay protection.
+    Mirrors createSequenceTracker() in ltx-sdk.js.
 
     Tracks both outbound (next_seq) and inbound (record_seq) sequence numbers
-    per node_id. Rejects bundles where seq <= last_seen_seq.
+    per node_id. Inbound seqs are checked against a sliding reorder window
+    below the highest seq seen (the high-water mark). Seqs skipped by a gap
+    are remembered while they remain inside the window, so a delayed but
+    genuine bundle that arrives after a higher seq is accepted and flagged
+    late, while an exact duplicate of an already-accepted (node_id, seq) is
+    rejected as a replay. Seqs below the window are rejected as replays (they
+    cannot be distinguished from one). Missing-seq markers live in the storage
+    adapter, so the window survives restarts when the adapter is persistent.
 
     Parameters
     ----------
     plan_id : str
         Plan identifier used to namespace storage keys.
     storage : optional
-        Object with ``get(key, default)`` and ``set(key, val)`` methods.
-        Defaults to an in-memory dict.
+        Object with ``get(key, default)`` and ``set(key, val)`` methods, and
+        optionally ``delete(key)``. Defaults to an in-memory dict.
+    reorder_window : int
+        Reorder window size (default SEQ_REORDER_WINDOW = 64); 0 disables late
+        acceptance (strictly monotonic). Must be a non-negative integer.
     """
 
-    def __init__(self, plan_id: str, storage=None) -> None:
+    def __init__(self, plan_id: str, storage=None,
+                 reorder_window: int = SEQ_REORDER_WINDOW) -> None:
+        window = _safe_integer(reorder_window)
+        if window is None or window < 0:
+            raise ValueError('SequenceTracker: reorder_window must be a non-negative integer')
         self._prefix = f'ltx_seq_{plan_id}_'
         self._mem: Dict[str, int] = {}
         self._storage = storage
+        self._window = window
 
     def _get(self, key: str) -> int:
         if self._storage is not None:
-            return self._storage.get(key, 0)
+            return self._storage.get(key, 0) or 0
         return self._mem.get(key, 0)
 
     def _set(self, key: str, val: int) -> None:
@@ -361,6 +402,20 @@ class SequenceTracker:
             self._storage.set(key, val)
         else:
             self._mem[key] = val
+
+    def _clear(self, key: str) -> None:
+        if self._storage is None:
+            self._mem.pop(key, None)
+        elif hasattr(self._storage, 'delete'):
+            self._storage.delete(key)
+        else:
+            self._storage.set(key, 0)
+
+    def _rx_key(self, node_id: str) -> str:
+        return self._prefix + node_id + '_rx'
+
+    def _miss_key(self, node_id: str, seq: int) -> str:
+        return f'{self._rx_key(node_id)}_miss_{seq}'
 
     def next_seq(self, node_id: str) -> int:
         """Increment and return the next outbound sequence number for this node."""
@@ -376,16 +431,49 @@ class SequenceTracker:
 
         Returns
         -------
-        dict with keys: accepted (bool), gap (bool), gap_size (int), reason (str, optional)
+        dict with keys: accepted (bool), gap (bool), gap_size (int),
+        late (bool), reason (str, optional):
+
+        - late True: seq below the high-water mark, never seen, inside the window
+        - reason 'replay': exact duplicate, or below the reorder window
+        - reason 'invalid_seq': seq is not a safe integer
         """
-        key = self._prefix + node_id + '_rx'
+        s_int = _safe_integer(seq)
+        if s_int is None:
+            return {'accepted': False, 'gap': False, 'gap_size': 0, 'late': False,
+                    'reason': 'invalid_seq'}
+        seq = s_int
+        w = self._window
+        key = self._rx_key(node_id)
         last = self._get(key)
+
         if seq <= last:
-            return {'accepted': False, 'gap': False, 'gap_size': 0, 'reason': 'replay'}
+            mk = self._miss_key(node_id, seq)
+            if seq > last - w and self._get(mk) == 1:
+                self._clear(mk)
+                return {'accepted': True, 'gap': False, 'gap_size': 0, 'late': True}
+            return {'accepted': False, 'gap': False, 'gap_size': 0, 'late': False,
+                    'reason': 'replay'}
+
         gap = seq > last + 1
         gap_size = seq - last - 1 if gap else 0
+        # Remember skipped seqs that stay inside the new window (seq - W, seq].
+        for s in range(max(last + 1, seq - w + 1), seq):
+            self._set(self._miss_key(node_id, s), 1)
+        # Forget markers that slide out of the window.
+        for s in range(max(1, last - w + 1), min(last, seq - w) + 1):
+            if self._get(self._miss_key(node_id, s)) == 1:
+                self._clear(self._miss_key(node_id, s))
         self._set(key, seq)
-        return {'accepted': True, 'gap': gap, 'gap_size': gap_size}
+        return {'accepted': True, 'gap': gap, 'gap_size': gap_size, 'late': False}
+
+    def missing_seqs(self, node_id: str) -> List[int]:
+        """Seqs below the high-water mark still missing inside the reorder
+        window, ascending (candidates for a retransmission request,
+        LTX-SECURITY.md §11.3)."""
+        last = self._get(self._rx_key(node_id))
+        return [s for s in range(max(1, last - self._window + 1), last)
+                if self._get(self._miss_key(node_id, s)) == 1]
 
     def last_seen_seq(self, node_id: str) -> int:
         """Return the last accepted inbound seq for node_id (0 if none seen)."""
@@ -560,8 +648,10 @@ def check_seq(
     Returns
     -------
     dict
-        Acceptance result with keys: accepted, gap, gap_size, reason (optional).
+        Acceptance result with keys: accepted, gap, gap_size, late,
+        reason (optional). A missing or non-numeric seq gives 'missing_seq'.
     """
-    if 'seq' not in bundle:
+    seq = bundle.get('seq')
+    if isinstance(seq, bool) or not isinstance(seq, (int, float)):
         return {'accepted': False, 'gap': False, 'gap_size': 0, 'reason': 'missing_seq'}
     return tracker.record_seq(sender_node_id, bundle['seq'])

@@ -140,8 +140,9 @@ final class Orbital
             ? -$dotAB / ($abMag * $aMag) : 0.0;
         $elongDeg = rad2deg(acos(max(-1.0, min(1.0, $cos_el))));
 
-        $blocked  = $closestSunAu < 0.1;
-        $degraded = !$blocked && ($closestSunAu < 0.25 || $elongDeg < 5.0);
+        // Same buffer zones as planet-time.js: < 0.01 AU blocked, < 0.05 AU degraded.
+        $blocked  = $closestSunAu < 0.01;
+        $degraded = !$blocked && $closestSunAu < 0.05;
 
         return new LineOfSightResult(
             clear: !$blocked && !$degraded,
@@ -155,16 +156,16 @@ final class Orbital
     // ── Lower-quartile light time ──────────────────────────────────────────────
 
     /**
-     * Sample one Earth year (360 samples) and return the lower-quartile
+     * Sample one Earth year (360 samples over 365.25 days) and return the lower-quartile
      * one-way light time in seconds (p25).
      */
     public static function lowerQuartileLightTime(string $a, string $b, int $refMs): float
     {
-        $YEAR_MS = 365 * Constants::EARTH_DAY_MS;
-        $STEP    = (int)($YEAR_MS / 360);
+        // Same sampling as planet-time.js: 360 samples over 365.25 days.
+        $STEP    = 365.25 * Constants::EARTH_DAY_MS / 360;
         $samples = [];
         for ($i = 0; $i < 360; $i++) {
-            $samples[] = self::lightTravelSeconds($a, $b, $refMs + $i * $STEP);
+            $samples[] = self::lightTravelSeconds($a, $b, (int)round($refMs + $i * $STEP));
         }
         sort($samples);
         return $samples[(int)(count($samples) * 0.25)];

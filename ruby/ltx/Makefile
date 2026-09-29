@@ -12,6 +12,8 @@ lint:
 	@ruby -c lib/interplanet_ltx.rb
 	@ruby -c lib/interplanet_ltx/constants.rb
 	@ruby -c lib/interplanet_ltx/models.rb
+	@ruby -c lib/interplanet_ltx/js_json.rb
+	@ruby -c lib/interplanet_ltx/validate.rb
 	@ruby -c test/test_interplanet_ltx.rb
 	@echo "Syntax OK"
 

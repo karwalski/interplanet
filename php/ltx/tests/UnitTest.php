@@ -204,6 +204,69 @@ check('fromJson seg_count preserved', count($rt?->segments ?? []) === count($pla
 
 check('fromJson invalid returns null', LtxPlan::fromJson('not json') === null);
 
+/* ── Conformance: golden planId vectors (spec/golden/plan-ids.json) ── */
+section('Conformance: golden planId vectors');
+$golden = json_decode(file_get_contents(__DIR__ . '/../../../spec/golden/plan-ids.json'));
+$gv = [];
+foreach ($golden->vectors as $vec) $gv[$vec->name] = $vec;
+check('golden vectors present (>= 9)',   count($golden->vectors) >= 9);
+foreach ($golden->vectors as $vec) {
+    $got = LTX::makePlanId($vec->plan);
+    check("golden {$vec->name} planId (got $got)", $got === $vec->planId);
+    if (isset($vec->planHash)) check("golden {$vec->name} planHash", LTX::planHash($vec->plan) === $vec->planHash);
+}
+check('golden anchor v2 default',        $gv['v2-createPlan-default']->planId === 'LTX-20260315-EARTHHQ-MARS-v2-2596ffe8');
+check('golden v2 key-order sensitive',   $gv['v2-createPlan-default']->planId !== $gv['v2-key-order-sensitive']->planId);
+check('golden v3 order-insensitive',     $gv['v3-upgrade-delays']->planId === $gv['v3-key-order-insensitive']->planId);
+check('golden v3 amendment chain hash',  $gv['v3-amendment']->plan->prevPlanHash === $gv['v3-upgrade-delays']->planHash);
+$fcAssoc = json_decode(json_encode($gv['v2-freeze-check']->plan), true);
+check('golden v2 from assoc array',      LTX::makePlanId($fcAssoc) === $gv['v2-freeze-check']->planId);
+$fcAssoc['nodes'][1]['delay'] = (float)$fcAssoc['nodes'][1]['delay'];
+check('v2 hash formats 840.0 as 840',    LTX::makePlanId($fcAssoc) === $gv['v2-freeze-check']->planId);
+check('JsJson::number matches JS',       array_map([\InterplanetLTX\JsJson::class, 'number'],
+                                             [840.0, 0.1, 1e21, 1e-7, 1.5e-7, 1e16, -2.5, 0.000001]) ===
+                                         ['840', '0.1', '1e+21', '1e-7', '1.5e-7', '10000000000000000', '-2.5', '0.000001']);
+
+/* ── Plan validation: reserved streams / branching (§3.5, §7) ─────── */
+section('Plan validation: reserved fields');
+$codesOf = fn(array $r) => array_column($r['errors'], 'code');
+$with = function (\stdClass $p, array $changes): \stdClass {
+    $c = clone $p;
+    foreach ($changes as $k => $v) $c->$k = $v;
+    return $c;
+};
+foreach ($golden->vectors as $vec) {
+    check("validatePlan accepts golden {$vec->name}", LTX::validatePlan($vec->plan)['valid'] === true);
+}
+$vpBase = $gv['v3-upgrade-delays']->plan;
+$vpV2   = $gv['v2-freeze-check']->plan;
+check('validatePlan v3 empty streams ok', LTX::validatePlan($with($vpBase, ['streams' => []]))['valid'] === true);
+$vpStreams = LTX::validatePlan($with($vpBase, ['streams' => [(object)['id' => 'S1']]]));
+check('validatePlan non-empty streams',   $vpStreams['valid'] === false && in_array('reserved_streams', $codesOf($vpStreams), true));
+$se = array_values(array_filter($vpStreams['errors'], fn($e) => $e['code'] === 'reserved_streams'));
+check('validatePlan streams error path',  $se[0]['path'] === 'streams');
+check('validatePlan streams non-array',   in_array('reserved_streams', $codesOf(LTX::validatePlan($with($vpBase, ['streams' => 'S1']))), true));
+check('validatePlan segment stream',      in_array('reserved_streams', $codesOf(LTX::validatePlan($with($vpBase,
+                                              ['segments' => [(object)['type' => 'TX', 'q' => 1, 'stream' => 'S1']]]))), true));
+check('validatePlan branches',            in_array('reserved_branching', $codesOf(LTX::validatePlan($with($vpBase, ['branches' => []]))), true));
+check('validatePlan branching',           in_array('reserved_branching', $codesOf(LTX::validatePlan($with($vpBase,
+                                              ['branching' => (object)['mode' => 'local']]))), true));
+$vpSegBranch = LTX::validatePlan($with($vpBase, ['segments' => [(object)['type' => 'CAUCUS', 'q' => 1, 'branch' => 'B1']]]));
+check('validatePlan segment branch',      in_array('reserved_branching', $codesOf($vpSegBranch), true) &&
+                                          $vpSegBranch['errors'][0]['path'] === 'segments[0].branch');
+check('validatePlan v2 streams is v3 field', in_array('v3_field_in_v2', $codesOf(LTX::validatePlan($with($vpV2, ['streams' => []]))), true));
+check('validatePlan v2 branching',        in_array('reserved_branching', $codesOf(LTX::validatePlan($with($vpV2, ['branching' => true]))), true));
+check('validatePlan assoc array input',   in_array('reserved_branching', $codesOf(LTX::validatePlan(
+                                              json_decode(json_encode($with($vpV2, ['branches' => [1]])), true))), true));
+check('validatePlan non-object',          in_array('not_an_object', $codesOf(LTX::validatePlan(null)), true));
+check('validatePlan bad version',         in_array('invalid_version', $codesOf(LTX::validatePlan($with($vpV2, ['v' => 7]))), true));
+check('validatePlan host not first',      in_array('invalid_host', $codesOf(LTX::validatePlan($with($vpV2, ['nodes' => array_reverse($vpV2->nodes)]))), true));
+check('validatePlan unsorted delays key', in_array('invalid_delays', $codesOf(LTX::validatePlan($with($vpBase,
+                                              ['delays' => (object)['N1|N0' => 860]]))), true));
+check('validatePlan unknown speaker',     in_array('unknown_speaker', $codesOf(LTX::validatePlan($with($vpV2,
+                                              ['segments' => [(object)['type' => 'TX', 'q' => 1, 'speaker' => 'N9']]]))), true));
+check('validatePlan quantum out of range', in_array('invalid_quantum', $codesOf(LTX::validatePlan($with($vpV2, ['quantum' => 0]))), true));
+
 /* ── Summary ─────────────────────────────────────────────────────── */
 echo "\n==========================================\n";
 echo "$passed passed  $failed failed\n";
