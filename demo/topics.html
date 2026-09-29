@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Topic Board (Experimental) | InterPlanet</title>
+  <link rel="icon" type="image/x-icon" href="assets/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
+  <meta name="theme-color" content="#060614">
+  <meta name="description" content="EXPERIMENTAL local simulation of the draft LTX topics extension. Not for production.">
+  <link rel="stylesheet" href="assets/sky.css?v=1.1.0">
+  <!--
+    EXPERIMENTAL (IP-T4, #17). Local-only simulation of docs/LTX-TOPICS-RFC.md.
+    Not for production pending the patent record review (#14).
+
+    Boundaries (RFC §12), kept deliberately:
+      - no input gating: every topic is always readable, draftable and
+        submittable, including closed topics;
+      - no automatic cycling, rotation or timer-driven focus change: this
+        page uses no timers at all, and only a direct user action changes
+        the selected topic or moves focus;
+      - the one-way delay is typed in by the user and is used ONLY to print an
+        expected-arrival time; it is never derived from light-time or
+        ephemeris and never controls delivery or input;
+      - "recommended focus" is an advisory label from segment topicRefs; it
+        never locks, hides or switches anything;
+      - no carousel.
+  -->
+  <style>
+    /* sky.css locks the viewport for the clock; this page scrolls normally. */
+    html, body { height: auto; overflow: auto; }
+    :root{
+      --bg:#060614;--surface:rgba(255,255,255,.04);--surface-2:rgba(255,255,255,.07);
+      --border:rgba(255,255,255,.12);--text:rgba(255,255,255,.92);--text-muted:rgba(255,255,255,.68);
+      --accent:#3563c8;--accent-h:#4472d8;--focus:#8fb3ff;--warn:#f0b84a;--warn-bg:rgba(240,184,74,.12);
+    }
+    body{background:var(--bg);color:var(--text);min-height:100vh;padding-bottom:3rem;line-height:1.45}
+    .skip-link{position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden}
+    .skip-link:focus{position:static;width:auto;height:auto;overflow:visible;padding:.35rem .75rem;background:var(--accent);color:#fff;border-radius:4px;font-size:.8rem;margin:.25rem;display:inline-block}
+    .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+    .wrap{max-width:1040px;margin:0 auto;padding:1.25rem 1rem}
+    a{color:var(--focus)}
+    :focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+    h1{font-size:1.35rem;font-weight:700;letter-spacing:-.01em}
+    h2{font-size:1rem;font-weight:700;margin-bottom:.5rem}
+    h3{font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:.5rem}
+
+    .topbar{display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap}
+    .back-link{color:var(--text-muted);text-decoration:none;font-size:.85rem}
+    .back-link:hover{color:var(--text)}
+
+    .banner{border:1px solid var(--warn);background:var(--warn-bg);border-radius:10px;padding:.75rem .9rem;margin-bottom:1rem;font-size:.88rem}
+    .banner strong{color:var(--warn);letter-spacing:.04em}
+
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1rem;margin-bottom:1rem}
+    .grid{display:grid;grid-template-columns:minmax(220px,300px) 1fr;gap:1rem;align-items:start}
+    @media(max-width:760px){.grid{grid-template-columns:1fr}}
+    .row{display:flex;gap:.75rem;flex-wrap:wrap;align-items:flex-end}
+    .field{display:flex;flex-direction:column;gap:.25rem;font-size:.85rem}
+    .field label{font-weight:600}
+    .hint{font-size:.78rem;color:var(--text-muted)}
+    input[type=text],input[type=number],select,textarea{
+      background:var(--surface-2);border:1px solid var(--border);border-radius:8px;color:var(--text);
+      font:inherit;font-size:.9rem;padding:.45rem .6rem}
+    textarea{width:100%;min-height:6rem;resize:vertical}
+    select option{background:#10102a;color:#fff}
+    .btn{background:var(--surface-2);border:1px solid var(--border);border-radius:8px;color:var(--text);font:inherit;font-size:.85rem;font-weight:600;padding:.45rem .8rem;cursor:pointer}
+    .btn:hover{background:rgba(255,255,255,.14)}
+    .btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+    .btn-primary:hover{background:var(--accent-h)}
+    .btn-small{font-size:.78rem;padding:.25rem .55rem}
+
+    .topic-list{list-style:none;display:flex;flex-direction:column;gap:.4rem}
+    .topic-btn{width:100%;text-align:left;display:flex;flex-direction:column;gap:.15rem;background:var(--surface);border:1px solid var(--border);border-radius:9px;color:var(--text);font:inherit;padding:.55rem .7rem;cursor:pointer}
+    .topic-btn:hover{background:var(--surface-2)}
+    .topic-btn[aria-current="true"]{border-color:var(--focus);background:rgba(91,141,239,.14)}
+    .topic-title{font-weight:700;font-size:.92rem}
+    .topic-meta{font-size:.75rem;color:var(--text-muted)}
+    .tag{display:inline-block;font-size:.7rem;font-weight:700;border:1px solid var(--border);border-radius:5px;padding:0 .35rem;margin-right:.25rem}
+    .tag-rec{border-color:var(--focus);color:var(--focus)}
+    .tag-closed{border-color:var(--warn);color:var(--warn)}
+
+    .thread, .thread ul{list-style:none}
+    .thread ul{margin-left:1.1rem;padding-left:.7rem;border-left:2px solid var(--border)}
+    .contrib{background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:.55rem .7rem;margin:.4rem 0}
+    .contrib-head{font-size:.76rem;color:var(--text-muted);margin-bottom:.2rem}
+    .contrib-body{white-space:pre-wrap;word-break:break-word;font-size:.9rem;margin-bottom:.35rem}
+    .notice{font-size:.8rem;color:var(--text-muted);margin:.4rem 0}
+    .notice-closed{color:var(--warn)}
+    .composer{margin-top:1rem;border-top:1px solid var(--border);padding-top:.8rem}
+    .composer-actions{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-top:.5rem}
+    .list-plain{list-style:none;font-size:.82rem;display:flex;flex-direction:column;gap:.35rem}
+    .list-plain li{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:.4rem .6rem}
+    .mono{font-variant-numeric:tabular-nums}
+    @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+  </style>
+</head>
+<body>
+<a class="skip-link" href="#main-content">Skip to content</a>
+<div class="wrap">
+  <div class="topbar">
+    <a href="index.html" class="back-link">&larr; InterPlanet</a>
+    <a href="ltx.html" class="back-link">LTX planner</a>
+  </div>
+
+  <div class="banner" role="note" aria-labelledby="banner-title">
+    <p><strong id="banner-title">EXPERIMENTAL. NOT FOR PRODUCTION.</strong>
+    This page is a local-only simulation of the draft
+    <a href="https://github.com/karwalski/interplanet/blob/main/docs/LTX-TOPICS-RFC.md">LTX topics RFC</a>.
+    Nothing is sent over a network, entries are not signed here, and the extension is on hold
+    pending a patent record review (issue #14).</p>
+  </div>
+
+  <main id="main-content" tabindex="-1">
+    <h1>Topic board</h1>
+    <p class="hint" style="margin:.35rem 0 1rem">You are <strong>Earth HQ</strong> (N0). Every topic can be read,
+      drafted and submitted to at any time, including closed topics. Drafts are kept per topic in this browser.</p>
+
+    <section class="card" aria-labelledby="sim-heading">
+      <h2 id="sim-heading">Simulation settings</h2>
+      <div class="row">
+        <div class="field">
+          <label for="delay-min">One-way delay to Mars Hab-01 (minutes)</label>
+          <input id="delay-min" type="number" min="0" max="60" step="0.5" value="14" aria-describedby="delay-hint">
+        </div>
+        <div class="field">
+          <label for="segment-sel">Current agenda segment (advisory)</label>
+          <select id="segment-sel" aria-describedby="segment-hint"></select>
+        </div>
+      </div>
+      <p id="delay-hint" class="hint" style="margin-top:.4rem">The delay is only used to show an expected arrival time.
+        It never enables, disables or holds back drafting or submitting.</p>
+      <p id="segment-hint" class="hint">The segment only adds a "Recommended focus" label to topics it references.
+        It never changes which topic you are viewing.</p>
+    </section>
+
+    <div class="grid">
+      <section class="card" aria-labelledby="topics-heading">
+        <h2 id="topics-heading">Topics</h2>
+        <ul id="topic-list" class="topic-list"></ul>
+        <form id="new-topic-form" style="margin-top:1rem" novalidate>
+          <div class="field">
+            <label for="new-topic-title">New topic title</label>
+            <input id="new-topic-title" type="text" maxlength="200" autocomplete="off">
+          </div>
+          <div class="composer-actions">
+            <button type="submit" class="btn">Create topic</button>
+            <span id="new-topic-msg" class="hint" role="status"></span>
+          </div>
+        </form>
+      </section>
+
+      <section class="card" id="topic-panel" aria-labelledby="topic-heading">
+        <h2 id="topic-heading" tabindex="-1"></h2>
+        <p id="topic-status" class="notice"></p>
+        <div class="composer-actions" style="margin-top:0">
+          <button type="button" id="toggle-status" class="btn btn-small"></button>
+        </div>
+        <h3 style="margin-top:1rem" id="thread-heading">Contributions</h3>
+        <ul id="thread" class="thread" aria-labelledby="thread-heading"></ul>
+        <p id="thread-empty" class="notice">No contributions yet.</p>
+
+        <form id="composer" class="composer" novalidate>
+          <div class="field">
+            <label for="draft" id="draft-label">Your contribution</label>
+            <textarea id="draft" aria-describedby="draft-hint reply-info"></textarea>
+          </div>
+          <p id="draft-hint" class="hint">Draft saved in this browser for this topic. Switching topics never discards it.</p>
+          <p id="reply-info" class="notice"></p>
+          <div class="composer-actions">
+            <button type="submit" class="btn btn-primary">Submit</button>
+            <button type="button" id="cancel-reply" class="btn" hidden>Cancel reply</button>
+            <span id="composer-msg" class="hint" role="status"></span>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <section class="card" aria-labelledby="outbox-heading">
+      <h2 id="outbox-heading">Outbox (sent from Earth HQ)</h2>
+      <p class="hint">Expected arrival at Mars Hab-01 = sent time + one-way delay. Display only.</p>
+      <ul id="outbox" class="list-plain" style="margin-top:.5rem"></ul>
+      <p id="outbox-empty" class="notice">Nothing sent yet.</p>
+    </section>
+
+    <section class="card" aria-labelledby="net-heading">
+      <h2 id="net-heading">Simulated inbound from Mars Hab-01</h2>
+      <p class="hint">Write a message as Mars, then deliver it whenever you like, in any order. Delivery is manual
+        so you can test late and out-of-order arrival.</p>
+      <form id="remote-form" novalidate style="margin-top:.6rem">
+        <div class="row">
+          <div class="field">
+            <label for="remote-topic">Topic</label>
+            <select id="remote-topic"></select>
+          </div>
+          <div class="field">
+            <label for="remote-reply">Reply to</label>
+            <select id="remote-reply"></select>
+          </div>
+        </div>
+        <div class="field" style="margin-top:.5rem">
+          <label for="remote-body">Message from Mars Hab-01</label>
+          <textarea id="remote-body" style="min-height:3.5rem"></textarea>
+        </div>
+        <div class="composer-actions">
+          <button type="submit" class="btn">Send from Mars</button>
+          <span id="remote-msg" class="hint" role="status"></span>
+        </div>
+      </form>
+      <h3 style="margin-top:1rem" id="inflight-heading">In flight to Earth HQ</h3>
+      <ul id="inflight" class="list-plain" aria-labelledby="inflight-heading"></ul>
+      <p id="inflight-empty" class="notice">Nothing in flight.</p>
+      <div class="composer-actions">
+        <button type="button" id="deliver-all" class="btn">Deliver all in flight</button>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="arrivals-heading">
+      <h2 id="arrivals-heading">Arrivals log</h2>
+      <ul id="arrivals" class="list-plain"></ul>
+      <p id="arrivals-empty" class="notice">No arrivals yet.</p>
+    </section>
+  </main>
+
+  <div id="live" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ── Model: an unsigned local mirror of ltx-topics.js reduceTopics ───────
+  // Entries: { entryId, nodeId, seq, type, content, timestamp }.
+  // Ordering and reduction rules follow docs/LTX-TOPICS-RFC.md §6 and §7.
+
+  var NODES = { N0: 'Earth HQ', N1: 'Mars Hab-01' };
+  var LOCAL = 'N0', REMOTE = 'N1';
+  var STORE_PREFIX = 'ltx-topics-demo:v0:';
+  var entries = [];
+  var seqs = { N0: 0, N1: 0 };
+  var outbox = [];
+  var inflight = [];
+  var arrivals = {};          // contributionId -> { expected, actual }
+  var unread = {};            // topicId -> count
+  var selected = null;
+  var replyTo = null;
+
+  var SEGMENTS = [
+    { label: 'None selected', refs: [] },
+    { label: 'TX 1: Habitat systems', refs: ['T-water'] },
+    { label: 'TX 2: Operations', refs: ['T-eva', 'T-science'] },
+    { label: 'CAUCUS', refs: [] }
+  ];
+
+  function nextEntry(nodeId, type, content, timestamp) {
+    seqs[nodeId] += 1;
+    var prefix = type === 'contribution' ? 'CTB' : 'TOP';
+    var entryId = prefix + '-' + nodeId + '-' + seqs[nodeId];
+    if (type === 'contribution' && !content.contributionId) content.contributionId = entryId;
+    return { entryId: entryId, nodeId: nodeId, seq: seqs[nodeId], type: type, content: content, timestamp: timestamp };
+  }
+
+  function compare(a, b) {
+    if (a.timestamp !== b.timestamp) return a.timestamp < b.timestamp ? -1 : 1;
+    if (a.nodeId !== b.nodeId) return a.nodeId < b.nodeId ? -1 : 1;
+    return a.seq - b.seq;
+  }
+
+  function reduce() {
+    var seen = {}, ordered = [];
+    entries.forEach(function (e) {
+      var k = e.nodeId + ' ' + e.seq;
+      if (!seen[k]) { seen[k] = true; ordered.push(e); }
+    });
+    ordered.sort(compare);
+    var byId = {}, order = [], winners = {}, closedBy = {}, contribs = {}, list = [];
+    ordered.forEach(function (e) {
+      if (e.type !== 'topic' || byId[e.content.topicId]) return;
+      byId[e.content.topicId] = { topicId: e.content.topicId, title: e.content.title, status: 'open', version: 1 };
+      winners[e.content.topicId] = { version: 1, editor: e.nodeId };
+      order.push(e.content.topicId);
+    });
+    ordered.forEach(function (e) {
+      if (e.type !== 'topic_update') return;
+      var t = byId[e.content.topicId]; if (!t) return;
+      var cur = winners[t.topicId], v = e.content.version;
+      var wins = v !== cur.version ? v > cur.version : e.nodeId < cur.editor;
+      if (!wins) return;
+      winners[t.topicId] = { version: v, editor: e.nodeId };
+      if (e.content.status) { t.status = e.content.status; closedBy[t.topicId] = e.content.status === 'closed' ? e : null; }
+      t.version = v;
+    });
+    ordered.forEach(function (e) {
+      if (e.type !== 'contribution') return;
+      var c = e.content, t = byId[c.topicId];
+      if (!t || contribs[c.contributionId]) return;
+      var closer = closedBy[c.topicId];
+      var rec = { contributionId: c.contributionId, topicId: c.topicId, body: c.body, author: e.nodeId,
+        seq: e.seq, timestamp: e.timestamp,
+        afterClose: !!(t.status === 'closed' && closer && compare(e, closer) > 0), replies: [] };
+      if (c.replyTo) {
+        rec.replyTo = c.replyTo;
+        var p = contribs[c.replyTo];
+        if (!p || p.topicId !== c.topicId) rec.parentUnresolved = true;
+      }
+      contribs[rec.contributionId] = rec;
+      list.push(rec);
+    });
+    return { byId: byId, order: order, contribs: contribs, list: list };
+  }
+
+  function threadsFor(state, topicId) {
+    var roots = [];
+    state.list.forEach(function (c) {
+      if (c.topicId !== topicId) return;
+      c.replies = [];
+    });
+    state.list.forEach(function (c) {
+      if (c.topicId !== topicId) return;
+      if (c.replyTo && !c.parentUnresolved) state.contribs[c.replyTo].replies.push(c);
+      else roots.push(c);
+    });
+    return roots;
+  }
+
+  // ── Storage (drafts only; failures are non-fatal) ───────────────────────
+
+  function loadDraft(topicId) {
+    try {
+      var raw = window.localStorage.getItem(STORE_PREFIX + 'draft:' + topicId);
+      if (!raw) return { body: '', replyTo: null };
+      var d = JSON.parse(raw);
+      return { body: typeof d.body === 'string' ? d.body : '', replyTo: typeof d.replyTo === 'string' ? d.replyTo : null };
+    } catch (_) { return { body: '', replyTo: null }; }
+  }
+  function saveDraft(topicId, body, reply) {
+    try {
+      if (!body && !reply) window.localStorage.removeItem(STORE_PREFIX + 'draft:' + topicId);
+      else window.localStorage.setItem(STORE_PREFIX + 'draft:' + topicId, JSON.stringify({ body: body, replyTo: reply }));
+    } catch (_) { /* storage unavailable: the draft stays in memory for this page */ }
+  }
+  var memDrafts = {};
+
+  // ── Helpers ─────────────────────────────────────────────────────────────
+
+  function $(id) { return document.getElementById(id); }
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text !== undefined) n.textContent = text;
+    return n;
+  }
+  function utc(ms) { return new Date(ms).toISOString().slice(11, 19) + ' UTC'; }
+  function delayMs() {
+    var v = parseFloat($('delay-min').value);
+    return (isFinite(v) && v >= 0 ? v : 0) * 60000;
+  }
+  function announce(msg) {
+    var live = $('live');
+    live.textContent = '';
+    // A fresh text node is enough for polite regions to re-announce.
+    live.appendChild(document.createTextNode(msg));
+  }
+  function recommended() {
+    var seg = SEGMENTS[$('segment-sel').selectedIndex] || SEGMENTS[0];
+    return seg.refs;
+  }
+  function dur(sec) {
+    var m = Math.floor(sec / 60), r = sec % 60;
+    return m ? m + ' min' + (r ? ' ' + r + ' s' : '') : r + ' s';
+  }
+  function shortBody(s) { return s.length > 60 ? s.slice(0, 57) + '...' : s; }
+
+  // ── Rendering ───────────────────────────────────────────────────────────
+
+  function renderTopics(state) {
+    var ul = $('topic-list');
+    var hadFocus = document.activeElement && document.activeElement.dataset
+      ? document.activeElement.dataset.topicId : null;
+    ul.textContent = '';
+    var rec = recommended();
+    state.order.forEach(function (id) {
+      var t = state.byId[id];
+      var li = el('li');
+      var b = el('button', 'topic-btn');
+      b.type = 'button';
+      b.dataset.topicId = id;
+      if (id === selected) b.setAttribute('aria-current', 'true');
+      b.appendChild(el('span', 'topic-title', t.title));
+      var meta = el('span', 'topic-meta');
+      var count = state.list.filter(function (c) { return c.topicId === id; }).length;
+      if (rec.indexOf(id) !== -1) meta.appendChild(el('span', 'tag tag-rec', 'Recommended focus'));
+      if (t.status === 'closed') meta.appendChild(el('span', 'tag tag-closed', 'Closed'));
+      var bits = [count + (count === 1 ? ' contribution' : ' contributions')];
+      if (unread[id]) bits.push(unread[id] + ' new');
+      var draft = memDrafts[id] !== undefined ? memDrafts[id] : loadDraft(id);
+      if (draft.body) bits.push('draft saved');
+      meta.appendChild(document.createTextNode(bits.join(', ')));
+      b.appendChild(meta);
+      b.addEventListener('click', function () { selectTopic(id, true); });
+      li.appendChild(b);
+      ul.appendChild(li);
+      if (hadFocus === id) b.focus();
+    });
+  }
+
+  function renderContribution(c) {
+    var li = el('li');
+    var art = el('article', 'contrib');
+    art.setAttribute('aria-label', NODES[c.author] + ' at ' + utc(c.timestamp));
+    var head = el('p', 'contrib-head mono');
+    var parts = [NODES[c.author] + ' (' + c.author + ')', 'written ' + utc(c.timestamp)];
+    var arr = arrivals[c.contributionId];
+    if (arr) parts.push('expected ' + utc(arr.expected), 'arrived ' + utc(arr.actual));
+    head.textContent = parts.join(' · ');
+    art.appendChild(head);
+    if (c.parentUnresolved) art.appendChild(el('p', 'notice', 'Reply to a contribution that has not arrived yet.'));
+    if (c.afterClose) art.appendChild(el('p', 'notice notice-closed', 'Posted after the topic was closed.'));
+    art.appendChild(el('p', 'contrib-body', c.body));
+    var rb = el('button', 'btn btn-small', 'Reply');
+    rb.type = 'button';
+    rb.setAttribute('aria-label', 'Reply to ' + NODES[c.author] + ': ' + shortBody(c.body));
+    rb.addEventListener('click', function () {
+      replyTo = c.contributionId;
+      persistComposer();
+      renderComposerReply();
+      $('draft').focus();
+    });
+    art.appendChild(rb);
+    li.appendChild(art);
+    if (c.replies.length) {
+      var ul = el('ul');
+      c.replies.forEach(function (r) { ul.appendChild(renderContribution(r)); });
+      li.appendChild(ul);
+    }
+    return li;
+  }
+
+  function renderPanel(state) {
+    var t = state.byId[selected];
+    $('topic-heading').textContent = t.title;
+    var rec = recommended().indexOf(selected) !== -1;
+    $('topic-status').className = 'notice' + (t.status === 'closed' ? ' notice-closed' : '');
+    $('topic-status').textContent = (t.status === 'closed'
+      ? 'Status: closed. You can still read, draft and submit here; new contributions are marked "after close".'
+      : 'Status: open.') + (rec ? ' Recommended focus for the current segment.' : '');
+    $('toggle-status').textContent = t.status === 'closed' ? 'Reopen topic' : 'Close topic';
+    var roots = threadsFor(state, selected);
+    var ul = $('thread');
+    ul.textContent = '';
+    roots.forEach(function (c) { ul.appendChild(renderContribution(c)); });
+    $('thread-empty').hidden = roots.length > 0;
+    $('draft-label').textContent = 'Your contribution to "' + t.title + '"';
+    renderComposerReply();
+  }
+
+  function renderComposerReply() {
+    var state = reduce();
+    var c = replyTo && state.contribs[replyTo];
+    if (replyTo && !c) replyTo = null;
+    $('reply-info').textContent = c ? 'Replying to ' + NODES[c.author] + ': "' + shortBody(c.body) + '"' : '';
+    $('cancel-reply').hidden = !c;
+  }
+
+  function renderOutbox() {
+    var ul = $('outbox');
+    ul.textContent = '';
+    outbox.slice().reverse().forEach(function (o) {
+      ul.appendChild(el('li', 'mono', '"' + shortBody(o.body) + '" in ' + o.topicTitle + '. Sent ' + utc(o.sent) +
+        ', expected at Mars Hab-01 ' + utc(o.expected) + '.'));
+    });
+    $('outbox-empty').hidden = outbox.length > 0;
+  }
+
+  function renderInflight() {
+    var ul = $('inflight');
+    ul.textContent = '';
+    inflight.forEach(function (m) {
+      var li = el('li', 'mono');
+      li.appendChild(document.createTextNode('"' + shortBody(m.entry.content.body) + '" for ' + m.topicTitle +
+        '. Sent ' + utc(m.entry.timestamp) + ', expected ' + utc(m.expected) + '. '));
+      var b = el('button', 'btn btn-small', 'Deliver now');
+      b.type = 'button';
+      b.setAttribute('aria-label', 'Deliver now: ' + shortBody(m.entry.content.body));
+      b.addEventListener('click', function () { deliver([m], b); });
+      li.appendChild(b);
+      ul.appendChild(li);
+    });
+    $('inflight-empty').hidden = inflight.length > 0;
+  }
+
+  function renderRemoteForm(state) {
+    var ts = $('remote-topic');
+    var keep = ts.value;
+    ts.textContent = '';
+    state.order.forEach(function (id) {
+      var o = el('option', null, state.byId[id].title);
+      o.value = id;
+      ts.appendChild(o);
+    });
+    if (keep && state.byId[keep]) ts.value = keep;
+    var rs = $('remote-reply');
+    var keepR = rs.value;
+    rs.textContent = '';
+    var none = el('option', null, 'Nothing (new thread)');
+    none.value = '';
+    rs.appendChild(none);
+    state.list.filter(function (c) { return c.topicId === ts.value; }).forEach(function (c) {
+      var o = el('option', null, NODES[c.author] + ': ' + shortBody(c.body));
+      o.value = c.contributionId;
+      rs.appendChild(o);
+    });
+    if (keepR && state.contribs[keepR] && state.contribs[keepR].topicId === ts.value) rs.value = keepR;
+  }
+
+  function renderAll() {
+    var state = reduce();
+    renderTopics(state);
+    renderPanel(state);
+    renderOutbox();
+    renderInflight();
+    renderRemoteForm(state);
+  }
+
+  // ── Actions (every one is a direct user action; no timers) ──────────────
+
+  function persistComposer() {
+    var body = $('draft').value;
+    memDrafts[selected] = { body: body, replyTo: replyTo };
+    saveDraft(selected, body, replyTo);
+  }
+
+  function selectTopic(id, moveFocus) {
+    if (selected) persistComposer();
+    selected = id;
+    unread[id] = 0;
+    var d = memDrafts[id] !== undefined ? memDrafts[id] : loadDraft(id);
+    $('draft').value = d.body;
+    replyTo = d.replyTo;
+    $('composer-msg').textContent = '';
+    renderAll();
+    if (moveFocus) $('topic-heading').focus();
+  }
+
+  function createTopic(title, id) {
+    var topicId = id || ('T-' + Date.now().toString(36));
+    entries.push(nextEntry(LOCAL, 'topic', { topicId: topicId, title: title }, Date.now()));
+    return topicId;
+  }
+
+  function deliver(list, fromButton) {
+    var state0 = reduce();
+    var now = Date.now();
+    var msgs = [];
+    list.forEach(function (m) {
+      var i = inflight.indexOf(m);
+      if (i === -1) return;
+      inflight.splice(i, 1);
+      entries.push(m.entry);
+      arrivals[m.entry.content.contributionId] = { expected: m.expected, actual: now };
+      unread[m.entry.content.topicId] = (unread[m.entry.content.topicId] || 0) + (m.entry.content.topicId === selected ? 0 : 1);
+      var diff = Math.round((now - m.expected) / 1000);
+      var rel = diff === 0 ? 'on time' : dur(Math.abs(diff)) + (diff > 0 ? ' late' : ' early');
+      var t = state0.byId[m.entry.content.topicId];
+      var text = 'New contribution in ' + (t ? t.title : m.entry.content.topicId) + ' from Mars Hab-01. Expected arrival ' +
+        utc(m.expected) + ', actual arrival ' + utc(now) + ' (' + rel + ').';
+      msgs.push(text);
+      var li = el('li', 'mono', text);
+      $('arrivals').insertBefore(li, $('arrivals').firstChild);
+    });
+    $('arrivals-empty').hidden = $('arrivals').children.length > 0;
+    var restore = document.activeElement;
+    renderAll();
+    // Keep focus where the user is. If the activated button was removed, move
+    // to the next logical control instead of dropping focus to <body>.
+    if (fromButton && !document.body.contains(fromButton)) {
+      ($('inflight').querySelector('button') || $('deliver-all')).focus();
+    } else if (restore && document.body.contains(restore)) {
+      restore.focus();
+    }
+    if (msgs.length) announce(msgs.join(' '));
+  }
+
+  // ── Wiring ──────────────────────────────────────────────────────────────
+
+  SEGMENTS.forEach(function (s, i) {
+    var o = el('option', null, s.label + (s.refs.length ? ' (refs: ' + s.refs.join(', ') + ')' : ''));
+    o.value = String(i);
+    $('segment-sel').appendChild(o);
+  });
+  $('segment-sel').addEventListener('change', function () {
+    // Advisory only: re-render labels, never change the selected topic or focus.
+    renderAll();
+    var rec = recommended();
+    var names = rec.map(function (id) { var t = reduce().byId[id]; return t ? t.title : id; });
+    announce(names.length ? 'Recommended focus: ' + names.join(', ') + '. Your current topic is unchanged.'
+      : 'No recommended focus for this segment.');
+  });
+
+  $('draft').addEventListener('input', function () {
+    persistComposer();
+    $('composer-msg').textContent = '';
+    renderTopics(reduce());   // refresh the "draft saved" hint; focus stays in the textarea
+  });
+
+  $('cancel-reply').addEventListener('click', function () {
+    replyTo = null;
+    persistComposer();
+    renderComposerReply();
+    $('draft').focus();
+  });
+
+  $('composer').addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    var body = $('draft').value.trim();
+    if (!body) {
+      $('composer-msg').textContent = 'Write something before submitting.';
+      $('draft').focus();
+      return;
+    }
+    var now = Date.now();
+    var content = { topicId: selected, body: body };
+    if (replyTo) content.replyTo = replyTo;
+    entries.push(nextEntry(LOCAL, 'contribution', content, now));
+    var state = reduce();
+    outbox.push({ body: body, topicTitle: state.byId[selected].title, sent: now, expected: now + delayMs() });
+    $('draft').value = '';
+    replyTo = null;
+    persistComposer();
+    renderAll();
+    $('composer-msg').textContent = 'Submitted. Expected at Mars Hab-01 ' + utc(now + delayMs()) + '.';
+    $('draft').focus();
+  });
+
+  $('toggle-status').addEventListener('click', function () {
+    var t = reduce().byId[selected];
+    var status = t.status === 'closed' ? 'open' : 'closed';
+    entries.push(nextEntry(LOCAL, 'topic_update', { topicId: selected, version: t.version + 1, status: status }, Date.now()));
+    renderAll();
+    announce('Topic ' + t.title + (status === 'closed' ? ' closed. It stays readable and open for drafts and submissions.' : ' reopened.'));
+    $('toggle-status').focus();
+  });
+
+  $('new-topic-form').addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    var title = $('new-topic-title').value.trim();
+    if (!title) {
+      $('new-topic-msg').textContent = 'Enter a title first.';
+      $('new-topic-title').focus();
+      return;
+    }
+    createTopic(title);
+    $('new-topic-title').value = '';
+    renderAll();
+    $('new-topic-msg').textContent = 'Topic "' + title + '" created.';
+    $('new-topic-title').focus();
+  });
+
+  $('remote-topic').addEventListener('change', function () { renderRemoteForm(reduce()); });
+
+  $('remote-form').addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    var body = $('remote-body').value.trim();
+    if (!body) { $('remote-msg').textContent = 'Write the Mars message first.'; $('remote-body').focus(); return; }
+    var state = reduce();
+    var topicId = $('remote-topic').value;
+    var content = { topicId: topicId, body: body };
+    if ($('remote-reply').value) content.replyTo = $('remote-reply').value;
+    var now = Date.now();
+    var entry = nextEntry(REMOTE, 'contribution', content, now);
+    inflight.push({ entry: entry, expected: now + delayMs(), topicTitle: state.byId[topicId].title });
+    $('remote-body').value = '';
+    renderAll();
+    $('remote-msg').textContent = 'Sent from Mars. Expected at Earth HQ ' + utc(now + delayMs()) + '.';
+    $('remote-body').focus();
+  });
+
+  $('deliver-all').addEventListener('click', function () {
+    if (!inflight.length) { announce('Nothing in flight.'); return; }
+    deliver(inflight.slice(), null);
+  });
+
+  // ── Seed ────────────────────────────────────────────────────────────────
+
+  createTopic('Water recycler', 'T-water');
+  createTopic('EVA schedule', 'T-eva');
+  createTopic('Science priorities', 'T-science');
+  var t0 = Date.now() - 20 * 60000;
+  entries.push(nextEntry(REMOTE, 'contribution', { topicId: 'T-water', body: 'Filter pressure dropped 8% overnight. Swapping the cartridge at 14:00 local.' }, t0));
+  selectTopic('T-water', false);
+})();
+</script>
+</body>
+</html>
