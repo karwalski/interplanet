@@ -79,4 +79,4 @@ All functions are in the `Interplanet_time` module:
 
 ## Version
 
-1.0.0
+1.0.0 (`Interplanet_time.version`, declared in `lib/constants.ml`)

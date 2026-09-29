@@ -2,6 +2,11 @@
    Story 18.18 — OCaml planet-time library
    Mirrors the planet-time.js / C / Python APIs. *)
 
+(* ── Version ─────────────────────────────────────────────────────────────── *)
+
+(** Library version (semver). *)
+let version = Constants.version
+
 (* ── Re-exported types ───────────────────────────────────────────────────── *)
 
 type planet_time = Time_calc.planet_time = {
