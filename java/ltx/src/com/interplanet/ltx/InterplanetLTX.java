@@ -137,19 +137,21 @@ public final class InterplanetLTX {
         cfg = upgradeConfig(cfg);
         String date = cfg.start.substring(0, 10).replace("-", "");
 
-        String hostStr = cfg.nodes.isEmpty() ? "HOST"
-            : cfg.nodes.get(0).name().replaceAll("\\s+", "").toUpperCase();
+        // HOSTSTR/NODESTR strip whitespace as JS /\s+/g does (every
+        // Unicode space and line terminator, not just ASCII) and upper-case.
+        String hostName = cfg.nodes.isEmpty() ? null : cfg.nodes.get(0).name();
+        String hostStr = LtxPlans.stripSpaceUpper(hostName == null || hostName.isEmpty() ? "HOST" : hostName);
         if (hostStr.length() > 8) hostStr = hostStr.substring(0, 8);
 
         String nodeStr;
         if (cfg.nodes.size() > 1) {
-            StringBuilder sb = new StringBuilder();
+            List<String> parts = new ArrayList<>();
             for (int i = 1; i < cfg.nodes.size(); i++) {
-                if (sb.length() > 0) sb.append("-");
-                String n = cfg.nodes.get(i).name().replaceAll("\\s+", "").toUpperCase();
-                sb.append(n, 0, Math.min(4, n.length()));
+                String n = LtxPlans.stripSpaceUpper(cfg.nodes.get(i).name());
+                parts.add(n.length() > 4 ? n.substring(0, 4) : n);
             }
-            nodeStr = sb.length() > 16 ? sb.substring(0, 16) : sb.toString();
+            nodeStr = String.join("-", parts);
+            if (nodeStr.length() > 16) nodeStr = nodeStr.substring(0, 16);
         } else {
             nodeStr = "RX";
         }
