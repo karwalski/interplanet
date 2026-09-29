@@ -269,7 +269,11 @@ func quorumCount(plan LtxPlan, opts SessionOptions) int {
 }
 
 // CreateSession creates a session context in DRAFT state. planID is supplied
-// by the caller (MakePlanID) so this module stays pure.
+// by the caller (MakePlanID) so this module stays pure. The typed LtxPlan has
+// no streams, branches, branching or segment stream/branch fields, so it
+// cannot carry the reserved identifiers of §3.5 / §7; for a plan received as
+// JSON use CreateSessionFromJSON, which rejects them as ltx-sdk.js
+// createSession does.
 func CreateSession(plan LtxPlan, planID string, opts SessionOptions) SessionContext {
 	planVersion := plan.PlanVersion
 	if planVersion == 0 {
@@ -292,6 +296,22 @@ func CreateSession(plan LtxPlan, planID string, opts SessionOptions) SessionCont
 		ResumeState:       "",
 		PendingAmendment:  nil,
 	}
+}
+
+// CreateSessionFromJSON is CreateSession for a plan received as JSON (bytes,
+// OrderedObject or map). Like ltx-sdk.js createSession it returns a
+// *ReservedFieldError (Code "reserved_streams" or "reserved_branching") when
+// the plan uses reserved fields (§3.5, §7), before decoding it into LtxPlan.
+func CreateSessionFromJSON(plan interface{}, planID string, opts SessionOptions) (SessionContext, error) {
+	if err := assertNoReservedFields(plan, "createSession"); err != nil {
+		return SessionContext{}, err
+	}
+	data := []byte(JSStringify(plan))
+	var typed LtxPlan
+	if err := json.Unmarshal(data, &typed); err != nil {
+		return SessionContext{}, fmt.Errorf("createSession: %w", err)
+	}
+	return CreateSession(typed, planID, opts), nil
 }
 
 // Ascending-delay fallback ordering over confirmed participants (§5.3).
@@ -684,7 +704,9 @@ func planMapInt(m map[string]interface{}, key string, fallback int) int {
 // CreateAmendment creates a signed amendment of signedPlan with changes
 // applied. The successor is always a v3 plan (LTX-SPECIFICATION.md §4.4);
 // the fields managed here ("v", "planVersion", "prevPlanHash") cannot be
-// overridden via changes.
+// overridden via changes. Returns a *ReservedFieldError (Code
+// "reserved_streams" or "reserved_branching") if the successor would carry
+// reserved fields (§3.5, §7).
 func CreateAmendment(signedPlan SignedPlan, changes map[string]interface{}, privateKeyB64 string) (SignedPlan, error) {
 	prev := toPlanMap(signedPlan.Plan)
 	if prev == nil {
@@ -700,6 +722,9 @@ func CreateAmendment(signedPlan SignedPlan, changes map[string]interface{}, priv
 	successor["v"] = 3
 	successor["planVersion"] = planMapInt(prev, "planVersion", 1) + 1
 	successor["prevPlanHash"] = PlanHash(prev)
+	if err := assertNoReservedFields(successor, "createAmendment"); err != nil {
+		return SignedPlan{}, err
+	}
 	return SignPlan(successor, privateKeyB64)
 }
 
@@ -771,6 +796,7 @@ var entryPrefix = map[string]string{
 	"state_transition":  "STA",
 	"merge_snapshot":    "MRG",
 	"decision":          "DEC",
+	"decision_update":   "DEC",
 }
 
 // CreateEntryOptions holds options for CreateRegisterEntry.
@@ -1049,6 +1075,189 @@ func ReduceActions(entries []RegisterEntry) (map[string]ActionState, []string) {
 		}
 	}
 	return byID, superseded
+}
+
+// DecisionState is the reduced state of one decision (LTX-SPECIFICATION.md
+// §10.3). Optional string fields are empty when absent.
+type DecisionState struct {
+	Did          string
+	Text         string
+	RecordedBy   string
+	Rationale    string
+	OriginWindow string
+	Status       string // RECORDED | RESCINDED
+	Editor       string // nodeId of the last applied decision_update ("" if none)
+	Version      int
+}
+
+var decisionStatuses = map[string]bool{"RECORDED": true, "RESCINDED": true}
+
+// ReduceDecisions reduces the decision register state from log entries
+// (LTX-SPECIFICATION.md §10.3), mirroring ltx-sdk.js reduceDecisions.
+// "decision" entries record a decision (did = entryId, version 1);
+// "decision_update" entries reference content.did and revise text/rationale
+// or rescind it. Conflicts follow §8.2 exactly as for questions and actions:
+// higher object version wins, then the lowest editor nodeId; losers (and
+// orphan updates, and duplicate creates) are returned as superseded. Pure.
+func ReduceDecisions(entries []RegisterEntry) (map[string]DecisionState, []string) {
+	byID := map[string]DecisionState{}
+	winners := map[string]versioned{}
+	superseded := []string{}
+
+	for _, e := range OrderEntries(entries) {
+		switch e.Type {
+		case "decision":
+			did := e.EntryId
+			if _, exists := byID[did]; exists {
+				superseded = append(superseded, e.EntryId)
+				continue
+			}
+			winners[did] = versioned{version: 1, editor: e.NodeId, entryID: e.EntryId}
+			d := DecisionState{Did: did, RecordedBy: e.NodeId, Status: "RECORDED", Version: 1}
+			d.Text, _ = contentStr(e.Content, "text")
+			d.Rationale, _ = contentStr(e.Content, "rationale")
+			d.OriginWindow, _ = contentStr(e.Content, "originWindow")
+			byID[did] = d
+		case "decision_update":
+			did, _ := contentStr(e.Content, "did")
+			d, exists := byID[did]
+			if !exists {
+				superseded = append(superseded, e.EntryId)
+				continue
+			}
+			version := planMapInt(e.Content, "version", d.Version+1)
+			incoming := versioned{version: version, editor: e.NodeId, entryID: e.EntryId}
+			current, hasCurrent := winners[did]
+			if hasCurrent && !winsConflict(incoming, current) {
+				superseded = append(superseded, e.EntryId)
+				continue
+			}
+			if hasCurrent && current.entryID != d.Did {
+				superseded = append(superseded, current.entryID)
+			}
+			winners[did] = incoming
+			if st, _ := contentStr(e.Content, "status"); decisionStatuses[st] {
+				d.Status = st
+			}
+			if t, ok := contentStr(e.Content, "text"); ok {
+				d.Text = t
+			}
+			if r, ok := contentStr(e.Content, "rationale"); ok {
+				d.Rationale = r
+			}
+			d.Editor = e.NodeId
+			d.Version = version
+			byID[did] = d
+		}
+	}
+	return byID, superseded
+}
+
+// ── Merge (LTX-SPECIFICATION.md §8.2, §8.4) ─────────────────────────────────
+
+// RejectedEntry is an entry dropped by MergeLogs, with the verify reason.
+type RejectedEntry struct {
+	Entry  RegisterEntry
+	Reason string
+}
+
+// MergeResult is the MergeLogs result: verified entries in §8.2 order.
+type MergeResult struct {
+	Entries  []RegisterEntry
+	Rejected []RejectedEntry
+}
+
+// MergeLogs deterministically merges two entry logs (§8.2): verify every
+// entry, union de-duplicated by (nodeId, seq), order totally. Symmetric by
+// construction. Mirrors ltx-sdk.js mergeLogs.
+func MergeLogs(entriesA, entriesB []RegisterEntry, keyCache map[string]NIK) MergeResult {
+	all := append(append([]RegisterEntry{}, entriesA...), entriesB...)
+	verified := make([]RegisterEntry, 0, len(all))
+	rejected := []RejectedEntry{}
+	for _, e := range all {
+		v := VerifyRegisterEntry(e, keyCache)
+		if v.Valid {
+			verified = append(verified, e)
+		} else {
+			reason := v.Reason
+			if reason == "" {
+				reason = "invalid"
+			}
+			rejected = append(rejected, RejectedEntry{Entry: e, Reason: reason})
+		}
+	}
+	return MergeResult{Entries: OrderEntries(verified), Rejected: rejected}
+}
+
+func questionStateMap(q QuestionState) map[string]interface{} {
+	m := map[string]interface{}{"qid": q.Qid, "text": q.Text, "submitter": q.Submitter, "status": q.Status, "version": q.Version}
+	for k, v := range map[string]string{"urgency": q.Urgency, "intendedWindow": q.IntendedWindow, "response": q.Response, "responder": q.Responder} {
+		if v != "" {
+			m[k] = v
+		}
+	}
+	return m
+}
+
+func actionStateMap(a ActionState) map[string]interface{} {
+	m := map[string]interface{}{"aid": a.Aid, "description": a.Description, "status": a.Status, "version": a.Version}
+	for k, v := range map[string]string{"owner": a.Owner, "dueTimeUTC": a.DueTimeUTC, "originWindow": a.OriginWindow} {
+		if v != "" {
+			m[k] = v
+		}
+	}
+	return m
+}
+
+func decisionStateMap(d DecisionState) map[string]interface{} {
+	m := map[string]interface{}{"did": d.Did, "text": d.Text, "recordedBy": d.RecordedBy, "status": d.Status, "version": d.Version}
+	for k, v := range map[string]string{"rationale": d.Rationale, "originWindow": d.OriginWindow, "editor": d.Editor} {
+		if v != "" {
+			m[k] = v
+		}
+	}
+	return m
+}
+
+// RunMergeSegment runs the MERGE segment (§8.4): MergeLogs, then a
+// HOST-signed merge_snapshot entry carrying mergedRoot, entryCount,
+// rejectedCount, questionRegister, actionRegister, decisionRegister and the
+// superseded entryIds (questions, then actions, then decisions). Mirrors
+// ltx-sdk.js runMergeSegment. Register states use the JavaScript field names;
+// optional fields are omitted when empty.
+func RunMergeSegment(localEntries, remoteEntries []RegisterEntry, keyCache map[string]NIK, opts CreateEntryOptions) (MergeResult, RegisterEntry, error) {
+	merged := MergeLogs(localEntries, remoteEntries, keyCache)
+	questions, qSup := ReduceQuestions(merged.Entries)
+	actions, aSup := ReduceActions(merged.Entries)
+	decisions, dSup := ReduceDecisions(merged.Entries)
+	qReg := map[string]interface{}{}
+	for k, v := range questions {
+		qReg[k] = questionStateMap(v)
+	}
+	aReg := map[string]interface{}{}
+	for k, v := range actions {
+		aReg[k] = actionStateMap(v)
+	}
+	dReg := map[string]interface{}{}
+	for k, v := range decisions {
+		dReg[k] = decisionStateMap(v)
+	}
+	superseded := []interface{}{}
+	for _, list := range [][]string{qSup, aSup, dSup} {
+		for _, id := range list {
+			superseded = append(superseded, id)
+		}
+	}
+	snapshot, err := CreateRegisterEntry("merge_snapshot", map[string]interface{}{
+		"mergedRoot":       EntriesRoot(merged.Entries),
+		"entryCount":       len(merged.Entries),
+		"rejectedCount":    len(merged.Rejected),
+		"questionRegister": qReg,
+		"actionRegister":   aReg,
+		"decisionRegister": dReg,
+		"superseded":       superseded,
+	}, opts)
+	return merged, snapshot, err
 }
 
 // ── Merkle log root (RFC 9162-style, story 28.5 hash scheme) ─────────────────

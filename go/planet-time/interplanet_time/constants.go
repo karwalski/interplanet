@@ -4,6 +4,11 @@ package interplanet_time
 
 import "math"
 
+// VERSION is the library version. Go modules are versioned by git tag; this
+// constant is the in-code source of truth, as VERSION is in the Go LTX port
+// (go/ltx/ltx.go) and the other planet-time ports.
+const VERSION = "1.0.0"
+
 // Fundamental constants
 const (
 	J2000Ms       = int64(946_728_000_000)    // Date.UTC(2000,0,1,12,0,0) — TT noon

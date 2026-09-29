@@ -35,7 +35,9 @@ fn writeJsonString(alloc: Allocator, buf: *std.ArrayList(u8), s: []const u8) !vo
             '\n' => try buf.appendSlice(alloc, "\\n"),
             '\r' => try buf.appendSlice(alloc, "\\r"),
             '\t' => try buf.appendSlice(alloc, "\\t"),
-            0x00...0x08, 0x0b, 0x0c, 0x0e...0x1f => {
+            0x08 => try buf.appendSlice(alloc, "\\b"),
+            0x0c => try buf.appendSlice(alloc, "\\f"),
+            0x00...0x07, 0x0b, 0x0e...0x1f => {
                 var tmp: [8]u8 = undefined;
                 const esc = std.fmt.bufPrint(&tmp, "\\u{x:0>4}", .{c}) catch unreachable;
                 try buf.appendSlice(alloc, esc);
@@ -61,7 +63,8 @@ fn writeJsonValue(
             const s = std.fmt.bufPrint(&tmp, "{d}", .{n}) catch unreachable;
             try buf.appendSlice(alloc, s);
         },
-        .float, .number_string => return error.FloatUnsupported,
+        .float => |f| try writeJsNumber(alloc, buf, f),
+        .number_string => |ns| try writeJsNumber(alloc, buf, std.fmt.parseFloat(f64, ns) catch return error.InvalidNumber),
         .string => |s| try writeJsonString(alloc, buf, s),
         .array => |arr| {
             try buf.append(alloc, '[');
@@ -83,7 +86,7 @@ fn writeJsonValue(
             if (sorted) {
                 std.sort.pdq([]const u8, keys.items, {}, struct {
                     pub fn lessThan(_: void, a: []const u8, b: []const u8) bool {
-                        return std.mem.lessThan(u8, a, b);
+                        return utf16Less(a, b);
                     }
                 }.lessThan);
             }
@@ -99,8 +102,91 @@ fn writeJsonValue(
     }
 }
 
-/// RFC 8785 canonical JSON of a parsed value: object keys sorted
-/// lexicographically at every level, compact separators, integers only.
+/// Number.prototype.toString (also the RFC 8785 number form).
+fn writeJsNumber(alloc: Allocator, buf: *std.ArrayList(u8), f: f64) !void {
+    if (!std.math.isFinite(f)) return buf.appendSlice(alloc, "null");
+    if (f == 0) return buf.append(alloc, '0');
+    var tmp: [64]u8 = undefined;
+    const e_form = try std.fmt.bufPrint(&tmp, "{e}", .{@abs(f)}); // d[.ddd]e[-]X
+    const e_at = std.mem.indexOfScalar(u8, e_form, 'e').?;
+    const exp = try std.fmt.parseInt(i32, e_form[e_at + 1 ..], 10);
+    var digits_buf: [40]u8 = undefined;
+    var k: usize = 0;
+    for (e_form[0..e_at]) |c| {
+        if (c != '.') {
+            digits_buf[k] = c;
+            k += 1;
+        }
+    }
+    const digits = digits_buf[0..k];
+    const n: i32 = exp + 1;
+    const ki: i32 = @intCast(k);
+    if (f < 0) try buf.append(alloc, '-');
+    if (ki <= n and n <= 21) {
+        try buf.appendSlice(alloc, digits);
+        try buf.appendNTimes(alloc, '0', @intCast(n - ki));
+    } else if (0 < n and n <= 21) {
+        try buf.appendSlice(alloc, digits[0..@intCast(n)]);
+        try buf.append(alloc, '.');
+        try buf.appendSlice(alloc, digits[@intCast(n)..]);
+    } else if (-6 < n and n <= 0) {
+        try buf.appendSlice(alloc, "0.");
+        try buf.appendNTimes(alloc, '0', @intCast(-n));
+        try buf.appendSlice(alloc, digits);
+    } else {
+        try buf.append(alloc, digits[0]);
+        if (k > 1) {
+            try buf.append(alloc, '.');
+            try buf.appendSlice(alloc, digits[1..]);
+        }
+        const e = n - 1;
+        var eb: [16]u8 = undefined;
+        try buf.appendSlice(alloc, try std.fmt.bufPrint(&eb, "e{s}{d}", .{ if (e < 0) "-" else "+", @abs(e) }));
+    }
+}
+
+/// UTF-16 code units of a code point (second unit 0 for the BMP).
+fn utf16Units(cp: u21) [2]u16 {
+    if (cp < 0x10000) return .{ @intCast(cp), 0 };
+    const v = cp - 0x10000;
+    return .{ 0xD800 + @as(u16, @intCast(v >> 10)), 0xDC00 + @as(u16, @intCast(v & 0x3FF)) };
+}
+
+/// Compare two UTF-8 strings by UTF-16 code units, as JavaScript
+/// Array.prototype.sort and RFC 8785 order object keys.
+pub fn utf16Less(a: []const u8, b: []const u8) bool {
+    var ia = (std.unicode.Utf8View.init(a) catch return std.mem.lessThan(u8, a, b)).iterator();
+    var ib = (std.unicode.Utf8View.init(b) catch return std.mem.lessThan(u8, a, b)).iterator();
+    while (true) {
+        const ca = ia.nextCodepoint() orelse return ib.nextCodepoint() != null;
+        const cb = ib.nextCodepoint() orelse return false;
+        if (ca == cb) continue;
+        const ua = utf16Units(ca);
+        const ub = utf16Units(cb);
+        if (ua[0] != ub[0]) return ua[0] < ub[0];
+        return ua[1] < ub[1];
+    }
+}
+
+/// Frozen v2 planId hash: h = imul(31, h) + charCodeAt(i) over the UTF-16
+/// code units of s (so non-ASCII titles hash as in JavaScript).
+pub fn imul31Utf16(s: []const u8) u32 {
+    var h: u32 = 0;
+    var it = (std.unicode.Utf8View.init(s) catch {
+        for (s) |c| h = h *% 31 +% @as(u32, c);
+        return h;
+    }).iterator();
+    while (it.nextCodepoint()) |cp| {
+        const u = utf16Units(cp);
+        h = h *% 31 +% @as(u32, u[0]);
+        if (cp >= 0x10000) h = h *% 31 +% @as(u32, u[1]);
+    }
+    return h;
+}
+
+/// RFC 8785 canonical JSON of a parsed value: object keys sorted by UTF-16
+/// code units at every level (as ltx-sdk.js canonicalJSON), compact
+/// separators, JavaScript number form.
 pub fn canonicalJsonValue(alloc: Allocator, v: std.json.Value) ![]u8 {
     var buf = std.ArrayList(u8){};
     errdefer buf.deinit(alloc);
@@ -266,11 +352,11 @@ pub fn makePlanIdJson(alloc: Allocator, plan: std.json.Value) ![]u8 {
         return std.fmt.allocPrint(alloc, "LTX-{s}-{s}-{s}-v3-{s}", .{ date, host_str, node_str, hex8 });
     }
 
-    // FROZEN v2 path — 32-bit polynomial over the insertion-order JSON.
+    // FROZEN v2 path: 32-bit polynomial over the UTF-16 code units of the
+    // insertion-order JSON (Math.imul / charCodeAt in ltx-sdk.js).
     const raw = try stringifyValue(alloc, plan);
     defer alloc.free(raw);
-    var h: u32 = 0;
-    for (raw) |c| h = h *% 31 +% @as(u32, c);
+    const h = imul31Utf16(raw);
     return std.fmt.allocPrint(alloc, "LTX-{s}-{s}-{s}-v2-{x:0>8}", .{ date, host_str, node_str, h });
 }
 
@@ -705,8 +791,11 @@ pub fn lockTimeoutMsJson(plan: std.json.Value) i64 {
 
 /// Create a session context in DRAFT state. plan_id is supplied by the
 /// caller (makePlanIdJson) so this module stays pure. The plan value must
-/// outlive the context.
+/// outlive the context. Like ltx-sdk.js createSession, a plan that uses
+/// reserved fields (§3.5, §7) is refused with error.ReservedStreams or
+/// error.ReservedBranching.
 pub fn createSession(alloc: Allocator, plan: std.json.Value, plan_id: []const u8, quorum: QuorumOpt) !SessionCtx {
+    try assertNoReservedFields(plan);
     var ctx = SessionCtx{
         .alloc = alloc,
         .state = .draft,
@@ -1501,4 +1590,646 @@ pub fn verifyPlanCoseJson(
         }
     }
     return .{ .ok = true, .reason = "ok" };
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// Parity with ltx-sdk.js (issue #27): validatePlan + reserved fields,
+// buildDelayMatrix via pairDelay, decision register, merge snapshot.
+// ════════════════════════════════════════════════════════════════════════
+
+// ── validatePlan (LTX-SPECIFICATION.md §3.5, §4, §7) ──────────────────────
+
+/// One validatePlan finding. code is static; path and message are owned.
+pub const PlanError = struct {
+    code: []const u8,
+    path: []u8,
+    message: []u8,
+};
+
+/// validatePlan result. Call deinit.
+pub const PlanValidation = struct {
+    errors: std.ArrayList(PlanError),
+    alloc: Allocator,
+
+    pub fn valid(self: PlanValidation) bool {
+        return self.errors.items.len == 0;
+    }
+
+    pub fn hasCode(self: PlanValidation, code: []const u8) bool {
+        for (self.errors.items) |e| {
+            if (std.mem.eql(u8, e.code, code)) return true;
+        }
+        return false;
+    }
+
+    pub fn deinit(self: *PlanValidation) void {
+        for (self.errors.items) |e| {
+            self.alloc.free(e.path);
+            self.alloc.free(e.message);
+        }
+        self.errors.deinit(self.alloc);
+    }
+
+    fn add(self: *PlanValidation, code: []const u8, comptime path_fmt: []const u8, path_args: anytype, comptime msg_fmt: []const u8, msg_args: anytype) !void {
+        const path = try std.fmt.allocPrint(self.alloc, path_fmt, path_args);
+        errdefer self.alloc.free(path);
+        const message = try std.fmt.allocPrint(self.alloc, msg_fmt, msg_args);
+        try self.errors.append(self.alloc, .{ .code = code, .path = path, .message = message });
+    }
+};
+
+const PLAN_SEGMENT_TYPES = [_][]const u8{ "PLAN_CONFIRM", "TX", "RX", "CAUCUS", "BUFFER", "MERGE", "SPEAK", "REST", "PAD", "OPEN", "RELAY" };
+const PLAN_MODES = [_][]const u8{ "LTX", "LTX-LIVE", "LTX-RELAY", "LTX-ASYNC" };
+const V3_ONLY_FIELDS = [_][]const u8{ "delays", "planVersion", "prevPlanHash", "questions", "actions", "streams" };
+const NODE_ROLES = [_][]const u8{ "HOST", "PARTICIPANT", "OBSERVER" };
+
+fn inList(list: []const []const u8, v: ?std.json.Value) bool {
+    const val = v orelse return false;
+    const str = switch (val) {
+        .string => |x| x,
+        else => return false,
+    };
+    for (list) |item| {
+        if (std.mem.eql(u8, item, str)) return true;
+    }
+    return false;
+}
+
+/// typeof v === 'number' → its value.
+fn jsNumberOf(v: ?std.json.Value) ?f64 {
+    const val = v orelse return null;
+    return switch (val) {
+        .integer => |n| @floatFromInt(n),
+        .float => |f| f,
+        .number_string => |ns| std.fmt.parseFloat(f64, ns) catch null,
+        else => null,
+    };
+}
+
+/// Number.isInteger(v) → its value.
+fn jsIntegerOf(v: ?std.json.Value) ?f64 {
+    const f = jsNumberOf(v) orelse return null;
+    if (!std.math.isFinite(f) or @floor(f) != f) return null;
+    return f;
+}
+
+fn isJsObject(v: std.json.Value) bool {
+    return switch (v) {
+        .object, .array => true,
+        else => false,
+    };
+}
+
+fn has(v: std.json.Value, key: []const u8) bool {
+    return objGet(v, key) != null;
+}
+
+/// First reserved-field violation code ("reserved_streams" or
+/// "reserved_branching"), in the order validatePlan reports them; null if none.
+pub fn reservedFieldCode(plan: std.json.Value) ?[]const u8 {
+    if (plan != .object) return null;
+    if (objGet(plan, "streams")) |st| {
+        const ok = switch (st) {
+            .array => |a| a.items.len == 0,
+            else => false,
+        };
+        if (!ok) return "reserved_streams";
+    }
+    if (has(plan, "branches") or has(plan, "branching")) return "reserved_branching";
+    if (objArr(plan, "segments")) |segs| {
+        for (segs) |sg| {
+            if (sg != .object) continue;
+            if (has(sg, "stream")) return "reserved_streams";
+            if (has(sg, "branch")) return "reserved_branching";
+        }
+    }
+    return null;
+}
+
+/// error.ReservedStreams / error.ReservedBranching when plan uses reserved
+/// stream or branching fields (§3.5, §7).
+pub fn assertNoReservedFields(plan: std.json.Value) error{ ReservedStreams, ReservedBranching }!void {
+    const code = reservedFieldCode(plan) orelse return;
+    if (std.mem.eql(u8, code, "reserved_streams")) return error.ReservedStreams;
+    return error.ReservedBranching;
+}
+
+fn addReservedErrors(r: *PlanValidation, plan: std.json.Value) !void {
+    if (plan != .object) return;
+    if (objGet(plan, "streams")) |st| {
+        const ok = switch (st) {
+            .array => |a| a.items.len == 0,
+            else => false,
+        };
+        if (!ok) try r.add("reserved_streams", "streams", .{}, "streams[] is reserved (§3.5) and MUST be absent or empty", .{});
+    }
+    for ([_][]const u8{ "branches", "branching" }) |f| {
+        if (has(plan, f)) try r.add("reserved_branching", "{s}", .{f}, "{s} is reserved for branching (§7, not yet implemented) and MUST be absent", .{f});
+    }
+    if (objArr(plan, "segments")) |segs| {
+        for (segs, 0..) |sg, i| {
+            if (sg != .object) continue;
+            if (has(sg, "stream")) try r.add("reserved_streams", "segments[{d}].stream", .{i}, "segment stream is reserved (§3.5) and MUST be absent", .{});
+            if (has(sg, "branch")) try r.add("reserved_branching", "segments[{d}].branch", .{i}, "segment branch is reserved for branching (§7) and MUST be absent", .{});
+        }
+    }
+}
+
+fn containsStr(list: []const []const u8, s: []const u8) bool {
+    for (list) |x| {
+        if (std.mem.eql(u8, x, s)) return true;
+    }
+    return false;
+}
+
+/// Validate a v2 or v3 wire plan against spec/ltx-schema.json (§4) and the
+/// reserved-field rules (§3.5 streams, §7 branching), mirroring ltx-sdk.js
+/// validatePlan. Error codes: not_an_object, invalid_version, missing_field,
+/// invalid_field, invalid_quantum, invalid_mode, invalid_nodes, invalid_host,
+/// duplicate_node_id, invalid_segment, unknown_speaker, v3_field_in_v2,
+/// invalid_delays, reserved_streams, reserved_branching. Caller deinits.
+pub fn validatePlanJson(alloc: Allocator, plan: std.json.Value) !PlanValidation {
+    var r = PlanValidation{ .errors = std.ArrayList(PlanError){}, .alloc = alloc };
+    errdefer r.deinit();
+    if (plan != .object) {
+        try r.add("not_an_object", "", .{}, "plan must be an object", .{});
+        return r;
+    }
+    const v = jsNumberOf(objGet(plan, "v"));
+    const is_v2 = v != null and v.? == 2;
+    const is_v3 = v != null and v.? == 3;
+    if (!is_v2 and !is_v3) try r.add("invalid_version", "v", .{}, "v must be 2 or 3", .{});
+    for ([_][]const u8{ "title", "start", "quantum", "mode", "nodes", "segments" }) |f| {
+        if (!has(plan, f)) try r.add("missing_field", "{s}", .{f}, "{s} is required", .{f});
+    }
+    if (objGet(plan, "title")) |t| {
+        if (t != .string) try r.add("invalid_field", "title", .{}, "title must be a string", .{});
+    }
+    if (objGet(plan, "start")) |st| {
+        const ok = switch (st) {
+            .string => |x| isIsoTimestamp(x),
+            else => false,
+        };
+        if (!ok) try r.add("invalid_field", "start", .{}, "start must be an ISO 8601 UTC timestamp", .{});
+    }
+    if (has(plan, "quantum")) {
+        const q = jsIntegerOf(objGet(plan, "quantum"));
+        if (q == null or q.? < 1 or q.? > 60) try r.add("invalid_quantum", "quantum", .{}, "quantum must be an integer 1..60 minutes (§3.2)", .{});
+    }
+    if (objGet(plan, "mode")) |m| {
+        if (!inList(&PLAN_MODES, m)) try r.add("invalid_mode", "mode", .{}, "mode must be one of LTX, LTX-LIVE, LTX-RELAY, LTX-ASYNC", .{});
+    }
+
+    var ids = std.ArrayList([]const u8){};
+    defer ids.deinit(alloc);
+    if (objGet(plan, "nodes")) |nv| {
+        const nodes: []std.json.Value = switch (nv) {
+            .array => |a| a.items,
+            else => &[_]std.json.Value{},
+        };
+        if (nodes.len == 0) {
+            try r.add("invalid_nodes", "nodes", .{}, "nodes must be a non-empty array", .{});
+        } else {
+            var hosts: usize = 0;
+            for (nodes, 0..) |n, i| {
+                const id = objStr(n, "id");
+                const delay = jsNumberOf(objGet(n, "delay"));
+                const ok = n == .object and id != null and id.?.len > 0 and
+                    std.mem.indexOfScalar(u8, id.?, '|') == null and objStr(n, "name") != null and
+                    inList(&NODE_ROLES, objGet(n, "role")) and delay != null and delay.? >= 0;
+                if (!ok) {
+                    try r.add("invalid_nodes", "nodes[{d}]", .{i}, "node needs id (no \"|\"), name, role HOST|PARTICIPANT|OBSERVER, delay >= 0", .{});
+                    continue;
+                }
+                if (containsStr(ids.items, id.?)) try r.add("duplicate_node_id", "nodes[{d}].id", .{i}, "duplicate node id {s}", .{id.?});
+                try ids.append(alloc, id.?);
+                if (std.mem.eql(u8, objStr(n, "role").?, "HOST")) hosts += 1;
+            }
+            const h = nodes[0];
+            const h_delay = jsNumberOf(objGet(h, "delay"));
+            const h_ok = h == .object and std.mem.eql(u8, objStr(h, "role") orelse "", "HOST") and h_delay != null and h_delay.? == 0;
+            if (hosts != 1 or !h_ok) try r.add("invalid_host", "nodes[0]", .{}, "exactly one HOST, first in nodes[], with delay 0 (§3.1)", .{});
+        }
+    }
+
+    if (objGet(plan, "segments")) |sv| {
+        switch (sv) {
+            .array => |a| for (a.items, 0..) |sg, i| {
+                const q = jsIntegerOf(objGet(sg, "q"));
+                if (!isJsObject(sg) or !inList(&PLAN_SEGMENT_TYPES, objGet(sg, "type")) or q == null or q.? < 1) {
+                    try r.add("invalid_segment", "segments[{d}]", .{i}, "segment needs a known type and integer q >= 1", .{});
+                    continue;
+                }
+                if (objGet(sg, "speaker")) |sp| {
+                    const known = switch (sp) {
+                        .string => |x| containsStr(ids.items, x),
+                        else => false,
+                    };
+                    if (!known) {
+                        const shown = switch (sp) {
+                            .string => |x| try alloc.dupe(u8, x),
+                            else => try stringifyValue(alloc, sp),
+                        };
+                        defer alloc.free(shown);
+                        try r.add("unknown_speaker", "segments[{d}].speaker", .{i}, "speaker {s} is not a node id", .{shown});
+                    }
+                }
+            },
+            else => try r.add("invalid_segment", "segments", .{}, "segments must be an array", .{}),
+        }
+    }
+
+    if (is_v2) {
+        for (V3_ONLY_FIELDS) |f| {
+            if (has(plan, f)) try r.add("v3_field_in_v2", "{s}", .{f}, "{s} is a v3 field and MUST NOT appear in a v2 plan (§4.3)", .{f});
+        }
+    } else if (is_v3) {
+        if (objGet(plan, "delays")) |d| {
+            switch (d) {
+                .object => |obj| for (obj.keys(), obj.values()) |k, val| {
+                    var ok = false;
+                    if (std.mem.indexOfScalar(u8, k, '|')) |bar| {
+                        const a = k[0..bar];
+                        const b = k[bar + 1 ..];
+                        const dv = jsNumberOf(val);
+                        ok = std.mem.indexOfScalar(u8, b, '|') == null and utf16Less(a, b) and
+                            (ids.items.len == 0 or (containsStr(ids.items, a) and containsStr(ids.items, b))) and
+                            dv != null and dv.? >= 0;
+                    }
+                    if (!ok) try r.add("invalid_delays", "delays.{s}", .{k}, "key must be two known node ids joined by \"|\" in sorted order; value >= 0 (§3.7.2)", .{});
+                },
+                else => try r.add("invalid_delays", "delays", .{}, "delays must be an object", .{}),
+            }
+        }
+        if (has(plan, "planVersion")) {
+            const pv = jsIntegerOf(objGet(plan, "planVersion"));
+            if (pv == null or pv.? < 1) try r.add("invalid_field", "planVersion", .{}, "planVersion must be an integer >= 1", .{});
+        }
+        if (objGet(plan, "prevPlanHash")) |ph| {
+            var ok = false;
+            if (ph == .string and ph.string.len == 64) {
+                ok = true;
+                for (ph.string) |c| {
+                    if (!((c >= '0' and c <= '9') or (c >= 'a' and c <= 'f'))) ok = false;
+                }
+            }
+            if (!ok) try r.add("invalid_field", "prevPlanHash", .{}, "prevPlanHash must be 64 lowercase hex characters", .{});
+        }
+        for ([_][]const u8{ "questions", "actions" }) |f| {
+            if (objGet(plan, f)) |x| {
+                if (x != .array) try r.add("invalid_field", "{s}", .{f}, "{s} must be an array", .{f});
+            }
+        }
+    }
+
+    try addReservedErrors(&r, plan);
+    return r;
+}
+
+/// ISO 8601 forms Date.parse accepts for a plan start: YYYY-MM-DD, or
+/// YYYY-MM-DDTHH:MM[:SS[.sss]] followed by Z or ±HH:MM.
+fn isIsoTimestamp(s: []const u8) bool {
+    const digitsAt = struct {
+        fn f(x: []const u8, a: usize, n: usize) bool {
+            if (x.len < a + n) return false;
+            for (x[a .. a + n]) |c| {
+                if (c < '0' or c > '9') return false;
+            }
+            return true;
+        }
+    }.f;
+    if (!digitsAt(s, 0, 4) or s.len < 10 or s[4] != '-' or !digitsAt(s, 5, 2) or s[7] != '-' or !digitsAt(s, 8, 2)) return false;
+    const mo = parseDigitsI64(s[5..7]);
+    const d = parseDigitsI64(s[8..10]);
+    if (mo < 1 or mo > 12 or d < 1 or d > 31) return false;
+    if (s.len == 10) return true;
+    if (s[10] != 'T' or !digitsAt(s, 11, 2) or s.len < 16 or s[13] != ':' or !digitsAt(s, 14, 2)) return false;
+    if (parseDigitsI64(s[11..13]) > 24 or parseDigitsI64(s[14..16]) > 59) return false;
+    var pos: usize = 16;
+    if (pos < s.len and s[pos] == ':') {
+        if (!digitsAt(s, pos + 1, 2) or parseDigitsI64(s[pos + 1 .. pos + 3]) > 59) return false;
+        pos += 3;
+        if (pos < s.len and s[pos] == '.') {
+            pos += 1;
+            const start = pos;
+            while (pos < s.len and s[pos] >= '0' and s[pos] <= '9') pos += 1;
+            if (pos == start) return false;
+        }
+    }
+    if (pos + 1 == s.len and s[pos] == 'Z') return true;
+    if (pos + 6 == s.len and (s[pos] == '+' or s[pos] == '-') and s[pos + 3] == ':' and digitsAt(s, pos + 1, 2) and digitsAt(s, pos + 4, 2)) return true;
+    return false;
+}
+
+// ── buildDelayMatrix via pairDelay (LTX-SPECIFICATION.md §3.7.3) ──────────
+
+/// One ordered node pair of a delay matrix. Strings reference the plan.
+pub const DelayPair = struct {
+    from_id: []const u8,
+    from_name: []const u8,
+    to_id: []const u8,
+    to_name: []const u8,
+    delay_seconds: i64,
+};
+
+/// Delay matrix over all ordered node pairs of a wire plan, mirroring
+/// ltx-sdk.js buildDelayMatrix: every entry is pairDelayJson(plan, from, to),
+/// so a v3 plan.delays entry is authoritative, HOST pairs use the node's
+/// declared delay, and non-HOST pairs the SUM of both HOST-relative delays
+/// (the conservative bound via the HOST vertex, never the max). The matrix is
+/// symmetric. Caller frees the returned slice.
+pub fn buildDelayMatrixJson(alloc: Allocator, plan: std.json.Value) ![]DelayPair {
+    const nodes = objArr(plan, "nodes") orelse &[_]std.json.Value{};
+    var out = std.ArrayList(DelayPair){};
+    errdefer out.deinit(alloc);
+    for (nodes, 0..) |from, i| {
+        for (nodes, 0..) |to, j| {
+            if (i == j) continue;
+            const from_id = objStr(from, "id") orelse "";
+            const to_id = objStr(to, "id") orelse "";
+            try out.append(alloc, .{
+                .from_id = from_id,
+                .from_name = objStr(from, "name") orelse "",
+                .to_id = to_id,
+                .to_name = objStr(to, "name") orelse "",
+                .delay_seconds = try pairDelayJson(alloc, plan, from_id, to_id),
+            });
+        }
+    }
+    return out.toOwnedSlice(alloc);
+}
+
+// ── Decision register (LTX-SPECIFICATION.md §10.3) ────────────────────────
+
+/// entryId prefix per register entry type (LTX-SECURITY.md §9.6).
+pub fn entryPrefix(entry_type: []const u8) ?[]const u8 {
+    const table = [_][2][]const u8{
+        .{ "question", "QST" },        .{ "question_response", "QST" },
+        .{ "action", "ACT" },          .{ "action_update", "ACT" },
+        .{ "amendment", "AMD" },       .{ "state_transition", "STA" },
+        .{ "merge_snapshot", "MRG" },  .{ "decision", "DEC" },
+        .{ "decision_update", "DEC" },
+    };
+    for (table) |row| {
+        if (std.mem.eql(u8, row[0], entry_type)) return row[1];
+    }
+    return null;
+}
+
+/// Reduced state of one decision (§10.3). Strings reference the entries.
+pub const DecisionState = struct {
+    did: []const u8,
+    text: []const u8,
+    recorded_by: []const u8,
+    rationale: ?[]const u8,
+    origin_window: ?[]const u8,
+    status: []const u8, // RECORDED | RESCINDED
+    editor: ?[]const u8,
+    version: i64,
+};
+
+pub const DecisionReduction = struct {
+    by_id: std.StringArrayHashMap(DecisionState),
+    superseded: std.ArrayList([]const u8),
+    alloc: Allocator,
+
+    pub fn deinit(self: *DecisionReduction) void {
+        self.by_id.deinit();
+        self.superseded.deinit(self.alloc);
+    }
+};
+
+/// Reduce decision register state from log entries (§10.3), mirroring
+/// ltx-sdk.js reduceDecisions: `decision` records (did = entryId, version 1),
+/// `decision_update` references content.did and revises text/rationale or
+/// rescinds. §8.2 conflicts: higher object version wins, then the lowest
+/// editor nodeId; losers, orphan updates and duplicate creates are returned
+/// in superseded. Pure.
+pub fn reduceDecisionsJson(alloc: Allocator, entries: []const std.json.Value) !DecisionReduction {
+    const statuses = [_][]const u8{ "RECORDED", "RESCINDED" };
+    var result = DecisionReduction{
+        .by_id = std.StringArrayHashMap(DecisionState).init(alloc),
+        .superseded = std.ArrayList([]const u8){},
+        .alloc = alloc,
+    };
+    errdefer result.deinit();
+    var winners = std.StringArrayHashMap(Versioned).init(alloc);
+    defer winners.deinit();
+
+    const ordered = try orderEntriesJson(alloc, entries);
+    defer alloc.free(ordered);
+
+    for (ordered) |e| {
+        const entry_type = objStr(e, "type") orelse "";
+        const entry_id = objStr(e, "entryId") orelse "";
+        const node_id = objStr(e, "nodeId") orelse "";
+        const content = objGet(e, "content") orelse continue;
+        if (std.mem.eql(u8, entry_type, "decision")) {
+            if (result.by_id.get(entry_id) != null) {
+                try result.superseded.append(alloc, entry_id);
+                continue;
+            }
+            try winners.put(entry_id, .{ .version = 1, .editor = node_id, .entry_id = entry_id });
+            try result.by_id.put(entry_id, .{
+                .did = entry_id,
+                .text = objStr(content, "text") orelse "",
+                .recorded_by = node_id,
+                .rationale = objStr(content, "rationale"),
+                .origin_window = objStr(content, "originWindow"),
+                .status = "RECORDED",
+                .editor = null,
+                .version = 1,
+            });
+        } else if (std.mem.eql(u8, entry_type, "decision_update")) {
+            const did = objStr(content, "did") orelse "";
+            const d = result.by_id.get(did) orelse {
+                try result.superseded.append(alloc, entry_id);
+                continue;
+            };
+            const version = objInt(content, "version") orelse (d.version + 1);
+            const incoming = Versioned{ .version = version, .editor = node_id, .entry_id = entry_id };
+            if (winners.get(did)) |current| {
+                if (!winsConflict(incoming, current)) {
+                    try result.superseded.append(alloc, entry_id);
+                    continue;
+                }
+                if (!std.mem.eql(u8, current.entry_id, d.did)) {
+                    try result.superseded.append(alloc, current.entry_id);
+                }
+            }
+            try winners.put(did, incoming);
+            var updated = d;
+            if (objStr(content, "status")) |st| {
+                for (statuses) |valid| {
+                    if (std.mem.eql(u8, st, valid)) updated.status = st;
+                }
+            }
+            if (objStr(content, "text")) |t| updated.text = t;
+            if (objStr(content, "rationale")) |ra| updated.rationale = ra;
+            updated.editor = node_id;
+            updated.version = version;
+            try result.by_id.put(did, updated);
+        }
+    }
+    return result;
+}
+
+// ── Register entry creation + merge (LTX-SPECIFICATION.md §8.2, §8.4) ─────
+
+/// Options for createRegisterEntryJson / runMergeSegmentJson.
+pub const EntryOpts = struct {
+    session_id: []const u8,
+    node_id: []const u8,
+    seq: i64,
+    timestamp: []const u8,
+    key_pair: Ed25519.KeyPair,
+    /// Explicit entryId; defaults to "<PREFIX>-<nodeId>-<seq>".
+    entry_id: ?[]const u8 = null,
+};
+
+/// Create a signed register entry as a wire-format JSON object (LTX-SECURITY
+/// §9.5): Ed25519 over the canonical JSON of the entry without "sig". All
+/// memory comes from `arena` (use an ArenaAllocator).
+pub fn createRegisterEntryJson(arena: Allocator, entry_type: []const u8, content: std.json.Value, opts: EntryOpts) !std.json.Value {
+    const entry_id = if (opts.entry_id) |id| try arena.dupe(u8, id) else blk: {
+        const prefix = entryPrefix(entry_type) orelse return error.UnknownEntryType;
+        break :blk try std.fmt.allocPrint(arena, "{s}-{s}-{d}", .{ prefix, opts.node_id, opts.seq });
+    };
+    var obj = std.json.ObjectMap.init(arena);
+    try obj.put("entryId", .{ .string = entry_id });
+    try obj.put("sessionId", .{ .string = try arena.dupe(u8, opts.session_id) });
+    try obj.put("nodeId", .{ .string = try arena.dupe(u8, opts.node_id) });
+    try obj.put("seq", .{ .integer = opts.seq });
+    try obj.put("type", .{ .string = try arena.dupe(u8, entry_type) });
+    try obj.put("content", content);
+    try obj.put("timestamp", .{ .string = try arena.dupe(u8, opts.timestamp) });
+    const msg = try canonicalJsonValue(arena, .{ .object = obj });
+    const sig = try opts.key_pair.sign(msg, null);
+    try obj.put("sig", .{ .string = try sec.b64uEnc(arena, &sig.toBytes()) });
+    return .{ .object = obj };
+}
+
+pub const RejectedEntry = struct {
+    entry: std.json.Value,
+    reason: []const u8,
+};
+
+/// mergeLogsJson result: verified entries in §8.2 order, plus rejects.
+pub const MergeLogsResult = struct {
+    entries: []std.json.Value,
+    rejected: []RejectedEntry,
+    alloc: Allocator,
+
+    pub fn deinit(self: *MergeLogsResult) void {
+        self.alloc.free(self.entries);
+        self.alloc.free(self.rejected);
+    }
+};
+
+/// Deterministic merge of two entry logs (§8.2): verify every entry, union
+/// de-duplicated by (nodeId, seq), order totally. Symmetric by construction.
+/// Mirrors ltx-sdk.js mergeLogs. Entries reference the inputs.
+pub fn mergeLogsJson(alloc: Allocator, a: []const std.json.Value, b: []const std.json.Value, cache: []const PubKeyEntry) !MergeLogsResult {
+    var verified = std.ArrayList(std.json.Value){};
+    defer verified.deinit(alloc);
+    var rejected = std.ArrayList(RejectedEntry){};
+    errdefer rejected.deinit(alloc);
+    for ([_][]const std.json.Value{ a, b }) |list| {
+        for (list) |e| {
+            const res = try verifyRegisterEntryJson(alloc, e, cache);
+            if (res.ok) try verified.append(alloc, e) else try rejected.append(alloc, .{ .entry = e, .reason = res.reason });
+        }
+    }
+    const ordered = try orderEntriesJson(alloc, verified.items);
+    return .{ .entries = ordered, .rejected = try rejected.toOwnedSlice(alloc), .alloc = alloc };
+}
+
+/// runMergeSegmentJson result. The snapshot lives in `arena`. Call deinit.
+pub const MergeSegmentResult = struct {
+    merged: MergeLogsResult,
+    snapshot: std.json.Value,
+    arena: std.heap.ArenaAllocator,
+
+    pub fn deinit(self: *MergeSegmentResult) void {
+        self.merged.deinit();
+        self.arena.deinit();
+    }
+};
+
+fn putStr(arena: Allocator, obj: *std.json.ObjectMap, key: []const u8, val: ?[]const u8) !void {
+    if (val) |v| try obj.put(key, .{ .string = try arena.dupe(u8, v) });
+}
+
+/// MERGE segment (§8.4): mergeLogsJson, then a HOST-signed merge_snapshot
+/// entry carrying mergedRoot, entryCount, rejectedCount, questionRegister,
+/// actionRegister, decisionRegister and superseded (questions, then actions,
+/// then decisions). Mirrors ltx-sdk.js runMergeSegment.
+pub fn runMergeSegmentJson(alloc: Allocator, local: []const std.json.Value, remote: []const std.json.Value, cache: []const PubKeyEntry, opts: EntryOpts) !MergeSegmentResult {
+    var merged = try mergeLogsJson(alloc, local, remote, cache);
+    errdefer merged.deinit();
+    var arena_state = std.heap.ArenaAllocator.init(alloc);
+    errdefer arena_state.deinit();
+    const arena = arena_state.allocator();
+
+    var questions = try reduceQuestionsJson(alloc, merged.entries);
+    defer questions.deinit();
+    var actions = try reduceActionsJson(alloc, merged.entries);
+    defer actions.deinit();
+    var decisions = try reduceDecisionsJson(alloc, merged.entries);
+    defer decisions.deinit();
+
+    var q_reg = std.json.ObjectMap.init(arena);
+    for (questions.by_id.keys(), questions.by_id.values()) |k, q| {
+        var o = std.json.ObjectMap.init(arena);
+        try putStr(arena, &o, "qid", q.qid);
+        try putStr(arena, &o, "text", q.text);
+        try putStr(arena, &o, "submitter", q.submitter);
+        try putStr(arena, &o, "urgency", q.urgency);
+        try putStr(arena, &o, "intendedWindow", q.intended_window);
+        try putStr(arena, &o, "status", q.status);
+        try o.put("version", .{ .integer = q.version });
+        try putStr(arena, &o, "response", q.response);
+        try putStr(arena, &o, "responder", q.responder);
+        try q_reg.put(try arena.dupe(u8, k), .{ .object = o });
+    }
+    var a_reg = std.json.ObjectMap.init(arena);
+    for (actions.by_id.keys(), actions.by_id.values()) |k, a| {
+        var o = std.json.ObjectMap.init(arena);
+        try putStr(arena, &o, "aid", a.aid);
+        try putStr(arena, &o, "description", a.description);
+        try putStr(arena, &o, "owner", a.owner);
+        try putStr(arena, &o, "dueTimeUTC", a.due_time_utc);
+        try putStr(arena, &o, "originWindow", a.origin_window);
+        try putStr(arena, &o, "status", a.status);
+        try o.put("version", .{ .integer = a.version });
+        try a_reg.put(try arena.dupe(u8, k), .{ .object = o });
+    }
+    var d_reg = std.json.ObjectMap.init(arena);
+    for (decisions.by_id.keys(), decisions.by_id.values()) |k, d| {
+        var o = std.json.ObjectMap.init(arena);
+        try putStr(arena, &o, "did", d.did);
+        try putStr(arena, &o, "text", d.text);
+        try putStr(arena, &o, "recordedBy", d.recorded_by);
+        try putStr(arena, &o, "rationale", d.rationale);
+        try putStr(arena, &o, "originWindow", d.origin_window);
+        try putStr(arena, &o, "status", d.status);
+        try putStr(arena, &o, "editor", d.editor);
+        try o.put("version", .{ .integer = d.version });
+        try d_reg.put(try arena.dupe(u8, k), .{ .object = o });
+    }
+    var sup = std.json.Array.init(arena);
+    for ([_][]const []const u8{ questions.superseded.items, actions.superseded.items, decisions.superseded.items }) |list| {
+        for (list) |id| try sup.append(.{ .string = try arena.dupe(u8, id) });
+    }
+    const root = try entriesRootJson(arena, merged.entries);
+    var content = std.json.ObjectMap.init(arena);
+    try content.put("mergedRoot", .{ .string = root });
+    try content.put("entryCount", .{ .integer = @intCast(merged.entries.len) });
+    try content.put("rejectedCount", .{ .integer = @intCast(merged.rejected.len) });
+    try content.put("questionRegister", .{ .object = q_reg });
+    try content.put("actionRegister", .{ .object = a_reg });
+    try content.put("decisionRegister", .{ .object = d_reg });
+    try content.put("superseded", .{ .array = sup });
+    const snapshot = try createRegisterEntryJson(arena, "merge_snapshot", .{ .object = content }, opts);
+    return .{ .merged = merged, .snapshot = snapshot, .arena = arena_state };
 }

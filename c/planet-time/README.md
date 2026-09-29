@@ -12,7 +12,7 @@ Includes:
 - **C# / .NET P/Invoke** (`bindings/dotnet/Interplanet.cs`)
 - **Unity MonoBehaviour helpers** (`unity/InterplanetUnity.cs`)
 - **C unit tests** (`tests/test_libinterplanet.c`)
-- **Cross-language fixture harness** (`tests/generate_fixtures.js`)
+- **Cross-language fixture harness** (`tests/generate_fixtures.js`, `tests/fixture_runner.c`)
 
 ---
 
@@ -172,12 +172,20 @@ IsWorkHour:     true
 # Generate reference fixtures from the JS library
 make fixtures         # writes fixtures/reference.json (54 entries)
 
-# Run C unit tests (includes fixture-based validation)
+# Run C unit tests and the fixture runner
 make test
+
+# Run only the fixture runner (tests/fixture_runner.c, no CMake needed)
+make fixture
 ```
 
-`fixtures/reference.json` is auto-generated from `planet-time.js` and should
-**not** be committed — it is re-generated on each build.
+`fixtures/reference.json` is generated from `planet-time.js` and committed:
+it is the shared reference that every port's fixture runner (and the
+Conformance workflow) checks against. `tests/fixture_runner.c` reads it with a
+built-in minimal JSON reader and checks hour, minute, second, day number,
+day in year, year number, period in week, work period and work hour flags,
+time strings, Mars sol in year, sols per year and MTC exactly, light travel
+time within 1 s and heliocentric distance within 0.002 AU.
 
 ---
 
@@ -195,8 +203,9 @@ libinterplanet/
 ├── unity/InterplanetUnity.cs      ← Unity MonoBehaviour helpers
 ├── tests/
 │   ├── test_libinterplanet.c      ← C unit tests (no external deps)
+│   ├── fixture_runner.c           ← reference.json checker (no external deps)
 │   └── generate_fixtures.js       ← Node.js fixture generator
-├── fixtures/reference.json        ← Auto-generated (not committed)
+├── fixtures/reference.json        ← Generated from planet-time.js (committed)
 ├── CMakeLists.txt
 ├── Makefile
 └── README.md

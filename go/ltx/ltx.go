@@ -11,11 +11,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
-	"reflect"
 	"regexp"
-	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -648,13 +648,13 @@ func parseISOMs(iso string) int64 {
 
 // planJSONOrdered is used for controlled JSON key ordering.
 type planJSONOrdered struct {
-	V        int                  `json:"v"`
-	Title    string               `json:"title"`
-	Start    string               `json:"start"`
-	Quantum  int                  `json:"quantum"`
-	Mode     string               `json:"mode"`
-	Nodes    []nodeJSONOrdered    `json:"nodes"`
-	Segments []segJSONOrdered     `json:"segments"`
+	V        int               `json:"v"`
+	Title    string            `json:"title"`
+	Start    string            `json:"start"`
+	Quantum  int               `json:"quantum"`
+	Mode     string            `json:"mode"`
+	Nodes    []nodeJSONOrdered `json:"nodes"`
+	Segments []segJSONOrdered  `json:"segments"`
 }
 
 type nodeJSONOrdered struct {
@@ -708,18 +708,20 @@ func planToJSON(plan LtxPlan) ([]byte, error) {
 	return bytes.TrimRight(buf.Bytes(), "\n"), nil
 }
 
-// planHashHex computes the polynomial hash hex string.
-// Matches Math.imul(31, h) in ltx-sdk.js: uint32 arithmetic.
+// planHashHex computes the frozen v2 polynomial hash hex string.
+// Matches Math.imul(31, h) + charCodeAt(i) in ltx-sdk.js: uint32 arithmetic
+// over the UTF-16 code units of the JSON.stringify form (so non-ASCII titles
+// hash as they do in JavaScript).
 func planHashHex(plan LtxPlan) string {
 	data, err := planToJSON(plan)
 	if err != nil {
 		return "00000000"
 	}
-	var h uint32
-	for _, b := range data {
-		h = h*31 + uint32(b)
+	o, err := ParseOrderedJSON(data)
+	if err != nil {
+		return "00000000"
 	}
-	return fmt.Sprintf("%08x", h)
+	return fmt.Sprintf("%08x", imul31(JSStringify(o)))
 }
 
 // strField reads a string field from a map, trying both the key as-is.
@@ -784,64 +786,18 @@ func httpGet(endpoint string) (string, error) {
 	return string(body), nil
 }
 
-
-
 // ────────────────────────────────────────────────────────────────────────────
 // Security: Epic 29 (stories 29.1, 29.4, 29.5)
 // ────────────────────────────────────────────────────────────────────────────
 
 // CanonicalJSON serialises any Go value to a deterministic JSON string with
-// object keys sorted lexicographically at every nesting level.
-// Arrays are preserved in their original order. Structs and pointers are
-// round-tripped through encoding/json so their tagged fields are sorted too.
+// object keys sorted at every nesting level, byte-identical to ltx-sdk.js
+// canonicalJSON: keys in UTF-16 code-unit order, strings quoted as
+// JSON.stringify does (no HTML escaping), numbers in JavaScript form.
+// Arrays keep their order. Structs and pointers are round-tripped through
+// encoding/json so their tagged fields are included.
 func CanonicalJSON(v interface{}) string {
-	if v == nil {
-		return "null"
-	}
-	rv := reflect.ValueOf(v)
-	if rv.Kind() == reflect.Ptr || rv.Kind() == reflect.Struct {
-		data, err := json.Marshal(v)
-		if err != nil {
-			return "null"
-		}
-		var generic interface{}
-		if err := json.Unmarshal(data, &generic); err != nil {
-			return "null"
-		}
-		return CanonicalJSON(generic)
-	}
-	switch rv.Kind() {
-	case reflect.Map:
-		keys := make([]string, 0, rv.Len())
-		for _, k := range rv.MapKeys() {
-			keys = append(keys, k.String())
-		}
-		sort.Strings(keys)
-		parts := make([]string, len(keys))
-		for i, k := range keys {
-			kb, _ := json.Marshal(k)
-			parts[i] = string(kb) + ":" + CanonicalJSON(rv.MapIndex(reflect.ValueOf(k)).Interface())
-		}
-		return "{" + strings.Join(parts, ",") + "}"
-	case reflect.Slice:
-		if rv.IsNil() {
-			return "null"
-		}
-		items := make([]string, rv.Len())
-		for i := range items {
-			items[i] = CanonicalJSON(rv.Index(i).Interface())
-		}
-		return "[" + strings.Join(items, ",") + "]"
-	case reflect.Array:
-		items := make([]string, rv.Len())
-		for i := range items {
-			items[i] = CanonicalJSON(rv.Index(i).Interface())
-		}
-		return "[" + strings.Join(items, ",") + "]"
-	default:
-		b, _ := json.Marshal(v)
-		return string(b)
-	}
+	return CanonicalJSONOrdered(v)
 }
 
 // ── NIK (Node Identity Key) ───────────────────────────────────────────────
@@ -1034,47 +990,199 @@ func VerifyPlan(sp SignedPlan, keyCache map[string]NIK) VerifyResult {
 
 // ── Sequence Tracker ─────────────────────────────────────────────────────
 
-// SequenceTracker tracks per-nodeId sequence numbers for replay detection.
-type SequenceTracker struct {
-	planId string
-	outSeq map[string]int
-	inSeq  map[string]int
+// SEQ_REORDER_WINDOW is the default reorder window for inbound seqs
+// (LTX-SECURITY.md §11.2): a seq up to this far below the highest seen,
+// never seen before, is accepted as late.
+const SEQ_REORDER_WINDOW = 64
+
+// maxSafeInteger is Number.MAX_SAFE_INTEGER (2^53 - 1).
+const maxSafeInteger = 1<<53 - 1
+
+// SeqStore is the storage adapter a SequenceTracker keeps its counters and
+// missing-seq markers in (mirrors the ltx-sdk.js get/set/delete adapter).
+// Get returns 0 for an absent key. Pass a persistent store to keep the
+// reorder window across restarts.
+type SeqStore interface {
+	Get(key string) int
+	Set(key string, value int)
 }
 
-// SeqCheckResult is returned by CheckSeq.
+// SeqStoreDeleter is an optional SeqStore extension. Without it, cleared
+// markers are set to 0.
+type SeqStoreDeleter interface {
+	Delete(key string)
+}
+
+// MemorySeqStore is the default in-memory SeqStore.
+type MemorySeqStore map[string]int
+
+// Get implements SeqStore.
+func (m MemorySeqStore) Get(key string) int { return m[key] }
+
+// Set implements SeqStore.
+func (m MemorySeqStore) Set(key string, value int) { m[key] = value }
+
+// Delete implements SeqStoreDeleter.
+func (m MemorySeqStore) Delete(key string) { delete(m, key) }
+
+// SequenceTracker tracks per-nodeId sequence numbers for replay detection
+// (mirrors ltx-sdk.js createSequenceTracker). Inbound seqs are checked
+// against a sliding reorder window below the highest seq seen (the
+// high-water mark): seqs skipped by a gap are remembered while inside the
+// window, so a delayed but genuine bundle is accepted and flagged Late,
+// while an exact duplicate of an accepted (nodeId, seq) is rejected as a
+// replay. Seqs below the window are rejected as replays.
+type SequenceTracker struct {
+	planId        string
+	store         SeqStore
+	reorderWindow int
+}
+
+// SeqCheckResult is returned by RecordSeq / CheckSeq.
+//   - Late: seq below the high-water mark, never seen, inside the window
+//   - Reason "replay": exact duplicate, or below the reorder window
+//   - Reason "invalid_seq": seq is not a safe integer
+//   - Reason "missing_seq": bundle has no numeric seq (CheckSeq only)
 type SeqCheckResult struct {
 	Accepted bool
 	Reason   string
 	Gap      bool
 	GapSize  int
+	Late     bool
 }
 
-// CreateSequenceTracker creates a new SequenceTracker for the given planId.
+// SequenceTrackerOptions configures CreateSequenceTrackerWithOptions.
+type SequenceTrackerOptions struct {
+	// Store is the storage adapter; nil means a fresh MemorySeqStore.
+	Store SeqStore
+	// ReorderWindow; nil means SEQ_REORDER_WINDOW. 0 = strictly monotonic.
+	ReorderWindow *int
+}
+
+// CreateSequenceTracker creates a SequenceTracker for planId with an
+// in-memory store and the default reorder window.
 func CreateSequenceTracker(planId string) *SequenceTracker {
-	return &SequenceTracker{
-		planId: planId,
-		outSeq: make(map[string]int),
-		inSeq:  make(map[string]int),
+	st, _ := CreateSequenceTrackerWithOptions(planId, SequenceTrackerOptions{})
+	return st
+}
+
+// CreateSequenceTrackerWithOptions creates a SequenceTracker with a storage
+// adapter and/or reorder window. It returns an error if the window is
+// negative (ltx-sdk.js throws for a non-integer or negative window).
+func CreateSequenceTrackerWithOptions(planId string, opts SequenceTrackerOptions) (*SequenceTracker, error) {
+	window := SEQ_REORDER_WINDOW
+	if opts.ReorderWindow != nil {
+		window = *opts.ReorderWindow
+	}
+	if window < 0 || window > maxSafeInteger {
+		return nil, fmt.Errorf("createSequenceTracker: reorderWindow must be a non-negative integer")
+	}
+	store := opts.Store
+	if store == nil {
+		store = MemorySeqStore{}
+	}
+	return &SequenceTracker{planId: planId, store: store, reorderWindow: window}, nil
+}
+
+func (st *SequenceTracker) prefix() string             { return "ltx_seq_" + st.planId + "_" }
+func (st *SequenceTracker) rxKey(nodeId string) string { return st.prefix() + nodeId + "_rx" }
+func (st *SequenceTracker) missKey(nodeId string, seq int) string {
+	return st.rxKey(nodeId) + "_miss_" + strconv.Itoa(seq)
+}
+func (st *SequenceTracker) clear(key string) {
+	if d, ok := st.store.(SeqStoreDeleter); ok {
+		d.Delete(key)
+	} else {
+		st.store.Set(key, 0)
 	}
 }
 
-func (st *SequenceTracker) nextSeq(nodeId string) int {
-	st.outSeq[nodeId]++
-	return st.outSeq[nodeId]
+// ReorderWindow returns the tracker's reorder window.
+func (st *SequenceTracker) ReorderWindow() int { return st.reorderWindow }
+
+// NextSeq returns the next outbound sequence number for nodeId.
+func (st *SequenceTracker) NextSeq(nodeId string) int {
+	key := st.prefix() + nodeId
+	next := st.store.Get(key) + 1
+	st.store.Set(key, next)
+	return next
 }
 
-func (st *SequenceTracker) recordSeq(nodeId string, seq int) SeqCheckResult {
-	last := st.inSeq[nodeId]
+func (st *SequenceTracker) nextSeq(nodeId string) int { return st.NextSeq(nodeId) }
+
+// RecordSeq records an inbound sequence number from nodeId.
+func (st *SequenceTracker) RecordSeq(nodeId string, seq int) SeqCheckResult {
+	if seq > maxSafeInteger || seq < -maxSafeInteger {
+		return SeqCheckResult{Accepted: false, Reason: "invalid_seq"}
+	}
+	key := st.rxKey(nodeId)
+	last := st.store.Get(key)
+	w := st.reorderWindow
+
 	if seq <= last {
-		return SeqCheckResult{Accepted: false, Reason: "replay", Gap: false, GapSize: 0}
+		mk := st.missKey(nodeId, seq)
+		if seq > last-w && st.store.Get(mk) == 1 {
+			st.clear(mk)
+			return SeqCheckResult{Accepted: true, Late: true}
+		}
+		return SeqCheckResult{Accepted: false, Reason: "replay"}
 	}
+
 	gap := seq > last+1
 	gapSize := 0
 	if gap {
 		gapSize = seq - last - 1
 	}
-	st.inSeq[nodeId] = seq
+	// Remember skipped seqs that stay inside the new window (seq - W, seq].
+	for s := maxInt(last+1, seq-w+1); s < seq; s++ {
+		st.store.Set(st.missKey(nodeId, s), 1)
+	}
+	// Forget markers that slide out of the window.
+	for s := maxInt(1, last-w+1); s <= minInt(last, seq-w); s++ {
+		if st.store.Get(st.missKey(nodeId, s)) == 1 {
+			st.clear(st.missKey(nodeId, s))
+		}
+	}
+	st.store.Set(key, seq)
 	return SeqCheckResult{Accepted: true, Gap: gap, GapSize: gapSize}
+}
+
+func (st *SequenceTracker) recordSeq(nodeId string, seq int) SeqCheckResult {
+	return st.RecordSeq(nodeId, seq)
+}
+
+// MissingSeqs lists seqs below the high-water mark still missing inside the
+// reorder window, ascending (candidates for a retransmission request,
+// LTX-SECURITY.md §11.3).
+func (st *SequenceTracker) MissingSeqs(nodeId string) []int {
+	last := st.store.Get(st.rxKey(nodeId))
+	out := []int{}
+	for s := maxInt(1, last-st.reorderWindow+1); s < last; s++ {
+		if st.store.Get(st.missKey(nodeId, s)) == 1 {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// LastSeenSeq returns the inbound high-water mark for nodeId.
+func (st *SequenceTracker) LastSeenSeq(nodeId string) int { return st.store.Get(st.rxKey(nodeId)) }
+
+// CurrentSeq returns the current outbound seq for nodeId.
+func (st *SequenceTracker) CurrentSeq(nodeId string) int { return st.store.Get(st.prefix() + nodeId) }
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // AddSeq stamps a bundle map with the next outbound sequence number.
@@ -1089,7 +1197,9 @@ func AddSeq(bundle map[string]interface{}, tracker *SequenceTracker, nodeId stri
 	return out
 }
 
-// CheckSeq checks an inbound bundle seq field against the tracker.
+// CheckSeq checks an inbound bundle seq field against the tracker. A bundle
+// whose seq is absent or not a number is rejected as "missing_seq"; a
+// non-integer or unsafe number as "invalid_seq" (as in ltx-sdk.js).
 func CheckSeq(bundle map[string]interface{}, tracker *SequenceTracker, senderNodeId string) SeqCheckResult {
 	seqRaw, ok := bundle["seq"]
 	if !ok {
@@ -1099,14 +1209,26 @@ func CheckSeq(bundle map[string]interface{}, tracker *SequenceTracker, senderNod
 	switch v := seqRaw.(type) {
 	case int:
 		seq = v
-	case float64:
-		seq = int(v)
 	case int64:
+		if v > maxSafeInteger || v < -maxSafeInteger {
+			return SeqCheckResult{Accepted: false, Reason: "invalid_seq"}
+		}
 		seq = int(v)
+	case float64:
+		if math.IsNaN(v) || math.IsInf(v, 0) || v != math.Trunc(v) || math.Abs(v) > maxSafeInteger {
+			return SeqCheckResult{Accepted: false, Reason: "invalid_seq"}
+		}
+		seq = int(v)
+	case json.Number:
+		f, err := v.Float64()
+		if err != nil || f != math.Trunc(f) || math.Abs(f) > maxSafeInteger {
+			return SeqCheckResult{Accepted: false, Reason: "invalid_seq"}
+		}
+		seq = int(f)
 	default:
-		return SeqCheckResult{Accepted: false, Reason: "invalid_seq"}
+		return SeqCheckResult{Accepted: false, Reason: "missing_seq"}
 	}
-	return tracker.recordSeq(senderNodeId, seq)
+	return tracker.RecordSeq(senderNodeId, seq)
 }
 
 // ── base64url byte helpers ────────────────────────────────────────────────

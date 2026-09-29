@@ -110,13 +110,18 @@ static int _b64url_decode(const char *in, size_t in_len,
     return (int)o;
 }
 
-/** Append a JSON-escaped string to buf at position *pos. */
+/** Append a string to buf at position *pos, quoted as JSON.stringify does. */
 static void _json_str(char *buf, size_t *pos, size_t max, const char *s) {
     if (*pos + 2 >= max) return;
     buf[(*pos)++] = '"';
-    while (*s && *pos + 2 < max) {
-        if (*s == '"' || *s == '\\') buf[(*pos)++] = '\\';
-        buf[(*pos)++] = *s++;
+    while (*s && *pos + 8 < max) {
+        unsigned char c = (unsigned char)*s++;
+        const char *esc = c == '"' ? "\\\"" : c == '\\' ? "\\\\" : c == '\b' ? "\\b" :
+                          c == '\f' ? "\\f" : c == '\n' ? "\\n" : c == '\r' ? "\\r" :
+                          c == '\t' ? "\\t" : NULL;
+        if (esc) { buf[(*pos)++] = esc[0]; buf[(*pos)++] = esc[1]; }
+        else if (c < 0x20) *pos += (size_t)snprintf(buf + *pos, max - *pos, "\\u%04x", c);
+        else buf[(*pos)++] = (char)c;
     }
     buf[(*pos)++] = '"';
 }
@@ -340,12 +345,11 @@ void itx_make_plan_id(const itx_plan_t *plan, char *buf) {
         node_str[np] = '\0';
     }
 
-    /* Polynomial hash matching Math.imul(31, h) in ltx-sdk.js */
+    /* Polynomial hash matching Math.imul(31, h) + charCodeAt(i) in
+     * ltx-sdk.js: over UTF-16 code units, so non-ASCII titles match JS. */
     char json_buf[ITX_JSON_BUF];
     _plan_to_json(plan, json_buf, sizeof(json_buf));
-    unsigned int h = 0;
-    for (const char *p = json_buf; *p; p++)
-        h = 31u * h + (unsigned char)*p;
+    unsigned int h = itx_imul31_utf16(json_buf);
 
     snprintf(buf, ITX_PLAN_ID_LEN, "LTX-%s-%s-%s-v2-%08x",
              date, host_str, node_str, h);

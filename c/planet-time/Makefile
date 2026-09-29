@@ -2,7 +2,8 @@
 #
 # Targets:
 #   make          → build shared + static libraries + test binary
-#   make test     → run C unit tests
+#   make test     → run C unit tests + reference.json fixture runner
+#   make fixture  → run only the reference.json fixture runner
 #   make fixtures → generate fixtures/reference.json from JS reference library
 #   make all      → fixtures + build + test
 #   make clean    → remove build directory
@@ -17,7 +18,7 @@ LDFLAGS   := -lm
 
 CMAKE     := $(shell command -v cmake 2>/dev/null)
 
-.PHONY: build test fixtures all clean
+.PHONY: build test fixture fixtures all clean
 
 build:
 ifdef CMAKE
@@ -32,7 +33,9 @@ else
 	@ar rcs $(BUILD_DIR)/libinterplanet_s.a $(BUILD_DIR)/libinterplanet.o
 	@$(CC) $(CFLAGS) -o $(BUILD_DIR)/test_libinterplanet \
 	    tests/test_libinterplanet.c src/libinterplanet.c $(LDFLAGS)
-	@echo "Built: $(BUILD_DIR)/test_libinterplanet"
+	@$(CC) $(CFLAGS) -o $(BUILD_DIR)/fixture_runner \
+	    tests/fixture_runner.c src/libinterplanet.c $(LDFLAGS)
+	@echo "Built: $(BUILD_DIR)/test_libinterplanet $(BUILD_DIR)/fixture_runner"
 endif
 
 test: build
@@ -40,7 +43,15 @@ ifdef CMAKE
 	@cd $(BUILD_DIR) && ctest --output-on-failure
 else
 	@$(BUILD_DIR)/test_libinterplanet
+	@$(BUILD_DIR)/fixture_runner fixtures/reference.json
 endif
+
+# Cross-check against fixtures/reference.json (no CMake needed).
+fixture:
+	@mkdir -p $(BUILD_DIR)
+	@$(CC) $(CFLAGS) -o $(BUILD_DIR)/fixture_runner \
+	    tests/fixture_runner.c src/libinterplanet.c $(LDFLAGS)
+	@$(BUILD_DIR)/fixture_runner fixtures/reference.json
 
 fixtures:
 	@$(NODE) tests/generate_fixtures.js

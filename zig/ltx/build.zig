@@ -59,8 +59,26 @@ pub fn build(b: *std.Build) void {
 
     const run_v11_tests = b.addRunArtifact(v11_tests);
 
+    // Parity with ltx-sdk.js (issue #27): golden planIds, validatePlan,
+    // buildDelayMatrix, decision register. Reads ../../spec/golden at runtime,
+    // so it runs with the package root as working directory.
+    const parity_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/parity_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const parity_tests = b.addExecutable(.{
+        .name = "parity_test",
+        .root_module = parity_test_mod,
+    });
+    b.installArtifact(parity_tests);
+
+    const run_parity_tests = b.addRunArtifact(parity_tests);
+    run_parity_tests.setCwd(b.path("."));
+
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_unit_tests.step);
     test_step.dependOn(&run_sec_tests.step);
     test_step.dependOn(&run_v11_tests.step);
+    test_step.dependOn(&run_parity_tests.step);
 }

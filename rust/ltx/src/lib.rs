@@ -2,6 +2,9 @@
 // Story 33.8 -- Rust 1.70+
 
 pub const VERSION: &str = "1.1.0";
+
+mod plan_json;
+pub use plan_json::*;
 /// Default quantum size in minutes (LTX-SPECIFICATION.md §3.2).
 pub const DEFAULT_QUANTUM: i32 = 5;
 pub const DEFAULT_API_BASE: &str = "https://interplanet.live/api/ltx.php";
@@ -459,30 +462,13 @@ fn plan_to_json(plan: &LtxPlan) -> String {
     out.push('}'); out
 }
 
-fn json_quote(s: &str) -> String {
-    let mut out = String::with_capacity(s.len() + 2);
-    out.push('"'  );
-    for c in s.chars() {
-        match c {
-            '"'  => out.push_str("\""),
-            '\\' => out.push_str("\\"),
-            '\n' => out.push_str("\n"),
-            '\r' => out.push_str("\r"),
-            '\t' => out.push_str("\t"),
-            _    => out.push(c),
-        }
-    }
-    out.push('"'  );
-    out
-}
+/// Quote a string as JSON.stringify does (the frozen v2 hash input).
+fn json_quote(s: &str) -> String { js_quote(s) }
 
+/// Frozen v2 hash: Math.imul(31, h) + charCodeAt(i) over the UTF-16 code
+/// units of the JSON.stringify form (so non-ASCII titles hash as in JS).
 fn plan_hash_hex(plan: &LtxPlan) -> String {
-    let json = plan_to_json(plan);
-    let mut h: u32 = 0;
-    for b in json.as_bytes() {
-        h = h.wrapping_mul(31).wrapping_add(*b as u32);
-    }
-    format!("{:08x}", h)
+    format!("{:08x}", imul31(&plan_to_json(plan)))
 }
 
 fn parse_iso_ms(iso: &str) -> i64 {
@@ -835,8 +821,12 @@ impl CjsonVal {
                 format!("[{}]", parts.join(","))
             }
             CjsonVal::Object(m) => {
-                // BTreeMap iterates keys in sorted order
-                let parts: Vec<String> = m.iter()
+                // Keys in UTF-16 code-unit order, as ltx-sdk.js canonicalJSON
+                // (Array.prototype.sort) and RFC 8785 order them. BTreeMap byte
+                // order differs only for astral vs U+E000..U+FFFF characters.
+                let mut members: Vec<(&String, &CjsonVal)> = m.iter().collect();
+                members.sort_by(|a, b| a.0.encode_utf16().cmp(b.0.encode_utf16()));
+                let parts: Vec<String> = members.into_iter()
                     .map(|(k, v)| format!("{}:{}", cjson_quote_str(k), v.serialize()))
                     .collect();
                 format!("{{{}}}", parts.join(","))
@@ -855,6 +845,8 @@ fn cjson_quote_str(s: &str) -> String {
             '\n' => { o.push('\\'); o.push('n'); }
             '\r' => { o.push('\\'); o.push('r'); }
             '\t' => { o.push('\\'); o.push('t'); }
+            '\u{0008}' => { o.push('\\'); o.push('b'); }
+            '\u{000c}' => { o.push('\\'); o.push('f'); }
             c if (c as u32) < 0x20 => { o.push_str(&format!("\\u{:04x}", c as u32)); }
             c    => o.push(c),
         }
@@ -1043,47 +1035,158 @@ pub fn verify_plan(sp: &SignedPlan, key_cache: &HashMap<String, Nik>) -> VerifyR
 
 // ── Sequence Tracker ──────────────────────────────────────────────────────
 
-pub struct SequenceTracker {
-    pub plan_id: String,
-    out_seq:     HashMap<String, i64>,
-    in_seq:      HashMap<String, i64>,
+/// Default reorder window for inbound seqs (LTX-SECURITY.md §11.2): a seq up
+/// to this far below the highest seen, never seen before, is accepted as late.
+pub const SEQ_REORDER_WINDOW: i64 = 64;
+
+/// Number.MAX_SAFE_INTEGER.
+const MAX_SAFE_INTEGER: i64 = (1i64 << 53) - 1;
+
+/// Storage adapter for a [`SequenceTracker`] (mirrors the ltx-sdk.js
+/// get/set/delete adapter). `get` returns 0 for an absent key. The default
+/// `delete` sets the key to 0, as JS does for an adapter without delete.
+pub trait SeqStore {
+    fn get(&self, key: &str) -> i64;
+    fn set(&mut self, key: &str, value: i64);
+    fn delete(&mut self, key: &str) { self.set(key, 0); }
 }
 
+/// Default in-memory store.
+#[derive(Debug, Default, Clone)]
+pub struct MemorySeqStore(pub HashMap<String, i64>);
+
+impl SeqStore for MemorySeqStore {
+    fn get(&self, key: &str) -> i64 { *self.0.get(key).unwrap_or(&0) }
+    fn set(&mut self, key: &str, value: i64) { self.0.insert(key.to_string(), value); }
+    fn delete(&mut self, key: &str) { self.0.remove(key); }
+}
+
+/// A shared store (for persistence across tracker instances); it has no
+/// delete, so cleared markers are set to 0.
+impl SeqStore for std::rc::Rc<std::cell::RefCell<HashMap<String, i64>>> {
+    fn get(&self, key: &str) -> i64 { *self.borrow().get(key).unwrap_or(&0) }
+    fn set(&mut self, key: &str, value: i64) { self.borrow_mut().insert(key.to_string(), value); }
+}
+
+/// Per-node sequence tracker (mirrors ltx-sdk.js createSequenceTracker).
+/// Inbound seqs are checked against a sliding reorder window below the
+/// highest seq seen: seqs skipped by a gap are remembered while inside the
+/// window, so a delayed but genuine bundle is accepted with `late: true`,
+/// while an exact duplicate of an accepted (node, seq) is rejected as
+/// "replay". Seqs below the window are rejected as "replay".
+pub struct SequenceTracker {
+    pub plan_id: String,
+    store: Box<dyn SeqStore>,
+    reorder_window: i64,
+}
+
+/// Result of record_seq / check_seq.
+/// - `late`: seq below the high-water mark, never seen, inside the window
+/// - reason "replay": exact duplicate, or below the reorder window
+/// - reason "invalid_seq": seq is not a safe integer
+/// - reason "missing_seq": bundle has no integer seq (check_seq only)
 #[derive(Debug, Clone)]
 pub struct SeqCheckResult {
     pub accepted: bool,
     pub reason:   String,
     pub gap:      bool,
     pub gap_size: i64,
+    pub late:     bool,
 }
 
-/// Create a new SequenceTracker for the given plan_id.
+impl SeqCheckResult {
+    fn reject(reason: &str) -> Self {
+        SeqCheckResult { accepted: false, reason: reason.into(), gap: false, gap_size: 0, late: false }
+    }
+}
+
+/// Create a new SequenceTracker for the given plan_id (in-memory store,
+/// default reorder window).
 pub fn create_sequence_tracker(plan_id: &str) -> SequenceTracker {
     SequenceTracker {
         plan_id: plan_id.into(),
-        out_seq: HashMap::new(),
-        in_seq:  HashMap::new(),
+        store: Box::new(MemorySeqStore::default()),
+        reorder_window: SEQ_REORDER_WINDOW,
     }
 }
 
+/// Create a SequenceTracker with a storage adapter and reorder window
+/// (None = SEQ_REORDER_WINDOW; 0 = strictly monotonic). Errors for a negative
+/// or unsafe window, as ltx-sdk.js throws.
+pub fn create_sequence_tracker_with(plan_id: &str, store: Box<dyn SeqStore>, reorder_window: Option<i64>)
+    -> Result<SequenceTracker, String>
+{
+    let w = reorder_window.unwrap_or(SEQ_REORDER_WINDOW);
+    if !(0..=MAX_SAFE_INTEGER).contains(&w) {
+        return Err("createSequenceTracker: reorderWindow must be a non-negative integer".into());
+    }
+    Ok(SequenceTracker { plan_id: plan_id.into(), store, reorder_window: w })
+}
+
 impl SequenceTracker {
+    fn prefix(&self) -> String { format!("ltx_seq_{}_", self.plan_id) }
+    fn rx_key(&self, node_id: &str) -> String { format!("{}{}_rx", self.prefix(), node_id) }
+    fn miss_key(&self, node_id: &str, seq: i64) -> String { format!("{}_miss_{}", self.rx_key(node_id), seq) }
+
+    /// The tracker's reorder window.
+    pub fn reorder_window(&self) -> i64 { self.reorder_window }
+
     /// Return and increment the outbound sequence number for node_id.
     pub fn next_seq(&mut self, node_id: &str) -> i64 {
-        let cur = self.out_seq.entry(node_id.to_string()).or_insert(0);
-        *cur += 1;
-        *cur
+        let key = format!("{}{}", self.prefix(), node_id);
+        let next = self.store.get(&key) + 1;
+        self.store.set(&key, next);
+        next
     }
+
     /// Record an inbound sequence number; return acceptance result.
     pub fn record_seq(&mut self, node_id: &str, seq: i64) -> SeqCheckResult {
-        let last = *self.in_seq.get(node_id).unwrap_or(&0);
+        if !(-MAX_SAFE_INTEGER..=MAX_SAFE_INTEGER).contains(&seq) {
+            return SeqCheckResult::reject("invalid_seq");
+        }
+        let key = self.rx_key(node_id);
+        let last = self.store.get(&key);
+        let w = self.reorder_window;
         if seq <= last {
-            return SeqCheckResult { accepted: false, reason: "replay".into(), gap: false, gap_size: 0 };
+            let mk = self.miss_key(node_id, seq);
+            if seq > last - w && self.store.get(&mk) == 1 {
+                self.store.delete(&mk);
+                return SeqCheckResult { accepted: true, reason: String::new(), gap: false, gap_size: 0, late: true };
+            }
+            return SeqCheckResult::reject("replay");
         }
         let gap = seq > last + 1;
-        let gs = if gap { seq - last - 1 } else { 0 };
-        self.in_seq.insert(node_id.to_string(), seq);
-        SeqCheckResult { accepted: true, reason: String::new(), gap, gap_size: gs }
+        let gap_size = if gap { seq - last - 1 } else { 0 };
+        // Remember skipped seqs that stay inside the new window (seq - W, seq].
+        for s in (last + 1).max(seq - w + 1)..seq {
+            let mk = self.miss_key(node_id, s);
+            self.store.set(&mk, 1);
+        }
+        // Forget markers that slide out of the window.
+        let mut s = 1.max(last - w + 1);
+        while s <= last.min(seq - w) {
+            let mk = self.miss_key(node_id, s);
+            if self.store.get(&mk) == 1 { self.store.delete(&mk); }
+            s += 1;
+        }
+        self.store.set(&key, seq);
+        SeqCheckResult { accepted: true, reason: String::new(), gap, gap_size, late: false }
     }
+
+    /// Seqs below the high-water mark still missing inside the reorder
+    /// window, ascending (retransmission candidates, LTX-SECURITY.md §11.3).
+    pub fn missing_seqs(&self, node_id: &str) -> Vec<i64> {
+        let last = self.store.get(&self.rx_key(node_id));
+        (1.max(last - self.reorder_window + 1)..last)
+            .filter(|s| self.store.get(&self.miss_key(node_id, *s)) == 1)
+            .collect()
+    }
+
+    /// Inbound high-water mark for node_id.
+    pub fn last_seen_seq(&self, node_id: &str) -> i64 { self.store.get(&self.rx_key(node_id)) }
+
+    /// Current outbound seq for node_id.
+    pub fn current_seq(&self, node_id: &str) -> i64 { self.store.get(&format!("{}{}", self.prefix(), node_id)) }
 }
 
 /// Stamp a bundle with the next outbound sequence number for node_id.
@@ -1102,9 +1205,9 @@ pub fn check_seq(bundle: &CjsonVal, tracker: &mut SequenceTracker, sender: &str)
     let seq = match bundle {
         CjsonVal::Object(m) => match m.get("seq") {
             Some(CjsonVal::Int(n)) => *n,
-            _ => return SeqCheckResult { accepted: false, reason: "missing_seq".into(), gap: false, gap_size: 0 },
+            _ => return SeqCheckResult::reject("missing_seq"),
         },
-        _ => return SeqCheckResult { accepted: false, reason: "missing_seq".into(), gap: false, gap_size: 0 },
+        _ => return SeqCheckResult::reject("missing_seq"),
     };
     tracker.record_seq(sender, seq)
 }
@@ -1612,8 +1715,26 @@ fn quorum_count(plan: &LtxPlan, quorum: QuorumOption) -> usize {
     }
 }
 
+/// Create a session context from a plan received as JSON text. Like
+/// ltx-sdk.js createSession it rejects a plan that uses reserved stream or
+/// branching fields (§3.5, §7) with a [`ReservedFieldError`] before decoding
+/// it into `LtxPlan` (which cannot carry those fields).
+pub fn create_session_from_json(plan_json: &str, plan_id: &str, quorum: QuorumOption)
+    -> Result<SessionContext, ReservedFieldError>
+{
+    let invalid = |m: String| ReservedFieldError { code: "not_an_object".into(), errors: Vec::new(), message: m };
+    let value = parse_ordered_json(plan_json).map_err(|e| invalid(format!("createSession: {}", e)))?;
+    assert_no_reserved_fields(&value, "createSession")?;
+    let typed = cjson_parse(&js_stringify(&value)).and_then(|v| plan_from_cjson(&v))
+        .map_err(|e| invalid(format!("createSession: {}", e)))?;
+    Ok(create_session(&typed, plan_id, quorum))
+}
+
 /// Create a session context in DRAFT state. plan_id is supplied by the
-/// caller (make_plan_id) so this module stays pure.
+/// caller (make_plan_id) so this module stays pure. The typed `LtxPlan` has
+/// no streams / branches / branching / segment stream or branch fields, so it
+/// cannot carry the reserved identifiers of §3.5 and §7; use
+/// [`create_session_from_json`] for a plan received as JSON.
 pub fn create_session(plan: &LtxPlan, plan_id: &str, quorum: QuorumOption) -> SessionContext {
     SessionContext {
         state: SessionPhase::Draft,
@@ -1940,6 +2061,9 @@ pub fn plan_hash(plan: &CjsonVal) -> String {
 /// Create a signed amendment of `signed_plan` with `changes` applied.
 /// The successor is always a v3 plan (LTX-SPECIFICATION.md §4.4); fields
 /// managed here ("v", "planVersion", "prevPlanHash") cannot be overridden.
+/// Fails if the successor would carry reserved fields (§3.5, §7); the error
+/// string then starts with the code, "reserved_streams: createAmendment: ..."
+/// or "reserved_branching: createAmendment: ...".
 pub fn create_amendment(signed_plan: &SignedPlan, changes: &BTreeMap<String, CjsonVal>,
                         private_key_b64: &str) -> Result<SignedPlan, String>
 {
@@ -1951,6 +2075,8 @@ pub fn create_amendment(signed_plan: &SignedPlan, changes: &BTreeMap<String, Cjs
     successor.insert("v".into(), CjsonVal::Int(3));
     successor.insert("planVersion".into(), CjsonVal::Int(prev_version + 1));
     successor.insert("prevPlanHash".into(), CjsonVal::Str(plan_hash(&signed_plan.plan)));
+    assert_no_reserved_fields(&json_from_cjson_map(&successor), "createAmendment")
+        .map_err(|e| format!("{}: {}", e.code, e.message))?;
     sign_plan(CjsonVal::Object(successor), private_key_b64)
 }
 
@@ -2015,7 +2141,7 @@ fn entry_prefix(entry_type: &str) -> Option<&'static str> {
         "amendment"                      => Some("AMD"),
         "state_transition"               => Some("STA"),
         "merge_snapshot"                 => Some("MRG"),
-        "decision"                       => Some("DEC"),
+        "decision" | "decision_update"   => Some("DEC"),
         _ => None,
     }
 }
@@ -2306,6 +2432,185 @@ pub fn reduce_actions(entries: &[RegisterEntry])
         }
     }
     (by_id, superseded)
+}
+
+/// Reduced state of one decision (LTX-SPECIFICATION.md §10.3).
+#[derive(Debug, Clone, PartialEq)]
+pub struct DecisionState {
+    pub did: String,
+    pub text: String,
+    pub recorded_by: String,
+    pub rationale: Option<String>,
+    pub origin_window: Option<String>,
+    pub status: String, // RECORDED | RESCINDED
+    /// node_id of the last applied decision_update.
+    pub editor: Option<String>,
+    pub version: i64,
+}
+
+/// Reduce decision register state from log entries (§10.3), mirroring
+/// ltx-sdk.js reduceDecisions. `decision` entries record a decision
+/// (did = entry_id, version 1); `decision_update` entries reference
+/// content.did and revise text/rationale or rescind it. Conflicts follow §8.2
+/// exactly as for questions and actions: higher object version wins, then
+/// the lowest editor node_id; losers (and orphan updates, and duplicate
+/// creates) are returned as superseded. Pure.
+pub fn reduce_decisions(entries: &[RegisterEntry])
+    -> (BTreeMap<String, DecisionState>, Vec<String>)
+{
+    const DECISION_STATUSES: [&str; 2] = ["RECORDED", "RESCINDED"];
+    let mut by_id: BTreeMap<String, DecisionState> = BTreeMap::new();
+    let mut winners: BTreeMap<String, Versioned> = BTreeMap::new();
+    let mut superseded: Vec<String> = Vec::new();
+
+    for e in order_entries(entries) {
+        if e.entry_type == "decision" {
+            let did = e.entry_id.clone();
+            if by_id.contains_key(&did) { superseded.push(e.entry_id.clone()); continue; }
+            winners.insert(did.clone(), Versioned {
+                version: 1, editor: e.node_id.clone(), entry_id: e.entry_id.clone(),
+            });
+            by_id.insert(did.clone(), DecisionState {
+                did,
+                text: content_str(&e.content, "text").unwrap_or_default(),
+                recorded_by: e.node_id.clone(),
+                rationale: content_str(&e.content, "rationale"),
+                origin_window: content_str(&e.content, "originWindow"),
+                status: "RECORDED".into(),
+                editor: None,
+                version: 1,
+            });
+        } else if e.entry_type == "decision_update" {
+            let did = content_str(&e.content, "did").unwrap_or_default();
+            let d = match by_id.get(&did) {
+                Some(d) => d.clone(),
+                None => { superseded.push(e.entry_id.clone()); continue; }
+            };
+            let version = e.content.get("version").and_then(|v| v.as_i64())
+                .unwrap_or(d.version + 1);
+            let incoming = Versioned {
+                version, editor: e.node_id.clone(), entry_id: e.entry_id.clone(),
+            };
+            if let Some(current) = winners.get(&did) {
+                if !wins_conflict(&incoming, current) {
+                    superseded.push(e.entry_id.clone());
+                    continue;
+                }
+                if current.entry_id != d.did { superseded.push(current.entry_id.clone()); }
+            }
+            winners.insert(did.clone(), incoming);
+            let mut updated = d;
+            if let Some(s) = content_str(&e.content, "status") {
+                if DECISION_STATUSES.contains(&s.as_str()) { updated.status = s; }
+            }
+            if let Some(t) = content_str(&e.content, "text") { updated.text = t; }
+            if let Some(r) = content_str(&e.content, "rationale") { updated.rationale = Some(r); }
+            updated.editor = Some(e.node_id.clone());
+            updated.version = version;
+            by_id.insert(did, updated);
+        }
+    }
+    (by_id, superseded)
+}
+
+// ── Merge (LTX-SPECIFICATION.md §8.2, §8.4) ───────────────────────────────
+
+/// merge_logs result: verified entries in §8.2 order, plus rejects.
+#[derive(Debug, Clone)]
+pub struct MergeResult {
+    pub entries: Vec<RegisterEntry>,
+    /// (entry, verify reason)
+    pub rejected: Vec<(RegisterEntry, String)>,
+}
+
+/// Deterministic merge of two entry logs (§8.2): verify every entry, union
+/// de-duplicated by (node_id, seq), order totally. Symmetric by construction.
+/// Mirrors ltx-sdk.js mergeLogs.
+pub fn merge_logs(entries_a: &[RegisterEntry], entries_b: &[RegisterEntry],
+                  key_cache: &HashMap<String, Nik>) -> MergeResult
+{
+    let mut verified = Vec::new();
+    let mut rejected = Vec::new();
+    for e in entries_a.iter().chain(entries_b.iter()) {
+        let v = verify_register_entry(e, key_cache);
+        if v.valid { verified.push(e.clone()); }
+        else {
+            let reason = if v.reason.is_empty() { "invalid".to_string() } else { v.reason };
+            rejected.push((e.clone(), reason));
+        }
+    }
+    MergeResult { entries: order_entries(&verified), rejected }
+}
+
+fn opt_insert(m: &mut BTreeMap<String, CjsonVal>, k: &str, v: &Option<String>) {
+    if let Some(s) = v { m.insert(k.into(), CjsonVal::Str(s.clone())); }
+}
+
+fn question_state_cjson(q: &QuestionState) -> CjsonVal {
+    let mut m = BTreeMap::new();
+    m.insert("qid".into(), CjsonVal::Str(q.qid.clone()));
+    m.insert("text".into(), CjsonVal::Str(q.text.clone()));
+    m.insert("submitter".into(), CjsonVal::Str(q.submitter.clone()));
+    opt_insert(&mut m, "urgency", &q.urgency);
+    opt_insert(&mut m, "intendedWindow", &q.intended_window);
+    m.insert("status".into(), CjsonVal::Str(q.status.clone()));
+    m.insert("version".into(), CjsonVal::Int(q.version));
+    opt_insert(&mut m, "response", &q.response);
+    opt_insert(&mut m, "responder", &q.responder);
+    CjsonVal::Object(m)
+}
+
+fn action_state_cjson(a: &ActionState) -> CjsonVal {
+    let mut m = BTreeMap::new();
+    m.insert("aid".into(), CjsonVal::Str(a.aid.clone()));
+    m.insert("description".into(), CjsonVal::Str(a.description.clone()));
+    opt_insert(&mut m, "owner", &a.owner);
+    opt_insert(&mut m, "dueTimeUTC", &a.due_time_utc);
+    opt_insert(&mut m, "originWindow", &a.origin_window);
+    m.insert("status".into(), CjsonVal::Str(a.status.clone()));
+    m.insert("version".into(), CjsonVal::Int(a.version));
+    CjsonVal::Object(m)
+}
+
+fn decision_state_cjson(d: &DecisionState) -> CjsonVal {
+    let mut m = BTreeMap::new();
+    m.insert("did".into(), CjsonVal::Str(d.did.clone()));
+    m.insert("text".into(), CjsonVal::Str(d.text.clone()));
+    m.insert("recordedBy".into(), CjsonVal::Str(d.recorded_by.clone()));
+    opt_insert(&mut m, "rationale", &d.rationale);
+    opt_insert(&mut m, "originWindow", &d.origin_window);
+    m.insert("status".into(), CjsonVal::Str(d.status.clone()));
+    opt_insert(&mut m, "editor", &d.editor);
+    m.insert("version".into(), CjsonVal::Int(d.version));
+    CjsonVal::Object(m)
+}
+
+/// MERGE segment (§8.4): merge_logs, then a HOST-signed merge_snapshot entry
+/// carrying mergedRoot, entryCount, rejectedCount, questionRegister,
+/// actionRegister, decisionRegister and superseded (questions, then actions,
+/// then decisions). Mirrors ltx-sdk.js runMergeSegment.
+pub fn run_merge_segment(local: &[RegisterEntry], remote: &[RegisterEntry],
+                         key_cache: &HashMap<String, Nik>, opts: &CreateEntryOptions)
+    -> Result<(MergeResult, RegisterEntry), String>
+{
+    let merged = merge_logs(local, remote, key_cache);
+    let (questions, q_sup) = reduce_questions(&merged.entries);
+    let (actions, a_sup) = reduce_actions(&merged.entries);
+    let (decisions, d_sup) = reduce_decisions(&merged.entries);
+    let mut content = BTreeMap::new();
+    content.insert("mergedRoot".into(), CjsonVal::Str(entries_root(&merged.entries)));
+    content.insert("entryCount".into(), CjsonVal::Int(merged.entries.len() as i64));
+    content.insert("rejectedCount".into(), CjsonVal::Int(merged.rejected.len() as i64));
+    content.insert("questionRegister".into(), CjsonVal::Object(
+        questions.iter().map(|(k, v)| (k.clone(), question_state_cjson(v))).collect()));
+    content.insert("actionRegister".into(), CjsonVal::Object(
+        actions.iter().map(|(k, v)| (k.clone(), action_state_cjson(v))).collect()));
+    content.insert("decisionRegister".into(), CjsonVal::Object(
+        decisions.iter().map(|(k, v)| (k.clone(), decision_state_cjson(v))).collect()));
+    content.insert("superseded".into(), CjsonVal::Array(
+        q_sup.iter().chain(a_sup.iter()).chain(d_sup.iter()).map(|s| CjsonVal::Str(s.clone())).collect()));
+    let snapshot = create_register_entry("merge_snapshot", CjsonVal::Object(content), opts)?;
+    Ok((merged, snapshot))
 }
 
 // ── Merkle log root (RFC 9162-style, story 28.5 hash scheme) ──────────────
