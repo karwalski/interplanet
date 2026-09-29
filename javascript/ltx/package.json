@@ -19,6 +19,7 @@
   "types": "dist/ltx-sdk.d.ts",
   "files": [
     "ltx-sdk.js",
+    "ltx-protocol-templates.js",
     "dist/",
     "README.md"
   ],

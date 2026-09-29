@@ -23,11 +23,13 @@ test:
 	  console.assert(segs.length > 0, 'segments'); \
 	  console.log('All LTX SDK smoke tests passed'); \
 	"
+	node tests/protocol-templates.js
 	@echo "All tests passed ✓"
 
 # Static lint via Node.js parse check
 lint:
 	node --check ltx-sdk.js
+	node --check ltx-protocol-templates.js
 	@echo "Lint passed ✓"
 
 # Remove generated files
