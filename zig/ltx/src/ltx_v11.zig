@@ -5,8 +5,8 @@
 //
 // These functions operate on the shared LTX wire format: plans and register
 // entries as parsed std.json.Value trees (std.json object maps preserve key
-// insertion order, which the frozen v2 planId hash depends on). The existing
-// struct-based Plan API in interplanet_ltx.zig is unchanged.
+// insertion order, which the frozen v2 planId hash depends on). The typed v2
+// model (LtxPlan) is in interplanet_ltx.zig.
 //
 // Effects note: transition() applies the LTX-SPECIFICATION.md §5 state
 // machine and exposes state + lock outputs (the audit/notify/escalate effect

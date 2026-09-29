@@ -1,6 +1,8 @@
-// unit_test.zig — LTX Zig library unit tests (Sprint 65)
+// unit_test.zig — LTX Zig library unit tests
 //
-// Standalone executable: imports interplanet_ltx.zig and runs ≥80 check() calls.
+// Standalone executable: imports interplanet_ltx.zig and runs check() calls
+// against the typed v2 model. Expected planIds, wire JSON and share tokens
+// are the output of javascript/ltx/ltx-sdk.js for the same inputs.
 // Exits with code 1 if any check fails.
 
 const std = @import("std");
@@ -27,7 +29,7 @@ fn checkStr(desc: []const u8, got: []const u8, expected: []const u8) void {
     }
 }
 
-fn checkInt(desc: []const u8, got: u32, expected: u32) void {
+fn checkInt(desc: []const u8, got: i64, expected: i64) void {
     if (got == expected) {
         passed += 1;
     } else {
@@ -45,31 +47,32 @@ fn checkContains(desc: []const u8, haystack: []const u8, needle: []const u8) voi
         passed += 1;
     } else {
         failed += 1;
-        std.debug.print("FAIL: {s} — expected to contain: {s}\n", .{ desc, needle });
+        std.debug.print("FAIL: {s}: expected to contain: {s}\n", .{ desc, needle });
     }
 }
 
-// ── Conformance vector v001 ───────────────────────────────────────────────
-// title: "Test Meeting Alpha"
-// start: "2040-01-15T14:00:00Z"
-// quantum: 5
-// host:   EARTH_HQ / Earth HQ / earth
-// remote: MARS     / Mars Base / mars
-// template: TX/3, RX/1, TX/2, RX/1, BUFFER/2  →  totalMin = 45
-// planId: "LTX-20400115-EARTH_HQ-MARS-v2-8f812845"
+// JS: createPlan({ title: 'Test Meeting Alpha', start: '2040-01-15T14:00:00.000Z' })
+const ALPHA_JSON =
+    \\{"v":2,"title":"Test Meeting Alpha","start":"2040-01-15T14:00:00.000Z","quantum":5,"mode":"LTX","segments":[{"type":"PLAN_CONFIRM","q":2},{"type":"TX","q":2},{"type":"RX","q":2},{"type":"CAUCUS","q":2},{"type":"TX","q":2},{"type":"RX","q":2},{"type":"BUFFER","q":1}],"nodes":[{"id":"N0","name":"Earth HQ","role":"HOST","delay":0,"location":"earth"},{"id":"N1","name":"Mars Hab-01","role":"PARTICIPANT","delay":0,"location":"mars"}]}
+;
+const ALPHA_ID = "LTX-20400115-EARTHHQ-MARS-v2-b6f41f93";
+const ALPHA_HASH = "#l=eyJ2IjoyLCJ0aXRsZSI6IlRlc3QgTWVldGluZyBBbHBoYSIsInN0YXJ0IjoiMjA0MC0wMS0xNVQxNDowMDowMC4wMDBaIiwicXVhbnR1bSI6NSwibW9kZSI6IkxUWCIsInNlZ21lbnRzIjpbeyJ0eXBlIjoiUExBTl9DT05GSVJNIiwicSI6Mn0seyJ0eXBlIjoiVFgiLCJxIjoyfSx7InR5cGUiOiJSWCIsInEiOjJ9LHsidHlwZSI6IkNBVUNVUyIsInEiOjJ9LHsidHlwZSI6IlRYIiwicSI6Mn0seyJ0eXBlIjoiUlgiLCJxIjoyfSx7InR5cGUiOiJCVUZGRVIiLCJxIjoxfV0sIm5vZGVzIjpbeyJpZCI6Ik4wIiwibmFtZSI6IkVhcnRoIEhRIiwicm9sZSI6IkhPU1QiLCJkZWxheSI6MCwibG9jYXRpb24iOiJlYXJ0aCJ9LHsiaWQiOiJOMSIsIm5hbWUiOiJNYXJzIEhhYi0wMSIsInJvbGUiOiJQQVJUSUNJUEFOVCIsImRlbGF5IjowLCJsb2NhdGlvbiI6Im1hcnMifV19";
 
-const V001_TEMPLATE = [_]ltx.SegmentTemplate{
-    .{ .seg_type = "TX", .duration = 3 },
-    .{ .seg_type = "RX", .duration = 1 },
-    .{ .seg_type = "TX", .duration = 2 },
-    .{ .seg_type = "RX", .duration = 1 },
-    .{ .seg_type = "BUFFER", .duration = 2 },
+// The interop representative plan (scripts/interop/plan.js): non-ASCII
+// title and labels with astral characters, three nodes, speaker/label.
+const REP_NODES = [_]ltx.Node{
+    .{ .id = "N0", .name = "Earth HQ", .role = "HOST", .delay = 0, .location = "earth" },
+    .{ .id = "N1", .name = "Mars Hab-01", .role = "PARTICIPANT", .delay = 840, .location = "mars" },
+    .{ .id = "N2", .name = "L-1 Gateway", .role = "PARTICIPANT", .delay = 2, .location = "moon" },
 };
-
-const V001_NODES = [_]ltx.Node{
-    .{ .id = "EARTH_HQ", .name = "Earth HQ", .location = "earth", .is_host = true },
-    .{ .id = "MARS", .name = "Mars Base", .location = "mars", .is_host = false },
+const REP_SEGS = [_]ltx.SegmentTemplate{
+    .{ .seg_type = "PLAN_CONFIRM", .q = 2 },
+    .{ .seg_type = "TX", .q = 3, .speaker = "N0", .label = "Ouverture: état de la mission" },
+    .{ .seg_type = "RX", .q = 3 },
+    .{ .seg_type = "TX", .q = 2, .speaker = "N1", .label = "Réponse 🔴" },
+    .{ .seg_type = "BUFFER", .q = 1 },
 };
+const REP_ID = "LTX-20260315-EARTHHQ-MARS-L-1G-v2-09310844";
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -81,438 +84,278 @@ pub fn main() !void {
     checkStr("VERSION = 1.1.0", ltx.VERSION, "1.1.0");
     checkInt("DEFAULT_QUANTUM = 5", ltx.DEFAULT_QUANTUM, 5);
     check("DEFAULT_API_BASE contains interplanettime.net", contains(ltx.DEFAULT_API_BASE, "interplanettime.net"));
-    checkInt("SEG_TYPES length = 5", ltx.SEG_TYPES.len, 5);
-    checkStr("SEG_TYPES[0] = TX", ltx.SEG_TYPES[0], "TX");
-    checkStr("SEG_TYPES[1] = RX", ltx.SEG_TYPES[1], "RX");
-    checkStr("SEG_TYPES[2] = BUFFER", ltx.SEG_TYPES[2], "BUFFER");
-    checkStr("SEG_TYPES[3] = HOLD", ltx.SEG_TYPES[3], "HOLD");
-    checkStr("SEG_TYPES[4] = PREP", ltx.SEG_TYPES[4], "PREP");
-    checkInt("DEFAULT_SEGMENTS length = 5", ltx.DEFAULT_SEGMENTS.len, 5);
-    checkStr("DEFAULT_SEGMENTS[0].type = TX", ltx.DEFAULT_SEGMENTS[0].seg_type, "TX");
-    checkStr("DEFAULT_SEGMENTS[4].type = BUFFER", ltx.DEFAULT_SEGMENTS[4].seg_type, "BUFFER");
-    checkInt("DEFAULT_SEGMENTS total quanta = 9", blk: {
+    checkInt("SEG_TYPES length = 6", ltx.SEG_TYPES.len, 6);
+    checkStr("SEG_TYPES[0] = PLAN_CONFIRM", ltx.SEG_TYPES[0], "PLAN_CONFIRM");
+    checkStr("SEG_TYPES[3] = CAUCUS", ltx.SEG_TYPES[3], "CAUCUS");
+    checkStr("SEG_TYPES[5] = MERGE", ltx.SEG_TYPES[5], "MERGE");
+    checkInt("DEFAULT_SEGMENTS length = 7", ltx.DEFAULT_SEGMENTS.len, 7);
+    checkStr("DEFAULT_SEGMENTS[0].type = PLAN_CONFIRM", ltx.DEFAULT_SEGMENTS[0].seg_type, "PLAN_CONFIRM");
+    checkStr("DEFAULT_SEGMENTS[6].type = BUFFER", ltx.DEFAULT_SEGMENTS[6].seg_type, "BUFFER");
+    checkInt("DEFAULT_SEGMENTS total quanta = 13", blk: {
         var t: u32 = 0;
-        for (ltx.DEFAULT_SEGMENTS) |s| t += s.duration;
+        for (ltx.DEFAULT_SEGMENTS) |s| t += s.q;
         break :blk t;
-    }, 9);
+    }, 13);
 
     // ── Section 2: formatHms ─────────────────────────────────────────────
 
-    {
-        const s1 = try ltx.formatHms(allocator, 90);
-        defer allocator.free(s1);
-        checkStr("formatHms 90 = 1h 30m", s1, "1h 30m");
-    }
-    {
-        const s2 = try ltx.formatHms(allocator, 45);
-        defer allocator.free(s2);
-        checkStr("formatHms 45 = 45m", s2, "45m");
-    }
-    {
-        const s3 = try ltx.formatHms(allocator, 120);
-        defer allocator.free(s3);
-        checkStr("formatHms 120 = 2h", s3, "2h");
-    }
-    {
-        const s4 = try ltx.formatHms(allocator, 0);
-        defer allocator.free(s4);
-        checkStr("formatHms 0 = 0m", s4, "0m");
-    }
-    {
-        const s5 = try ltx.formatHms(allocator, 61);
-        defer allocator.free(s5);
-        checkStr("formatHms 61 = 1h 1m", s5, "1h 1m");
-    }
-    {
-        const s6 = try ltx.formatHms(allocator, 60);
-        defer allocator.free(s6);
-        checkStr("formatHms 60 = 1h", s6, "1h");
-    }
-    {
-        const s7 = try ltx.formatHms(allocator, 1);
-        defer allocator.free(s7);
-        checkStr("formatHms 1 = 1m", s7, "1m");
-    }
-    {
-        const s8 = try ltx.formatHms(allocator, 150);
-        defer allocator.free(s8);
-        checkStr("formatHms 150 = 2h 30m", s8, "2h 30m");
+    const hms_cases = [_]struct { m: u32, s: []const u8 }{
+        .{ .m = 90, .s = "1h 30m" }, .{ .m = 45, .s = "45m" }, .{ .m = 120, .s = "2h" }, .{ .m = 0, .s = "0m" },
+        .{ .m = 61, .s = "1h 1m" },  .{ .m = 60, .s = "1h" },  .{ .m = 1, .s = "1m" },   .{ .m = 150, .s = "2h 30m" },
+    };
+    for (hms_cases) |c| {
+        const s = try ltx.formatHms(allocator, c.m);
+        defer allocator.free(s);
+        checkStr("formatHms", s, c.s);
     }
 
-    // ── Section 3: createPlan defaults ───────────────────────────────────
-
-    const default_plan = try ltx.createPlan(allocator, .{});
-    checkStr("default plan v = 2", default_plan.v, "2");
-    checkStr("default plan title", default_plan.title, "LTX Session");
-    checkInt("default plan quantum = 5", default_plan.quantum, 5);
-    checkStr("default plan mode = LTX", default_plan.mode, "LTX");
-    checkInt("default plan nodes = 2", @intCast(default_plan.nodes.len), 2);
-    check("default plan has segments", default_plan.segments.len > 0);
-    checkInt("default plan segments = 5", @intCast(default_plan.segments.len), 5);
-    check("default host is_host = true", default_plan.nodes[0].is_host);
-    check("default remote is_host = false", !default_plan.nodes[1].is_host);
-    checkStr("default host location", default_plan.nodes[0].location, "earth");
-    checkStr("default remote location", default_plan.nodes[1].location, "mars");
-
-    // ── Section 4: createPlan custom params ─────────────────────────────
-
-    const custom_plan = try ltx.createPlan(allocator, .{
-        .title = "My Meeting",
-        .start = "2040-06-01T10:00:00Z",
-        .quantum = 10,
-        .host_id = "LUNA",
-        .host_name = "Lunar Station",
-        .host_location = "moon",
-        .remote_id = "EUROPA",
-        .remote_name = "Europa Base",
-        .remote_location = "europa",
-    });
-    checkStr("custom title", custom_plan.title, "My Meeting");
-    checkInt("custom quantum = 10", custom_plan.quantum, 10);
-    checkStr("custom host name", custom_plan.nodes[0].name, "Lunar Station");
-    checkStr("custom remote name", custom_plan.nodes[1].name, "Europa Base");
-    checkStr("custom remote location", custom_plan.nodes[1].location, "europa");
-    check("custom host is_host = true", custom_plan.nodes[0].is_host);
-    check("custom remote is_host = false", !custom_plan.nodes[1].is_host);
-    checkInt("custom default segments = 5", @intCast(custom_plan.segments.len), 5);
-
-    // ── Section 5: upgradeConfig ─────────────────────────────────────────
+    // ── Section 3: createPlan defaults (v2 schema) ───────────────────────
 
     {
-        // A plan already at v="2" with nodes should be returned unchanged
-        const v2_plan = try ltx.upgradeConfig(allocator, default_plan);
-        checkStr("upgrade v2 plan: v still 2", v2_plan.v, "2");
-        checkInt("upgrade v2 plan: quantum preserved", v2_plan.quantum, 5);
-        checkInt("upgrade v2 plan: nodes unchanged", @intCast(v2_plan.nodes.len), @intCast(default_plan.nodes.len));
+        const p = try ltx.createPlan(allocator, .{});
+        defer ltx.deinitPlan(allocator, p);
+        checkInt("default plan v = 2 (number)", p.v, 2);
+        checkStr("default plan title", p.title, "LTX Session");
+        checkInt("default plan quantum = 5", p.quantum, 5);
+        checkStr("default plan mode = LTX", p.mode, "LTX");
+        checkInt("default plan nodes = 2", @intCast(p.nodes.len), 2);
+        checkInt("default plan segments = 7", @intCast(p.segments.len), 7);
+        checkStr("default host id N0", p.nodes[0].id, "N0");
+        checkStr("default host name", p.nodes[0].name, "Earth HQ");
+        checkStr("default host role HOST", p.nodes[0].role, "HOST");
+        checkInt("default host delay 0", p.nodes[0].delay, 0);
+        checkStr("default host location", p.nodes[0].location, "earth");
+        checkStr("default remote id N1", p.nodes[1].id, "N1");
+        checkStr("default remote name", p.nodes[1].name, "Mars Hab-01");
+        checkStr("default remote role PARTICIPANT", p.nodes[1].role, "PARTICIPANT");
+        checkStr("default remote location", p.nodes[1].location, "mars");
+        // Default start: whole minute, toISOString form, ~5 min from now.
+        check("default start is toISOString form", p.start.len == 24 and std.mem.endsWith(u8, p.start, ":00.000Z"));
+        const delta = ltx.parseIsoMs(p.start) - std.time.milliTimestamp();
+        check("default start is 4..5 min ahead", delta > 4 * 60_000 - 1000 and delta <= 5 * 60_000);
+        checkInt("default totalMin = 65", ltx.totalMin(p), 65);
+    }
+
+    // ── Section 4: createPlan / makePlanId / wire JSON match JS ──────────
+
+    {
+        const p = try ltx.createPlan(allocator, .{ .title = "Test Meeting Alpha", .start = "2040-01-15T14:00:00.000Z" });
+        defer ltx.deinitPlan(allocator, p);
+        const json = try ltx.planToJson(allocator, p);
+        defer allocator.free(json);
+        checkStr("wire JSON = JSON.stringify(createPlan(...))", json, ALPHA_JSON);
+        const id = try ltx.makePlanId(allocator, p);
+        defer allocator.free(id);
+        checkStr("makePlanId = JS makePlanId", id, ALPHA_ID);
+        const hash = try ltx.encodeHash(allocator, p);
+        defer allocator.free(hash);
+        checkStr("encodeHash = JS encodeHash", hash, ALPHA_HASH);
+        checkInt("totalMin = 65", ltx.totalMin(p), 65);
+
+        // decodeHash returns the wire JSON; every prefix form accepted
+        const d1 = try ltx.decodeHash(allocator, hash);
+        defer allocator.free(d1);
+        checkStr("decodeHash(#l=...)", d1, ALPHA_JSON);
+        const d2 = try ltx.decodeHash(allocator, hash[1..]);
+        defer allocator.free(d2);
+        checkStr("decodeHash(l=...)", d2, ALPHA_JSON);
+        const d3 = try ltx.decodeHash(allocator, hash[3..]);
+        defer allocator.free(d3);
+        checkStr("decodeHash(raw token)", d3, ALPHA_JSON);
+
+        // planFromJson round trip reproduces the same wire JSON and id
+        const back = try ltx.planFromJson(allocator, d1);
+        defer ltx.deinitPlan(allocator, back);
+        const back_json = try ltx.planToJson(allocator, back);
+        defer allocator.free(back_json);
+        checkStr("planFromJson -> planToJson round-trips", back_json, ALPHA_JSON);
+        const back_id = try ltx.makePlanId(allocator, back);
+        defer allocator.free(back_id);
+        checkStr("planFromJson keeps the planId", back_id, ALPHA_ID);
     }
     {
-        // A plan with v != "2" should be upgraded
-        const old_plan = ltx.Plan{
-            .v = "1",
-            .title = "Old Meeting",
-            .start = "2040-06-01T10:00:00Z",
+        const p = try ltx.createPlan(allocator, .{
+            .title = "My Meeting",
+            .start = "2040-06-01T10:00:00.000Z",
+            .quantum = 10,
+            .host_name = "Lunar Station",
+            .host_location = "moon",
+            .remote_name = "Europa Base",
+            .remote_location = "europa",
+            .delay = 1200,
+        });
+        defer ltx.deinitPlan(allocator, p);
+        checkStr("custom host name", p.nodes[0].name, "Lunar Station");
+        checkStr("custom remote location", p.nodes[1].location, "europa");
+        checkInt("custom remote delay", p.nodes[1].delay, 1200);
+        checkInt("custom totalMin = 130", ltx.totalMin(p), 130);
+        const id = try ltx.makePlanId(allocator, p);
+        defer allocator.free(id);
+        checkStr("custom makePlanId = JS (HOSTSTR 8, NODESTR 4)", id, "LTX-20400601-LUNARSTA-EURO-v2-9cc339ba");
+    }
+
+    // ── Section 5: representative interop plan (UTF-16 hash, L-1G) ───────
+
+    {
+        const p = try ltx.createPlan(allocator, .{
+            .title = "Réunion Mars 🚀",
+            .start = "2026-03-15T14:00:00.000Z",
             .quantum = 3,
-            .mode = "LTX",
-            .nodes = &.{},
-            .segments = &.{},
-        };
-        const upgraded = try ltx.upgradeConfig(allocator, old_plan);
-        checkStr("upgrade v1 plan: v = 2", upgraded.v, "2");
-        checkInt("upgrade v1 plan: 2 nodes", @intCast(upgraded.nodes.len), 2);
-        check("upgraded host is_host = true", upgraded.nodes[0].is_host);
-        check("upgraded remote is_host = false", !upgraded.nodes[1].is_host);
+            .mode = "LTX-ASYNC",
+            .nodes = &REP_NODES,
+            .segments = &REP_SEGS,
+        });
+        defer ltx.deinitPlan(allocator, p);
+        const id = try ltx.makePlanId(allocator, p);
+        defer allocator.free(id);
+        checkStr("representative plan makePlanId = JS", id, REP_ID);
+        const json = try ltx.planToJson(allocator, p);
+        defer allocator.free(json);
+        checkContains("wire has speaker/label", json, "{\"type\":\"TX\",\"q\":3,\"speaker\":\"N0\",\"label\":\"Ouverture: état de la mission\"}");
+        check("wire key order: segments before nodes", std.mem.indexOf(u8, json, "\"segments\"").? < std.mem.indexOf(u8, json, "\"nodes\"").?);
+        checkContains("wire v is a number", json, "{\"v\":2,");
+        check("UTF-16 hash differs from UTF-8 byte hash", ltx.imul31Utf16(json) != blk: {
+            var h: u32 = 0;
+            for (json) |c| h = h *% 31 +% @as(u32, c);
+            break :blk h;
+        });
+
+        // computeSegments (JS computeSegments)
+        const segs = try ltx.computeSegments(allocator, p);
+        defer allocator.free(segs);
+        checkInt("computeSegments count", @intCast(segs.len), 5);
+        checkInt("seg[0] start = plan start", segs[0].start_ms, ltx.parseIsoMs("2026-03-15T14:00:00.000Z"));
+        checkInt("seg[1] start 14:06", segs[1].start_ms, ltx.parseIsoMs("2026-03-15T14:06:00.000Z"));
+        checkInt("seg[4] end 14:33", segs[4].end_ms, ltx.parseIsoMs("2026-03-15T14:33:00.000Z"));
+        checkInt("seg[1] durMin 9", segs[1].dur_min, 9);
+        checkInt("seg[4] durMin 3", segs[4].dur_min, 3);
+        checkStr("seg[1] type TX", segs[1].seg_type, "TX");
+        check("seg[1] speaker N0", segs[1].speaker != null and std.mem.eql(u8, segs[1].speaker.?, "N0"));
+        check("seg[2] no speaker", segs[2].speaker == null);
+        var iso_buf: [32]u8 = undefined;
+        checkStr("formatIsoMs", ltx.formatIsoMs(&iso_buf, segs[4].end_ms), "2026-03-15T14:33:00.000Z");
+
+        // buildDelayMatrix / pairDelay (§3.7.3: sum via HOST)
+        const m = try ltx.buildDelayMatrix(allocator, p);
+        defer allocator.free(m);
+        checkInt("delay matrix pairs = 6", @intCast(m.len), 6);
+        checkStr("m[0] N0->N1", m[0].to_id, "N1");
+        checkInt("m[0] = 840", m[0].delay_seconds, 840);
+        checkInt("m[1] N0->N2 = 2", m[1].delay_seconds, 2);
+        checkInt("m[3] N1->N2 = 842 (sum)", m[3].delay_seconds, 842);
+        checkInt("m[5] N2->N1 = 842 (symmetric)", m[5].delay_seconds, 842);
+        checkInt("pairDelay same node = 0", try ltx.pairDelay(p, "N1", "N1"), 0);
+        check("pairDelay unknown node errors", if (ltx.pairDelay(p, "N0", "X")) |_| false else |_| true);
+
+        // buildNodeUrls (JS buildNodeUrls)
+        const urls = try ltx.buildNodeUrls(allocator, p, "https://interplanet.live/ltx.html?x=1#a");
+        defer ltx.freeNodeUrls(allocator, urls);
+        checkInt("buildNodeUrls count = 3", @intCast(urls.len), 3);
+        checkStr("url[2].node_id", urls[2].node_id, "N2");
+        checkStr("url[2].role", urls[2].role, "PARTICIPANT");
+        check("url[2] strips query and fragment", std.mem.startsWith(u8, urls[2].url, "https://interplanet.live/ltx.html?node=N2#l=eyJ2IjoyLCJ0aXRsZSI6IlLDqXVuaW9uIE1hcnMg8J-agCIs"));
+        const hash = try ltx.encodeHash(allocator, p);
+        defer allocator.free(hash);
+        check("url[2] carries encodeHash", std.mem.endsWith(u8, urls[2].url, hash));
     }
 
-    // ── Section 6: totalMin ──────────────────────────────────────────────
+    // ── Section 6: HOSTSTR / NODESTR rules ───────────────────────────────
 
     {
-        // Build v001 plan manually
-        const v001_segs = try ltx.computeSegments(allocator, &V001_NODES, &V001_TEMPLATE, 5);
-        const v001_plan = ltx.Plan{
-            .v = "2",
-            .title = "Test Meeting Alpha",
-            .start = "2040-01-15T14:00:00Z",
-            .quantum = 5,
-            .mode = "LTX",
-            .nodes = &V001_NODES,
-            .segments = v001_segs,
+        // Whitespace (incl. tab) stripped, upper-cased (ß -> SS, Latin-1),
+        // truncated in UTF-16 units (an astral char counts 2).
+        const nodes = [_]ltx.Node{
+            .{ .id = "A", .name = "straße  größe\tÿ", .role = "HOST", .location = "earth" },
+            .{ .id = "B", .name = "  émile x", .role = "PARTICIPANT", .delay = 5, .location = "mars" },
+            .{ .id = "C", .name = "🚀🚀🚀", .role = "OBSERVER", .delay = 5, .location = "moon" },
         };
-        checkInt("v001 totalMin = 45", ltx.totalMin(v001_plan), 45);
-
-        // Default plan: 5 segs at quantum=5: (3+1+2+1+2)*5 = 45
-        checkInt("default totalMin = 45", ltx.totalMin(default_plan), 45);
-
-        // Custom: 5 segs at quantum=10: (3+1+2+1+2)*10 = 90
-        checkInt("custom totalMin = 90", ltx.totalMin(custom_plan), 90);
+        const p = try ltx.createPlan(allocator, .{ .title = "x", .start = "2040-01-15T14:00:00.000Z", .nodes = &nodes });
+        defer ltx.deinitPlan(allocator, p);
+        const id = try ltx.makePlanId(allocator, p);
+        defer allocator.free(id);
+        checkStr("name tokens match JS", id, "LTX-20400115-STRASSEG-ÉMIL-🚀🚀-v2-f01ae8de");
+    }
+    {
+        const nodes = [_]ltx.Node{.{ .id = "A", .name = "Earth HQ", .role = "HOST", .location = "earth" }};
+        const p = try ltx.createPlan(allocator, .{ .title = "Solo", .start = "2040-01-15T14:00:00.000Z", .nodes = &nodes });
+        defer ltx.deinitPlan(allocator, p);
+        const id = try ltx.makePlanId(allocator, p);
+        defer allocator.free(id);
+        checkStr("single-node plan NODESTR = RX", id, "LTX-20400115-EARTHHQ-RX-v2-83ef3d37");
     }
 
-    // ── Section 7: computeSegments ───────────────────────────────────────
+    // ── Section 7: generateIcs ───────────────────────────────────────────
 
     {
-        const segs = try ltx.computeSegments(allocator, &V001_NODES, &V001_TEMPLATE, 5);
-        checkInt("computeSegments count = 5", @intCast(segs.len), 5);
-        checkStr("seg[0] type = TX", segs[0].seg_type, "TX");
-        checkStr("seg[1] type = RX", segs[1].seg_type, "RX");
-        checkStr("seg[2] type = TX", segs[2].seg_type, "TX");
-        checkStr("seg[3] type = RX", segs[3].seg_type, "RX");
-        checkStr("seg[4] type = BUFFER", segs[4].seg_type, "BUFFER");
-        checkInt("seg[0] duration = 15", segs[0].duration, 15);
-        checkInt("seg[1] duration = 5", segs[1].duration, 5);
-        checkInt("seg[0] start_offset = 0", segs[0].start_offset, 0);
-        checkInt("seg[1] start_offset = 15", segs[1].start_offset, 15);
-        checkInt("seg[2] start_offset = 20", segs[2].start_offset, 20);
-        checkInt("seg[3] start_offset = 30", segs[3].start_offset, 30);
-        checkInt("seg[4] start_offset = 35", segs[4].start_offset, 35);
-        checkStr("seg[0] id = s1", segs[0].id, "s1");
-        checkStr("seg[4] id = s5", segs[4].id, "s5");
-        // TX speaker = host id
-        check("seg[0] speaker = EARTH_HQ", segs[0].speaker != null and std.mem.eql(u8, segs[0].speaker.?, "EARTH_HQ"));
-        // RX speaker = remote id
-        check("seg[1] speaker = MARS", segs[1].speaker != null and std.mem.eql(u8, segs[1].speaker.?, "MARS"));
-        // BUFFER speaker = null
-        check("seg[4] speaker = null", segs[4].speaker == null);
-    }
-
-    // ── Section 8: makePlanId ────────────────────────────────────────────
-
-    {
-        const v001_segs = try ltx.computeSegments(allocator, &V001_NODES, &V001_TEMPLATE, 5);
-        const v001_plan = ltx.Plan{
-            .v = "2",
-            .title = "Test Meeting Alpha",
-            .start = "2040-01-15T14:00:00Z",
-            .quantum = 5,
-            .mode = "LTX",
-            .nodes = &V001_NODES,
-            .segments = v001_segs,
-        };
-        const plan_id = try ltx.makePlanId(allocator, v001_plan);
-        defer allocator.free(plan_id);
-
-        checkContains("planId starts with LTX-", plan_id, "LTX-");
-        checkContains("planId has date 20400115", plan_id, "20400115");
-        checkContains("planId has EARTH_HQ", plan_id, "EARTH_HQ");
-        checkContains("planId has MARS", plan_id, "MARS");
-        checkContains("planId has -v2-", plan_id, "-v2-");
-        checkContains("planId golden hash 8f812845", plan_id, "8f812845");
-
-        // Default plan has different id
-        const def_id = try ltx.makePlanId(allocator, default_plan);
-        defer allocator.free(def_id);
-        checkContains("default planId starts with LTX-", def_id, "LTX-");
-        check("different plans → different IDs", !std.mem.eql(u8, plan_id, def_id));
-    }
-
-    // ── Section 9: encodeHash / decodeHash round-trip ────────────────────
-
-    {
-        const v001_segs = try ltx.computeSegments(allocator, &V001_NODES, &V001_TEMPLATE, 5);
-        const v001_plan = ltx.Plan{
-            .v = "2",
-            .title = "Test Meeting Alpha",
-            .start = "2040-01-15T14:00:00Z",
-            .quantum = 5,
-            .mode = "LTX",
-            .nodes = &V001_NODES,
-            .segments = v001_segs,
-        };
-
-        const original_json = try ltx.planToJson(allocator, v001_plan);
-        defer allocator.free(original_json);
-
-        const encoded = try ltx.encodeHash(allocator, v001_plan);
-        defer allocator.free(encoded);
-
-        check("encodeHash starts with #l=", std.mem.startsWith(u8, encoded, "#l="));
-        check("encodeHash is longer than #l=", encoded.len > 3);
-
-        const decoded = try ltx.decodeHash(allocator, encoded);
-        defer allocator.free(decoded);
-
-        checkStr("decode(encode(json)) round-trips correctly", decoded, original_json);
-
-        // Re-encode should give same token
-        const encoded_raw = encoded[3..]; // strip "#l="
-        const re_decoded = try ltx.decodeHash(allocator, encoded_raw);
-        defer allocator.free(re_decoded);
-        checkStr("decode without #l= prefix also works", re_decoded, original_json);
-
-        // l= prefix variant
-        var l_prefix = try allocator.alloc(u8, encoded.len - 1);
-        defer allocator.free(l_prefix);
-        @memcpy(l_prefix[0..], encoded[1..]); // strip leading '#'
-        const re_decoded2 = try ltx.decodeHash(allocator, l_prefix);
-        defer allocator.free(re_decoded2);
-        checkStr("decode with l= prefix works", re_decoded2, original_json);
-    }
-
-    // ── Section 10: buildNodeUrls ────────────────────────────────────────
-
-    {
-        const v001_segs = try ltx.computeSegments(allocator, &V001_NODES, &V001_TEMPLATE, 5);
-        const v001_plan = ltx.Plan{
-            .v = "2",
-            .title = "Test Meeting Alpha",
-            .start = "2040-01-15T14:00:00Z",
-            .quantum = 5,
-            .mode = "LTX",
-            .nodes = &V001_NODES,
-            .segments = v001_segs,
-        };
-
-        const urls = try ltx.buildNodeUrls(allocator, v001_plan, "https://interplanet.live/meet");
-        defer {
-            for (urls) |u| allocator.free(u.session_url);
-            allocator.free(urls);
-        }
-
-        checkInt("buildNodeUrls count = 2", @intCast(urls.len), 2);
-        checkStr("url[0].node_id = EARTH_HQ", urls[0].node_id, "EARTH_HQ");
-        checkStr("url[1].node_id = MARS", urls[1].node_id, "MARS");
-        checkContains("url[0].session_url has node=EARTH_HQ", urls[0].session_url, "node=EARTH_HQ");
-        checkContains("url[1].session_url has node=MARS", urls[1].session_url, "node=MARS");
-        checkContains("url[0].session_url has #l=", urls[0].session_url, "#l=");
-        checkContains("url[1].session_url has #l=", urls[1].session_url, "#l=");
-        check("url[0].session_url starts with base", std.mem.startsWith(u8, urls[0].session_url, "https://"));
-    }
-
-    // ── Section 11: buildDelayMatrix ─────────────────────────────────────
-
-    {
-        const v001_segs = try ltx.computeSegments(allocator, &V001_NODES, &V001_TEMPLATE, 5);
-        const v001_plan = ltx.Plan{
-            .v = "2",
-            .title = "Test Meeting Alpha",
-            .start = "2040-01-15T14:00:00Z",
-            .quantum = 5,
-            .mode = "LTX",
-            .nodes = &V001_NODES,
-            .segments = v001_segs,
-        };
-
-        const matrix = try ltx.buildDelayMatrix(allocator, v001_plan);
-        defer {
-            for (matrix) |row| allocator.free(row);
-            allocator.free(matrix);
-        }
-
-        checkInt("delay matrix rows = 2", @intCast(matrix.len), 2);
-        checkInt("delay matrix cols = 2", @intCast(matrix[0].len), 2);
-        checkInt("matrix[0][0] diagonal = 0", matrix[0][0], 0);
-        checkInt("matrix[1][1] diagonal = 0", matrix[1][1], 0);
-        check("matrix[0][1] off-diagonal > 0", matrix[0][1] > 0);
-        check("matrix[1][0] off-diagonal > 0", matrix[1][0] > 0);
-        // quantum=5, host↔remote = 5*4 = 20
-        checkInt("matrix[0][1] = quantum*4 = 20", matrix[0][1], 20);
-        checkInt("matrix[1][0] = quantum*4 = 20", matrix[1][0], 20);
-
-        // 3-node plan
-        const three_nodes = [_]ltx.Node{
-            .{ .id = "N0", .name = "Earth HQ", .location = "earth", .is_host = true },
-            .{ .id = "N1", .name = "Mars Base", .location = "mars", .is_host = false },
-            .{ .id = "N2", .name = "Lunar Base", .location = "moon", .is_host = false },
-        };
-        const three_segs = try ltx.computeSegments(allocator, &three_nodes, &V001_TEMPLATE, 5);
-        const three_plan = ltx.Plan{
-            .v = "2",
-            .title = "3-Node",
-            .start = "2040-03-01T09:00:00Z",
-            .quantum = 5,
-            .mode = "LTX",
-            .nodes = &three_nodes,
-            .segments = three_segs,
-        };
-        const m3 = try ltx.buildDelayMatrix(allocator, three_plan);
-        defer {
-            for (m3) |row| allocator.free(row);
-            allocator.free(m3);
-        }
-        checkInt("3-node matrix rows = 3", @intCast(m3.len), 3);
-        checkInt("3-node diagonal[0][0] = 0", m3[0][0], 0);
-        checkInt("3-node diagonal[1][1] = 0", m3[1][1], 0);
-        checkInt("3-node diagonal[2][2] = 0", m3[2][2], 0);
-        check("3-node off-diag[0][1] > 0", m3[0][1] > 0);
-        check("3-node off-diag[1][2] > 0", m3[1][2] > 0);
-    }
-
-    // ── Section 12: generateIcs ──────────────────────────────────────────
-
-    {
-        const v001_segs = try ltx.computeSegments(allocator, &V001_NODES, &V001_TEMPLATE, 5);
-        const v001_plan = ltx.Plan{
-            .v = "2",
-            .title = "Test Meeting Alpha",
-            .start = "2040-01-15T14:00:00Z",
-            .quantum = 5,
-            .mode = "LTX",
-            .nodes = &V001_NODES,
-            .segments = v001_segs,
-        };
-
-        const ics = try ltx.generateIcs(allocator, v001_plan);
+        const p = try ltx.createPlan(allocator, .{ .title = "Test Meeting Alpha", .start = "2040-01-15T14:00:00.000Z" });
+        defer ltx.deinitPlan(allocator, p);
+        const ics = try ltx.generateIcs(allocator, p);
         defer allocator.free(ics);
-
-        checkContains("ics has BEGIN:VCALENDAR", ics, "BEGIN:VCALENDAR");
-        checkContains("ics has END:VCALENDAR", ics, "END:VCALENDAR");
-        checkContains("ics has BEGIN:VEVENT", ics, "BEGIN:VEVENT");
-        checkContains("ics has END:VEVENT", ics, "END:VEVENT");
-        checkContains("ics has LTX-PLANID:", ics, "LTX-PLANID:");
-        checkContains("ics has LTX-QUANTUM:PT5M", ics, "LTX-QUANTUM:PT5M");
-        checkContains("ics has golden hash", ics, "8f812845");
-        checkContains("ics has SUMMARY:Test Meeting Alpha", ics, "SUMMARY:Test Meeting Alpha");
-        checkContains("ics has CRLF line endings", ics, "\r\n");
-        checkContains("ics has LTX-MODE:LTX", ics, "LTX-MODE:LTX");
-        checkContains("ics has DTSTART", ics, "DTSTART:");
-        checkContains("ics has DTEND", ics, "DTEND:");
+        check("ics starts with BEGIN:VCALENDAR", std.mem.startsWith(u8, ics, "BEGIN:VCALENDAR\r\n"));
+        check("ics ends with END:VCALENDAR", std.mem.endsWith(u8, ics, "\r\nEND:VCALENDAR"));
+        checkContains("ics UID", ics, "UID:" ++ ALPHA_ID ++ "@interplanet.live\r\n");
+        checkContains("ics DTSTART", ics, "DTSTART:20400115T140000Z\r\n");
+        checkContains("ics DTEND = start + 65 min", ics, "DTEND:20400115T150500Z\r\n");
+        checkContains("ics SUMMARY", ics, "SUMMARY:Test Meeting Alpha\r\n");
+        checkContains("ics PLANID", ics, "LTX-PLANID:" ++ ALPHA_ID ++ "\r\n");
+        checkContains("ics QUANTUM", ics, "LTX-QUANTUM:PT5M\r\n");
+        checkContains("ics SEGMENT-TEMPLATE", ics, "LTX-SEGMENT-TEMPLATE:PLAN_CONFIRM,TX,RX,CAUCUS,TX,RX,BUFFER\r\n");
+        checkContains("ics MODE", ics, "LTX-MODE:LTX\r\n");
+        checkContains("ics host node", ics, "LTX-NODE:ID=EARTH-HQ;ROLE=HOST\r\n");
+        checkContains("ics participant node", ics, "LTX-NODE:ID=MARS-HAB-01;ROLE=PARTICIPANT\r\n");
+        checkContains("ics delay", ics, "LTX-DELAY;NODEID=MARS-HAB-01:ONEWAY-MIN=0;ONEWAY-MAX=120;ONEWAY-ASSUMED=0\r\n");
+        checkContains("ics readiness", ics, "LTX-READINESS:CHECK=PT10M;REQUIRED=TRUE;FALLBACK=LTX-RELAY\r\n");
+        checkContains("ics localtime", ics, "LTX-LOCALTIME:NODE=MARS-HAB-01;SCHEME=LMST;PARAMS=LONGITUDE:0E\r\n");
+        checkContains("ics description", ics, "Signal delays: Mars Hab-01: 0 min one-way\\nMode: LTX");
     }
 
-    // ── Section 13: escapeIcsText (Story 26.3) ───────────────────────────
+    // ── Section 8: escapeIcsText (Story 26.3) ────────────────────────────
 
-    {
-        const s1 = try ltx.escapeIcsText(allocator, "");
-        defer allocator.free(s1);
-        checkStr("escapeIcsText empty", s1, "");
+    const esc_cases = [_]struct { in: []const u8, out: []const u8 }{
+        .{ .in = "", .out = "" },         .{ .in = "hello", .out = "hello" }, .{ .in = "a,b", .out = "a\\,b" },
+        .{ .in = "a;b", .out = "a\\;b" }, .{ .in = "a\\b", .out = "a\\\\b" }, .{ .in = "a\nb", .out = "a\\nb" },
+    };
+    for (esc_cases) |c| {
+        const s = try ltx.escapeIcsText(allocator, c.in);
+        defer allocator.free(s);
+        checkStr("escapeIcsText", s, c.out);
     }
     {
-        const s2 = try ltx.escapeIcsText(allocator, "hello");
-        defer allocator.free(s2);
-        checkStr("escapeIcsText no specials", s2, "hello");
-    }
-    {
-        const s3 = try ltx.escapeIcsText(allocator, "a,b");
-        defer allocator.free(s3);
-        checkStr("escapeIcsText comma", s3, "a\\,b");
-    }
-    {
-        const s4 = try ltx.escapeIcsText(allocator, "a;b");
-        defer allocator.free(s4);
-        checkStr("escapeIcsText semicolon", s4, "a\\;b");
-    }
-    {
-        const s5 = try ltx.escapeIcsText(allocator, "a\\b");
-        defer allocator.free(s5);
-        checkStr("escapeIcsText backslash", s5, "a\\\\b");
-    }
-    {
-        const s6 = try ltx.escapeIcsText(allocator, "a\nb");
-        defer allocator.free(s6);
-        checkStr("escapeIcsText newline", s6, "a\\nb");
-    }
-    {
-        // SUMMARY in ICS should use escaped title
-        const special_plan = ltx.Plan{
-            .v = "2",
-            .title = "Mars,Earth;Session",
-            .start = "2040-01-15T14:00:00Z",
-            .quantum = 5,
-            .mode = "LTX",
-            .nodes = &V001_NODES,
-            .segments = &.{},
-        };
-        const ics_sp = try ltx.generateIcs(allocator, special_plan);
-        defer allocator.free(ics_sp);
-        checkContains("generateIcs SUMMARY escapes title specials", ics_sp, "SUMMARY:Mars\\,Earth\\;Session");
+        const p = try ltx.createPlan(allocator, .{ .title = "Mars,Earth;Session", .start = "2040-01-15T14:00:00.000Z" });
+        defer ltx.deinitPlan(allocator, p);
+        const ics = try ltx.generateIcs(allocator, p);
+        defer allocator.free(ics);
+        checkContains("generateIcs SUMMARY escapes title specials", ics, "SUMMARY:Mars\\,Earth\\;Session");
     }
 
-    // ── Section 14: Story 26.4 protocol hardening ─────────────────────────
+    // ── Section 9: JSON escaping ─────────────────────────────────────────
+
+    {
+        const p = try ltx.createPlan(allocator, .{ .title = "q\"b\\n\n\x01", .start = "2040-01-15T14:00:00.000Z" });
+        defer ltx.deinitPlan(allocator, p);
+        const json = try ltx.planToJson(allocator, p);
+        defer allocator.free(json);
+        checkContains("title escaped as JSON.stringify", json, "\"title\":\"q\\\"b\\\\n\\n\\u0001\"");
+        const back = try ltx.planFromJson(allocator, json);
+        defer ltx.deinitPlan(allocator, back);
+        checkStr("escaped title round-trips", back.title, p.title);
+    }
+
+    // ── Section 10: Story 26.4 protocol hardening ────────────────────────
 
     checkInt("DEFAULT_PLAN_LOCK_TIMEOUT_FACTOR = 2", ltx.DEFAULT_PLAN_LOCK_TIMEOUT_FACTOR, 2);
     checkInt("DELAY_VIOLATION_WARN_S = 120", ltx.DELAY_VIOLATION_WARN_S, 120);
     checkInt("DELAY_VIOLATION_DEGRADED_S = 300", ltx.DELAY_VIOLATION_DEGRADED_S, 300);
     checkInt("SESSION_STATES length = 5", @intCast(ltx.SESSION_STATES.len), 5);
     checkStr("SESSION_STATES[0] = INIT", ltx.SESSION_STATES[0], "INIT");
-    checkStr("SESSION_STATES[1] = LOCKED", ltx.SESSION_STATES[1], "LOCKED");
-    checkStr("SESSION_STATES[2] = RUNNING", ltx.SESSION_STATES[2], "RUNNING");
     checkStr("SESSION_STATES[3] = DEGRADED", ltx.SESSION_STATES[3], "DEGRADED");
     checkStr("SESSION_STATES[4] = COMPLETE", ltx.SESSION_STATES[4], "COMPLETE");
 
-    // planLockTimeoutMs
     check("planLockTimeoutMs(0) = 0", ltx.planLockTimeoutMs(0) == 0);
     check("planLockTimeoutMs(100) = 200000", ltx.planLockTimeoutMs(100) == 200_000);
     check("planLockTimeoutMs(60) = 120000", ltx.planLockTimeoutMs(60) == 120_000);
     check("planLockTimeoutMs(1000) = 2000000", ltx.planLockTimeoutMs(1000) == 2_000_000);
 
-    // checkDelayViolation
     checkStr("checkDelayViolation same = ok", ltx.checkDelayViolation(100, 100), "ok");
     checkStr("checkDelayViolation diff=100 = ok", ltx.checkDelayViolation(100, 200), "ok");
     checkStr("checkDelayViolation diff=120 = ok (boundary)", ltx.checkDelayViolation(100, 220), "ok");
