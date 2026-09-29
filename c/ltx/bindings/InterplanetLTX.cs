@@ -105,10 +105,12 @@ internal static class Native
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     internal static extern int itx_total_min(ref NativePlan plan);
 
+    // Raw bytes, not LPStr: the id can hold a lone surrogate as WTF-8
+    // (see LtxPlan.MakePlanId), which a UTF-8 decode would mangle.
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     internal static extern void itx_make_plan_id(
         ref NativePlan plan,
-        [MarshalAs(UnmanagedType.LPStr)] StringBuilder buf);
+        [Out] byte[] buf);
 
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     internal static extern void itx_encode_hash(
@@ -224,11 +226,38 @@ public sealed class LtxPlan
     /// <summary>Total session duration in minutes.</summary>
     public int TotalMin() => Native.itx_total_min(ref _native);
 
-    /// <summary>Deterministic plan ID string (e.g. "LTX-20260315-EARTHHQ-MARS-v2-a3b2c1d0").</summary>
+    /// <summary>
+    ///   Deterministic plan ID string (e.g. "LTX-20260315-EARTHHQ-MARS-v2-a3b2c1d0").
+    ///   The exact JavaScript id (LTX-SPECIFICATION.md 4.3): when the UTF-16
+    ///   slicing of HOSTSTR / NODESTR splits a surrogate pair, libitx writes the
+    ///   lone high surrogate as WTF-8 (ED A0..AF xx) and this returns it as a
+    ///   lone UTF-16 surrogate, like the JS string (spec/golden/plan-id-prefixes.json
+    ///   planId). Encoding.UTF8 would turn it into U+FFFD per byte.
+    /// </summary>
     public string MakePlanId()
     {
-        var sb = new StringBuilder(128);   // ITX_PLAN_ID_LEN
-        Native.itx_make_plan_id(ref _native, sb);
+        var buf = new byte[128];           // ITX_PLAN_ID_LEN
+        Native.itx_make_plan_id(ref _native, buf);
+        int len = Array.IndexOf(buf, (byte)0);
+        return FromWtf8(buf, len < 0 ? buf.Length : len);
+    }
+
+    /// <summary>Decode WTF-8 (UTF-8 plus lone surrogates as ED A0..BF xx) to UTF-16.</summary>
+    private static string FromWtf8(byte[] b, int len)
+    {
+        var sb = new StringBuilder(len);
+        int start = 0;
+        for (int i = 0; i + 2 < len; i++)
+        {
+            if (b[i] == 0xED && (b[i + 1] & 0xE0) == 0xA0 && (b[i + 2] & 0xC0) == 0x80)
+            {
+                sb.Append(Encoding.UTF8.GetString(b, start, i - start));
+                sb.Append((char)(0xD000 | ((b[i + 1] & 0x3F) << 6) | (b[i + 2] & 0x3F)));
+                i += 2;
+                start = i + 1;
+            }
+        }
+        sb.Append(Encoding.UTF8.GetString(b, start, len - start));
         return sb.ToString();
     }
 
