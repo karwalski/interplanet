@@ -309,10 +309,22 @@ def make_plan_id(plan) -> str:
     return f'LTX-{date}-{host_str}-{node_str}-v2-{h:08x}'
 
 
+# The ECMAScript \s set (WhiteSpace + LineTerminator). Python's \s differs:
+# it also matches U+001C..U+001F and U+0085, and not U+FEFF.
+_JS_WS = re.compile('[\t\n\v\f\r \u00a0\u1680\u2000-\u200a\u2028\u2029'
+                    '\u202f\u205f\u3000\ufeff]+')
+
+
 def _id_part(name, n: int, default: str) -> str:
-    """(name || default).replace(/\\s+/g, '').toUpperCase().slice(0, n)"""
+    """(name || default).replace(/\\s+/g, '').toUpperCase().slice(0, n)
+
+    str.upper() is the locale-independent full Unicode case mapping, like
+    JS toUpperCase (special casing included: 'ß' -> 'SS'). The slice is in
+    UTF-16 code units and may leave a lone high surrogate, which a Python
+    str holds exactly as JS does (spec/golden/plan-id-prefixes.json planId).
+    """
     s = name if isinstance(name, str) and name else default
-    return utf16_slice(re.sub(r'\s+', '', s).upper(), n)
+    return utf16_slice(_JS_WS.sub('', s).upper(), n)
 
 
 def _plan_id_date(start: str) -> str:

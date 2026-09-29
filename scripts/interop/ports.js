@@ -55,7 +55,7 @@ module.exports = [
     run: 'elixir -pa build driver.exs' },
   { name: 'lua', need: ['lua'], run: 'cd "$ROOT/lua/ltx" && lua "$OLDPWD/driver.lua"' },
   { name: 'ocaml', need: ['ocamlfind', 'ocamlopt'],
-    build: 'rm -rf build && mkdir -p build && cp "$ROOT"/ocaml/ltx/lib/*.ml driver.ml build/ && cd build && ocamlfind ocamlopt -package unix,str -linkpkg constants.ml models.ml interplanet_ltx.ml ed25519.ml security.ml validate.ml v11.ml driver.ml -o driver',
+    build: 'rm -rf build && mkdir -p build && cp "$ROOT"/ocaml/ltx/lib/*.ml driver.ml build/ && cd build && ocamlfind ocamlopt -package unix,str -linkpkg constants.ml models.ml upper.ml interplanet_ltx.ml ed25519.ml security.ml validate.ml v11.ml driver.ml -o driver',
     run: './build/driver' },
   { name: 'r', need: ['Rscript'], run: 'cd "$ROOT/r/ltx" && LC_ALL=C.UTF-8 Rscript "$OLDPWD/driver.R"' },
   { name: 'julia', need: ['julia'], run: 'julia --startup-file=no --project="$ROOT/julia/ltx" driver.jl' },

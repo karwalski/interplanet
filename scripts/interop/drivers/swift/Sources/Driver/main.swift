@@ -45,7 +45,7 @@ write("wire-v3.json", unhash(L.encodeHash(v3)))
 print("ID_V3 \(L.makePlanID(v3))")
 print("NOTE v3 built by setting v/planVersion/delays on LtxPlan (no upgrade function)")
 
-for v in ["2", "3"] {
+for v in ["2", "3", "P"] {
     let json = try! String(contentsOfFile: "\(inDir)/js-v\(v).json", encoding: .utf8)
     print("JS_V\(v) \(L.makePlanID(json: json) ?? "nil")")
 }

@@ -219,25 +219,12 @@ defmodule InterplanetLtx do
 
     host_str = case plan.nodes do
       [] -> "HOST"
-      [first | _] ->
-        first.name
-        |> String.replace(~r/\s+/, "")
-        |> String.upcase()
-        |> String.slice(0, 8)
+      [first | _] -> plan_id_host(first.name)
     end
 
     node_str = case plan.nodes do
       nodes when length(nodes) <= 1 -> "RX"
-      [_ | rest] ->
-        rest
-        |> Enum.map(fn n ->
-          n.name
-          |> String.replace(~r/\s+/, "")
-          |> String.upcase()
-          |> String.slice(0, 4)
-        end)
-        |> Enum.join("-")
-        |> String.slice(0, 16)
+      [_ | rest] -> plan_id_nodes(Enum.map(rest, & &1.name))
     end
 
     h = plan_hash_hex(plan)
@@ -245,6 +232,51 @@ defmodule InterplanetLtx do
   end
 
   def make_plan_id(cfg) when is_map(cfg), do: make_plan_id(upgrade_config(cfg))
+
+  # ── planId HOSTSTR / NODESTR (LTX-SPECIFICATION.md §4.3) ────────────────────
+
+  # ECMAScript \s: WhiteSpace and LineTerminator. A plain ~r/\s/ is ASCII
+  # only, and the Unicode White_Space property has U+0085 and not U+FEFF.
+  @js_whitespace ~r/[\t\n\x{0B}\f\r \x{A0}\x{1680}\x{2000}-\x{200A}\x{2028}\x{2029}\x{202F}\x{205F}\x{3000}\x{FEFF}]+/u
+
+  @doc false
+  # (name || 'HOST').replace(/\s+/g, '').toUpperCase().slice(0, 8)
+  def plan_id_host(name) when is_binary(name) and name != "", do: plan_id_token(name, 8)
+  def plan_id_host(_), do: "HOST"
+
+  @doc false
+  # names.map(n => token(n, 4)).join('-').slice(0, 16)
+  def plan_id_nodes(names),
+    do: names |> Enum.map_join("-", &plan_id_token(&1 || "", 4)) |> utf16_slice(16)
+
+  @doc false
+  # name.replace(/\s+/g, '').toUpperCase().slice(0, n). String.upcase/1 is the
+  # full, locale-independent Unicode mapping (special casing included), as
+  # JS toUpperCase; the slice is in UTF-16 code units (not graphemes).
+  def plan_id_token(name, n) when is_binary(name),
+    do: name |> String.replace(@js_whitespace, "") |> String.upcase() |> utf16_slice(n)
+
+  @doc false
+  # s.slice(0, n) in UTF-16 code units. An Elixir string is UTF-8 and cannot
+  # hold the lone surrogate JS leaves when the cut splits a surrogate pair:
+  # it becomes U+FFFD, the UTF-8 form of the JS id (planIdUtf8 in
+  # spec/golden/plan-id-prefixes.json).
+  def utf16_slice(s, n) when is_binary(s) do
+    utf16 = :unicode.characters_to_binary(s, :utf8, {:utf16, :big})
+
+    if byte_size(utf16) <= 2 * n do
+      s
+    else
+      <<head::binary-size(2 * n), _::binary>> = utf16
+      {whole, lone} =
+        case head do
+          <<rest::binary-size(2 * n - 2), hi::16>> when hi in 0xD800..0xDBFF -> {rest, true}
+          _ -> {head, false}
+        end
+
+      :unicode.characters_to_binary(whole, {:utf16, :big}, :utf8) <> if(lone, do: "\u{FFFD}", else: "")
+    end
+  end
 
   # ── URL hash encoding ─────────────────────────────────────────────────────
 

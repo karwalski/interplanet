@@ -19,6 +19,7 @@ For every port whose toolchain is found, `run.js` runs a small driver in
 | (a) v3 | The same for the port's v3 plan (its `upgradePlanToV3`, or the v3 fields of its typed plan where it has no upgrade function). `n/a` where the typed API cannot build a v3 plan. |
 | (c) v2 | The port computes the planId of a JS `createPlan` plan (segments first) from its JSON text with its JSON-based function (`makePlanIdFromJson`, `make_plan_id_from_json`, `plan_id_from_json`, `makePlanIdFromMap`, ...). Must equal JS `makePlanId`. |
 | (c) v3 | The same for `upgradePlanToV3(plan, { delays: { 'N1\|N2': 842 } })`. |
+| (c) pfx | The same for a JS `createPlan` plan whose node names (`PREFIX_NODES` in `plan.js`) stress the planId HOSTSTR/NODESTR: JS whitespace (U+3000, U+00A0), the full Unicode upper-case mapping of `toUpperCase` (ß, ﬁ, ﬂ, ΐ, σ/ς, ı, İ, Deseret astral letters) and UTF-16 slicing (issue #37). Optional: `n/a` for a driver that does not print `JS_VP`. No cut splits a surrogate pair here; `spec/golden/plan-id-prefixes.json` covers those cases in each port's own tests. |
 | wire key order | Top-level key order of the port's v2 wire JSON: `nodes first` (v, title, start, quantum, mode, nodes, segments) or `segments first (as JS)`. |
 
 The representative plan (`plan.js`) has a non-ASCII title with an astral
@@ -83,33 +84,38 @@ on OTP 24, Lua 5.4.6, OCaml 4.14.1, R 4.3.3, gcc 13.3, TypeScript 6.0.2, Dart
 JS reference ids for the inputs to (c): v2 `LTX-20260315-EARTHHQ-MARS-L-1G-v2-09310844`,
 v3 `LTX-20260315-EARTHHQ-MARS-L-1G-v3-f3abaee9`.
 
-| Port | Status | (a) v2 | (a) v3 | (c) v2 | (c) v3 | Wire key order | Notes |
-|---|---|---|---|---|---|---|---|
-| javascript | PASS | ok | ok | ok | ok | segments first | reference, harness baseline |
-| typescript | PASS | ok | ok | ok | ok | segments first | |
-| python | PASS | ok | ok | ok | ok | nodes first | v3 wire via `json.dumps` (`encode_hash` takes a v2 `LtxPlan`) |
-| rust | PASS | ok | ok | ok | ok | nodes first | v3 by setting the typed v3 fields |
-| go | PASS | ok | ok | ok | ok | nodes first | v3 by setting the typed v3 fields |
-| ruby | PASS | ok | n/a | ok | ok | nodes first | typed segments have no speaker/label; no typed v3 |
-| php | PASS | ok | n/a | ok | ok | nodes first | typed segments have no speaker/label; no typed v3 |
-| java | PASS | ok | n/a | ok | ok | nodes first | typed segments have no speaker/label; no typed v3 |
-| kotlin | PASS | ok | n/a | ok | ok | nodes first | `LtxPlan`: no speaker/label, no v3 |
-| kotlin-v11 | PASS | ok | ok | ok | ok | nodes first | `PlanV11` |
-| scala | PASS | ok | n/a | ok | ok | nodes first | `LtxPlan`: no speaker/label, no v3 |
-| scala-v11 | PASS | ok | ok | ok | ok | nodes first | `PlanV11` |
-| csharp | PASS | ok | n/a | ok | ok | nodes first | `LtxPlan`: no speaker/label, no v3 |
-| csharp-v11 | PASS | ok | ok | ok | ok | nodes first | `PlanV11` |
-| fsharp | PASS | ok | n/a | ok | ok | nodes first | `LtxPlan`: no speaker/label, no v3 |
-| fsharp-v11 | PASS | ok | ok | ok | ok | nodes first | `PlanV11` |
-| c | PASS | ok | n/a | ok | ok | nodes first | `itx_plan_t`: no speaker/label; the C port builds no v3 plans |
-| dart | PASS | ok | ok | ok | ok | nodes first | |
-| swift | PASS | ok | ok | ok | ok | nodes first | |
-| zig | PASS | ok | n/a | ok | ok | segments first (as JS) | typed `LtxPlan` is v2 only; v3 through `makePlanIdJson` |
-| elixir | PASS | ok | ok | ok | ok | nodes first | |
-| lua | PASS | ok | ok | ok | ok | nodes first | |
-| ocaml | PASS | ok | ok | ok | ok | nodes first | typed plan: no speaker/label; v3 through `V11` on the parsed wire JSON |
-| r | PASS | ok | ok | ok | ok | nodes first | `ltx_segment_spec`: no speaker/label |
-| julia | PASS | ok | ok | ok | ok | nodes first | `LtxSegmentSpec`: no speaker/label |
+| Port | Status | (a) v2 | (a) v3 | (c) v2 | (c) v3 | (c) pfx | Wire key order | Notes |
+|---|---|---|---|---|---|---|---|---|
+| javascript | PASS | ok | ok | ok | ok | ok | segments first | reference, harness baseline |
+| typescript | PASS | ok | ok | ok | ok | ok | segments first | |
+| python | PASS | ok | ok | ok | ok | ok | nodes first | v3 wire via `json.dumps` (`encode_hash` takes a v2 `LtxPlan`) |
+| rust | PASS | ok | ok | ok | ok | ok | nodes first | v3 by setting the typed v3 fields |
+| go | PASS | ok | ok | ok | ok | n/a | nodes first | v3 by setting the typed v3 fields |
+| ruby | PASS | ok | n/a | ok | ok | ok | nodes first | typed segments have no speaker/label; no typed v3 |
+| php | PASS | ok | n/a | ok | ok | ok | nodes first | typed segments have no speaker/label; no typed v3 |
+| java | PASS | ok | n/a | ok | ok | n/a | nodes first | typed segments have no speaker/label; no typed v3 |
+| kotlin | PASS | ok | n/a | ok | ok | n/a | nodes first | `LtxPlan`: no speaker/label, no v3 |
+| kotlin-v11 | PASS | ok | ok | ok | ok | n/a | nodes first | `PlanV11` |
+| scala | PASS | ok | n/a | ok | ok | n/a | nodes first | `LtxPlan`: no speaker/label, no v3 |
+| scala-v11 | PASS | ok | ok | ok | ok | n/a | nodes first | `PlanV11` |
+| csharp | PASS | ok | n/a | ok | ok | n/a | nodes first | `LtxPlan`: no speaker/label, no v3 |
+| csharp-v11 | PASS | ok | ok | ok | ok | n/a | nodes first | `PlanV11` |
+| fsharp | PASS | ok | n/a | ok | ok | n/a | nodes first | `LtxPlan`: no speaker/label, no v3 |
+| fsharp-v11 | PASS | ok | ok | ok | ok | n/a | nodes first | `PlanV11` |
+| c | PASS | ok | n/a | ok | ok | ok | nodes first | `itx_plan_t`: no speaker/label; the C port builds no v3 plans |
+| dart | PASS | ok | ok | ok | ok | ok | nodes first | |
+| swift | PASS | ok | ok | ok | ok | ok | nodes first | |
+| zig | PASS | ok | n/a | ok | ok | ok | segments first (as JS) | typed `LtxPlan` is v2 only; v3 through `makePlanIdJson` |
+| elixir | PASS | ok | ok | ok | ok | ok | nodes first | |
+| lua | PASS | ok | ok | ok | ok | ok | nodes first | |
+| ocaml | PASS | ok | ok | ok | ok | ok | nodes first | typed plan: no speaker/label; v3 through `V11` on the parsed wire JSON |
+| r | PASS | ok | ok | ok | ok | ok | nodes first | `ltx_segment_spec`: no speaker/label |
+| julia | PASS | ok | ok | ok | ok | ok | nodes first | `LtxSegmentSpec`: no speaker/label |
+
+The (c) pfx column was added for issue #37 and run for the 15 ports whose
+drivers print `JS_VP` (all pass, JS id
+`LTX-20260315-GRÖSSEΣΣ-FIXF-Ϊ́Λ-𐐀𐐁-I-v2-0ec4062a`); the Java, Kotlin,
+Scala, C#, F# and Go drivers do not print it yet, so it is `n/a` there.
 
 25 pass, 0 fail, 0 known-incompatible (xfail), 0 skipped. Every toolchain was
 available; sbt, Dart, Zig and Julia were not on the default PATH and were
@@ -172,6 +178,7 @@ produces for the same values.
 1. Add `drivers/<port>/` with a driver that builds the plan in `plan.js` with
    the port's typed API and follows the contract at the top of `run.js`:
    `<driver> <inDir> <outDir>`, write `outDir/wire-v2.json` (and
-   `wire-v3.json`), print `ID_V2`, `ID_V3`, `JS_V2`, `JS_V3` lines (omit a
-   line for anything the port cannot do; `NOTE` lines are passed through).
+   `wire-v3.json`), print `ID_V2`, `ID_V3`, `JS_V2`, `JS_V3` and `JS_VP`
+   (the JSON planId of `inDir/js-vP.json`) lines (omit a line for anything
+   the port cannot do; `NOTE` lines are passed through).
 2. Add its entry to `ports.js`.

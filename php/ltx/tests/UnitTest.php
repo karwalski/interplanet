@@ -227,6 +227,32 @@ check('JsJson::number matches JS',       array_map([\InterplanetLTX\JsJson::clas
                                              [840.0, 0.1, 1e21, 1e-7, 1.5e-7, 1e16, -2.5, 0.000001]) ===
                                          ['840', '0.1', '1e+21', '1e-7', '1.5e-7', '10000000000000000', '-2.5', '0.000001']);
 
+/* ── Conformance: planId prefix vectors (spec/golden/plan-id-prefixes.json) ── */
+/* Unicode upper-casing and UTF-16 slicing of HOSTSTR / NODESTR (issue #37).
+ * A PHP string holds a lone surrogate as WTF-8 (as JsJson does), so the
+ * expected id is the planIdWtf8Hex bytes. */
+section('Conformance: planId prefix vectors');
+$prefixText   = file_get_contents(__DIR__ . '/../../../spec/golden/plan-id-prefixes.json');
+/* json_decode rejects a lone surrogate escape (JSON_ERROR_UTF16); the exact
+ * JS planId carries one as \ud83d, so map those to \ufffd before decoding
+ * (only the planId fields have them; the test uses planIdWtf8Hex). */
+$prefixText   = preg_replace('/\\\\u[dD][89abAB][0-9a-fA-F]{2}(?!\\\\u[dD][c-fC-F])/', '\\\\ufffd', $prefixText);
+$prefixGolden = json_decode($prefixText);
+check('prefix vectors present (>= 18)',  count($prefixGolden->vectors) >= 18);
+foreach ($prefixGolden->vectors as $vec) {
+    $want = hex2bin($vec->planIdWtf8Hex);
+    $got  = LTX::makePlanId($vec->plan);
+    check("prefix {$vec->name} planId (got $got)", $got === $want);
+    $assoc = json_decode(json_encode($vec->plan, JSON_UNESCAPED_UNICODE), true);
+    check("prefix {$vec->name} planId from assoc array", LTX::makePlanId($assoc) === $want);
+    $typed = LtxPlan::fromJson(json_encode($vec->plan));
+    $typedId = $typed === null ? '' : LTX::makePlanId($typed);
+    check("prefix {$vec->name} typed LtxPlan prefix (got $typedId)",
+          $typed !== null && substr($typedId, 0, -12) === substr($want, 0, -12));
+    check("prefix {$vec->name} lone surrogate stringifies as \\udxxx",
+          str_contains(\InterplanetLTX\JsJson::string($got), '\\ud8') === $vec->loneSurrogate);
+}
+
 /* ── Plan validation: reserved streams / branching (§3.5, §7) ─────── */
 section('Plan validation: reserved fields');
 $codesOf = fn(array $r) => array_column($r['errors'], 'code');

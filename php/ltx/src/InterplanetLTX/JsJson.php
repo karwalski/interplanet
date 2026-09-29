@@ -159,19 +159,58 @@ final class JsJson
         return self::stringify($v);
     }
 
-    /** UTF-16 code units of a UTF-8 string (what JavaScript's charCodeAt iterates). */
+    /**
+     * UTF-16 code units of a UTF-8 string (what JavaScript's charCodeAt
+     * iterates). A WTF-8 string (lone surrogates as ED A0..BF xx) gives each
+     * lone surrogate as one unit; any other invalid byte throws.
+     */
     public static function utf16Units(string $s): array
     {
         if ($s === '') return [];
-        return array_values(unpack('v*', mb_convert_encoding($s, 'UTF-16LE', 'UTF-8')));
+        if (mb_check_encoding($s, 'UTF-8')) {
+            return array_values(unpack('v*', mb_convert_encoding($s, 'UTF-16LE', 'UTF-8')));
+        }
+        $units = [];
+        $len = strlen($s);
+        for ($i = 0; $i < $len; $i += $n) {
+            $b = ord($s[$i]);
+            $n = $b < 0x80 ? 1 : ($b >= 0xF0 ? 4 : ($b >= 0xE0 ? 3 : 2));
+            $chunk = substr($s, $i, $n);
+            if (strlen($chunk) === $n && mb_check_encoding($chunk, 'UTF-8')) {
+                array_push($units, ...array_values(unpack('v*', mb_convert_encoding($chunk, 'UTF-16LE', 'UTF-8'))));
+            } elseif ($n === 3 && strlen($chunk) === 3 && $b === 0xED
+                && (ord($chunk[1]) & 0xE0) === 0xA0 && (ord($chunk[2]) & 0xC0) === 0x80) {
+                $units[] = 0xD000 | ((ord($chunk[1]) & 0x3F) << 6) | (ord($chunk[2]) & 0x3F);
+            } else {
+                throw new \JsonException('Malformed UTF-8 characters, possibly incorrectly encoded');
+            }
+        }
+        return $units;
     }
 
-    /** $s.slice(0, $n) with JavaScript (UTF-16 code unit) semantics. */
+    /**
+     * $s.slice(0, $n) with JavaScript (UTF-16 code unit) semantics. A cut that
+     * splits a surrogate pair keeps the lone high surrogate, as WTF-8
+     * (spec/golden/plan-id-prefixes.json planIdWtf8Hex); string() writes it
+     * back as JSON.stringify does. mb_convert_encoding would substitute '?'.
+     */
     public static function utf16Slice(string $s, int $n): string
     {
         $units = array_slice(self::utf16Units($s), 0, $n);
-        if (!$units) return '';
-        return mb_convert_encoding(pack('v*', ...$units), 'UTF-8', 'UTF-16LE');
+        $out = '';
+        $count = count($units);
+        for ($i = 0; $i < $count; $i++) {
+            $u = $units[$i];
+            if ($u >= 0xD800 && $u <= 0xDBFF && $i + 1 < $count
+                && $units[$i + 1] >= 0xDC00 && $units[$i + 1] <= 0xDFFF) {
+                $out .= mb_chr(0x10000 + (($u - 0xD800) << 10) + ($units[++$i] - 0xDC00), 'UTF-8');
+            } elseif ($u >= 0xD800 && $u <= 0xDFFF) {
+                $out .= chr(0xE0 | ($u >> 12)) . chr(0x80 | (($u >> 6) & 0x3F)) . chr(0x80 | ($u & 0x3F));
+            } else {
+                $out .= mb_chr($u, 'UTF-8');
+            }
+        }
+        return $out;
     }
 
     private static function compareUtf16(string $a, string $b): int

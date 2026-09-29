@@ -100,21 +100,28 @@ defmodule InterplanetLtx.Json do
 
   defp string("\"" <> rest, acc), do: {acc |> Enum.reverse() |> IO.iodata_to_binary(), rest}
 
+  # A surrogate pair escape is joined into one code point. A lone surrogate
+  # escape (valid JSON; JSON.stringify writes one for a lone surrogate, e.g.
+  # a planId whose cut split a pair) cannot be held by a UTF-8 string and
+  # decodes to U+FFFD, as when JS encodes that string to UTF-8.
   defp string("\\u" <> <<hex::binary-size(4), rest::binary>>, acc) do
     cp = String.to_integer(hex, 16)
 
-    if cp in 0xD800..0xDBFF do
-      case rest do
-        "\\u" <> <<lo_hex::binary-size(4), rest2::binary>> ->
-          lo = String.to_integer(lo_hex, 16)
+    cond do
+      cp in 0xD800..0xDBFF ->
+        with "\\u" <> <<lo_hex::binary-size(4), rest2::binary>> <- rest,
+             lo when lo in 0xDC00..0xDFFF <- String.to_integer(lo_hex, 16) do
           full = 0x10000 + ((cp - 0xD800) <<< 10) + (lo - 0xDC00)
           string(rest2, [<<full::utf8>> | acc])
+        else
+          _ -> string(rest, ["\uFFFD" | acc])
+        end
 
-        _ ->
-          raise ArgumentError, "json: lone surrogate"
-      end
-    else
-      string(rest, [<<cp::utf8>> | acc])
+      cp in 0xDC00..0xDFFF ->
+        string(rest, ["\uFFFD" | acc])
+
+      true ->
+        string(rest, [<<cp::utf8>> | acc])
     end
   end
 

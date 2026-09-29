@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'models.dart';
 import 'constants.dart';
 import 'security.dart';
+import 'upper.dart';
 
 // ── Internal utilities ─────────────────────────────────────────────────────
 
@@ -189,23 +190,14 @@ String makePlanId(LtxPlan cfg) {
   // Extract date portion
   final date = c.start.substring(0, 10).replaceAll('-', '');
 
-  // Host string: first node name, no spaces, uppercase, max 8 chars
-  final hostStr = c.nodes.isNotEmpty
-      ? c.nodes[0].name.replaceAll(RegExp(r'\s+'), '').toUpperCase().substring(
-            0,
-            c.nodes[0].name.replaceAll(RegExp(r'\s+'), '').length > 8
-                ? 8
-                : c.nodes[0].name.replaceAll(RegExp(r'\s+'), '').length,
-          )
+  // HOSTSTR / NODESTR (§4.3): JS whitespace removed, JS toUpperCase (full
+  // Unicode mapping), sliced to 8 / 4 / 16 UTF-16 code units.
+  final hostStr = c.nodes.isNotEmpty && c.nodes[0].name.isNotEmpty
+      ? planIdToken(c.nodes[0].name, 8)
       : 'HOST';
-
-  // Node string: remaining nodes, first 4 chars each, joined by -, max 16 chars
   String nodeStr;
   if (c.nodes.length > 1) {
-    final parts = c.nodes.skip(1).map((n) {
-      final cleaned = n.name.replaceAll(RegExp(r'\s+'), '').toUpperCase();
-      return cleaned.length > 4 ? cleaned.substring(0, 4) : cleaned;
-    }).join('-');
+    final parts = c.nodes.skip(1).map((n) => planIdToken(n.name, 4)).join('-');
     nodeStr = parts.length > 16 ? parts.substring(0, 16) : parts;
   } else {
     nodeStr = 'RX';

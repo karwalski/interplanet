@@ -285,21 +285,30 @@ function _js_space_replace(s::AbstractString, rep::AbstractString = "")
     return String(take!(io))
 end
 
-"""s.slice(0, n) in UTF-16 code units (a pair that does not fit is dropped)."""
+"""
+s.slice(0, n) in UTF-16 code units. When the cut splits a surrogate pair, JS
+keeps the lone high surrogate, and so does this: a Julia String holds it as
+WTF-8, as the JSON layer does (planIdWtf8Hex in
+spec/golden/plan-id-prefixes.json).
+"""
 function _utf16_first(s::AbstractString, n::Integer)
     io = IOBuffer()
     units = 0
     for c in s
-        units += UInt32(c) >= 0x10000 ? 2 : 1
-        units > n && break
+        w = isvalid(c) && UInt32(c) >= 0x10000 ? 2 : 1
+        if units + w > n
+            units < n && print(io, Char(0xD800 + ((UInt32(c) - 0x10000) >> 10)))
+            break
+        end
+        units += w
         print(io, c)
     end
     return String(take!(io))
 end
 
-"""name.replace(/\\s+/g, '').toUpperCase().slice(0, n) (Julia's uppercase is
-Unicode simple case mapping)."""
-_short(name, n) = _utf16_first(uppercase(_js_space_replace(String(name))), n)
+"""name.replace(/\\s+/g, '').toUpperCase().slice(0, n): JS whitespace, JS
+toUpperCase (full mapping, `js_uppercase` in upper.jl), UTF-16 code units."""
+_short(name, n) = _utf16_first(js_uppercase(_js_space_replace(String(name))), n)
 
 """
     make_plan_id(plan::JsonObject) -> String

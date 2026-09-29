@@ -243,8 +243,10 @@ char *itx_json_quote(const char *utf8);
 
 /**
  * makePlanId HOSTSTR and NODESTR from node names (names[0] is the HOST):
- * name.replace(/\s+/g, '').toUpperCase() with JavaScript's \s, ASCII case
- * mapping, and slices counted in UTF-16 code units. host needs 32 bytes,
+ * name.replace(/\s+/g, '').toUpperCase() with JavaScript's \s and the full
+ * Unicode case mapping of JS toUpperCase (special casing included), and
+ * slices counted in UTF-16 code units; a cut that splits a surrogate pair
+ * keeps the high surrogate as WTF-8, as JS keeps it. host needs 32 bytes,
  * nodes 64.
  */
 void itx_plan_id_name_strs(const char *const *names, size_t count, char *host, char *nodes);

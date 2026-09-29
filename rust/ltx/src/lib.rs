@@ -241,19 +241,19 @@ pub fn make_plan_id(plan: &LtxPlan) -> String {
     id
 }
 
+// HOSTSTR / NODESTR (§4.3): JS whitespace removed, full Unicode upper-case,
+// sliced in UTF-16 code units (not chars), as the JSON-based path does.
 fn nodes_host_str(nodes: &[LtxNode]) -> String {
-    if nodes.is_empty() { return "HOST".to_string(); }
-    let s: String = nodes[0].name.chars().filter(|c| !c.is_whitespace()).collect();
-    s.to_uppercase().chars().take(8).collect()
+    match nodes.first() {
+        Some(n) if !n.name.is_empty() => plan_json::name_token(&n.name, 8),
+        _ => "HOST".to_string(),
+    }
 }
 
 fn nodes_remote_str(nodes: &[LtxNode]) -> String {
     if nodes.len() <= 1 { return "RX".to_string(); }
-    let parts: Vec<String> = nodes[1..].iter().map(|n| {
-        let s: String = n.name.chars().filter(|c| !c.is_whitespace()).collect();
-        s.to_uppercase().chars().take(4).collect()
-    }).collect();
-    parts.join("-").chars().take(16).collect()
+    let parts: Vec<String> = nodes[1..].iter().map(|n| plan_json::name_token(&n.name, 4)).collect();
+    plan_json::utf16_prefix(&parts.join("-"), 16)
 }
 
 pub fn encode_hash(plan: &LtxPlan) -> String {

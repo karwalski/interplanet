@@ -32,6 +32,6 @@ v3 = upgrade_plan_to_v3(plan; extras = ["delays" => parse_json_ordered("{\"N1|N2
 write(joinpath(out_dir, "wire-v3.json"), json_stringify(v3))
 println("ID_V3 ", make_plan_id(v3))
 
-for v in ("2", "3")
+for v in ("2", "3", "P")
     println("JS_V$v ", plan_id_from_json(read(joinpath(in_dir, "js-v$v.json"), String)))
 end

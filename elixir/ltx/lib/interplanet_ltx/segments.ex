@@ -80,14 +80,14 @@ defmodule InterplanetLtx.Segments do
 
       host_str =
         case nodes do
-          [first | _] -> short_name(first["name"] || "HOST", 8)
+          [first | _] -> InterplanetLtx.plan_id_host(first["name"])
           [] -> "HOST"
         end
 
       node_str =
         case nodes do
           [_ | rest] when rest != [] ->
-            rest |> Enum.map_join("-", fn n -> short_name(n["name"] || "", 4) end) |> String.slice(0, 16)
+            InterplanetLtx.plan_id_nodes(Enum.map(rest, & &1["name"]))
 
           _ ->
             "RX"
@@ -107,16 +107,14 @@ defmodule InterplanetLtx.Segments do
 
       host_str =
         case nodes do
-          [first | _] -> short_name(first["name"] || "HOST", 8)
+          [first | _] -> InterplanetLtx.plan_id_host(first["name"])
           [] -> "HOST"
         end
 
       node_str =
         case nodes do
           [_ | rest] when rest != [] ->
-            rest
-            |> Enum.map_join("-", fn n -> short_name(n["name"] || "", 4) end)
-            |> String.slice(0, 16)
+            InterplanetLtx.plan_id_nodes(Enum.map(rest, & &1["name"]))
 
           _ -> "RX"
         end
@@ -198,13 +196,6 @@ defmodule InterplanetLtx.Segments do
 
     InterplanetLtx.Validate.assert_no_reserved_fields!(plan, "upgradePlanToV3")
     plan
-  end
-
-  defp short_name(name, len) do
-    name
-    |> String.replace(~r/\s+/, "")
-    |> String.upcase()
-    |> String.slice(0, len)
   end
 
   # ── pair_delay (LTX-SPECIFICATION.md §3.7) ──────────────────────────────────

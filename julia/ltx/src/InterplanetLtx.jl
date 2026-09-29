@@ -837,6 +837,7 @@ function _http_get_str(url::String)::String
     return String(take!(buf))
 end
 
+include("upper.jl")
 include("parity.jl")
 
 end  # module InterplanetLtx

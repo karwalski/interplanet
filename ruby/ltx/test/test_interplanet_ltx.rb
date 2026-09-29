@@ -217,6 +217,30 @@ check 'v2 hash formats 840.0 as 840',     make_plan_id(fc_float) == gv_by_name['
 check 'JsJson.number matches JS',         [840.0, 0.1, 1e21, 1e-7, 1.5e-7, 1e16, -2.5, 0.000001].map { |x| JsJson.number(x) } ==
                                           %w[840 0.1 1e+21 1e-7 1.5e-7 10000000000000000 -2.5 0.000001]
 
+# ── Conformance: planId prefix vectors (spec/golden/plan-id-prefixes.json) ─
+# Unicode upper-casing and UTF-16 slicing of HOSTSTR / NODESTR (issue #37).
+# A Ruby String holds a lone surrogate as WTF-8 (as JsJson does), so the
+# expected id is the planIdWtf8Hex bytes.
+section 'Conformance: planId prefix vectors'
+prefix_golden = JSON.parse(File.read(File.join(__dir__, '../../../spec/golden/plan-id-prefixes.json')))
+check 'prefix vectors present (>= 18)',   prefix_golden['vectors'].size >= 18
+prefix_golden['vectors'].each do |gv|
+  want = [gv['planIdWtf8Hex']].pack('H*').force_encoding('UTF-8')
+  got = make_plan_id(gv['plan'])
+  check "prefix #{gv['name']} planId (got #{got})", got == want
+  from_text = make_plan_id(JSON.parse(JSON.generate(gv['plan'])))
+  check "prefix #{gv['name']} planId from JSON text", from_text == want
+  p = gv['plan']
+  typed = LtxPlan.new(
+    v: 2, title: p['title'], start: p['start'], quantum: p['quantum'], mode: p['mode'],
+    nodes: p['nodes'].map { |n| LtxNode.new(id: n['id'], name: n['name'], role: n['role'], delay: n['delay'], location: n['location']) },
+    segments: p['segments'].map { |s| LtxSegmentTemplate.new(type: s['type'], q: s['q']) },
+  )
+  typed_id = make_plan_id(typed)
+  check "prefix #{gv['name']} typed LtxPlan prefix (got #{typed_id})", typed_id.b[0...-12] == want.b[0...-12]
+  check "prefix #{gv['name']} lone surrogate stringifies as \\udxxx", JsJson.string(got).include?('\\ud8') == gv['loneSurrogate']
+end
+
 # ── Plan validation: reserved streams / branching (§3.5, §7) ─────────────
 section 'Plan validation: reserved fields'
 codes_of = ->(r) { r[:errors].map { |e| e[:code] } }

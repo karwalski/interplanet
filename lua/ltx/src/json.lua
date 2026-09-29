@@ -194,6 +194,11 @@ local function quote(str)
     local b = c:byte()
     if b < 0x20 then return string.format("\\u%04x", b) end
     return c  -- DEL (0x7f) is not escaped by JSON.stringify
+  end):gsub('\xED[\xA0-\xBF][\x80-\xBF]', function(w)
+    -- A lone UTF-16 surrogate held as WTF-8 (as decode_ordered keeps one):
+    -- JSON.stringify writes it as a lowercase \udxxx escape.
+    local b1, b2 = w:byte(2, 3)
+    return string.format("\\u%04x", 0xD000 | ((b1 & 0x3F) << 6) | (b2 & 0x3F))
   end) .. '"'
 end
 
@@ -247,7 +252,7 @@ end
 function M.imul31_hex(s)
   local h = 0
   local function add(unit) h = (h * 31 + unit) & 0xFFFFFFFF end
-  for _, cp in utf8.codes(s) do
+  for _, cp in utf8.codes(s, true) do  -- lax: a WTF-8 lone surrogate is one unit
     if cp >= 0x10000 then
       local x = cp - 0x10000
       add(0xD800 + (x >> 10))

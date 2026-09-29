@@ -292,10 +292,7 @@ public enum InterplanetLTX {
         fmt.dateFormat = "yyyyMMdd"
         let dateStr = fmt.string(from: date)
 
-        var hostStr = "HOST"
-        if let first = plan.nodes.first {
-            hostStr = jsSlice(jsCompactUpper(first.name), 8)
-        }
+        let hostStr = jsHostStr(plan.nodes.first?.name)
 
         var nodeStr = "RX"
         if plan.nodes.count > 1 {

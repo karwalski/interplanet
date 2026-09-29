@@ -53,7 +53,7 @@ fn main() {
     println!("ID_V3 {}", make_plan_id(&v3));
     println!("NOTE v3 built by setting v/plan_version/delays on LtxPlan (no upgrade function)");
 
-    for v in ["2", "3"] {
+    for v in ["2", "3", "P"] {
         let json = fs::read_to_string(in_dir.join(format!("js-v{}.json", v))).unwrap();
         println!("JS_V{} {}", v, make_plan_id_from_json(&json).unwrap());
     }

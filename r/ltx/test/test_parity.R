@@ -26,6 +26,34 @@ parse_json <- function(txt) jsonlite::fromJSON(txt, simplifyVector = FALSE)
 codes <- function(r) vapply(r$errors, function(e) e$code, character(1L))
 with_key <- function(x, k, v) { x[k] <- list(v); x }
 
+# ── Conformance: planId prefix vectors (spec/golden/plan-id-prefixes.json) ─
+# Unicode upper-casing and UTF-16 slicing of HOSTSTR / NODESTR (issue #37).
+# R strings are UTF-8 and cannot hold a lone surrogate, so the expected id is
+# planIdUtf8 (a surrogate pair split by the cut becomes U+FFFD).
+
+prefix_golden <- parse_json(paste(readLines("../../spec/golden/plan-id-prefixes.json", encoding = "UTF-8",
+                                            warn = FALSE), collapse = "\n"))
+check(length(prefix_golden$vectors) >= 18L, "prefix vectors present")
+for (gv in prefix_golden$vectors) {
+  want <- gv$planIdUtf8
+  got <- make_plan_id(gv$plan)
+  check(identical(got, want), sprintf("prefix planId %s (got %s)", gv$name, got))
+  check(identical(make_plan_id(parse_json(json_stringify(gv$plan))), want), paste("prefix planId from JSON text", gv$name))
+  # decode_hash gives the typed (nodes-first) plan: same prefix
+  wire <- decode_hash(encode_hash(gv$plan))
+  check(identical(substr(make_plan_id(wire), 1L, nchar(want) - 12L), substr(want, 1L, nchar(want) - 12L)),
+        paste("prefix planId of decode_hash", gv$name))
+  typed <- create_plan(title = gv$plan$title, start_iso = gv$plan$start)
+  typed$nodes <- lapply(gv$plan$nodes, function(n)
+    list(id = n$id, name = n$name, role = n$role, delay = n$delay, location = n$location))
+  tid <- make_plan_id(typed)
+  cut <- function(id) substr(id, 1L, nchar(id) - 12L)
+  check(identical(cut(tid), cut(want)), sprintf("prefix typed planId %s (got %s)", gv$name, tid))
+}
+check(identical(.js_toupper("stra\u00dfe \ufb01 \u0149 \u0390 \u1fb3 \u0587 \u023f"),
+                "STRASSE FI \u02bcN \u0399\u0308\u0301 \u0391\u0399 \u0535\u0552 \u2c7e"),
+      ".js_toupper full mapping")
+
 # ── Conformance: golden planId vectors (spec/golden/plan-ids.json) ───────────
 
 golden <- parse_json(paste(readLines("../../spec/golden/plan-ids.json", encoding = "UTF-8", warn = FALSE),

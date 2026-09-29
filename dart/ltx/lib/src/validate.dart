@@ -8,6 +8,7 @@
 import 'dart:convert';
 
 import 'security.dart';
+import 'upper.dart';
 
 /// One validation failure: a stable [code], the JSON [path] and a message.
 class PlanValidationError {
@@ -272,11 +273,12 @@ String makePlanIdFromMap(Map<String, dynamic> plan) {
       '${start.month.toString().padLeft(2, '0')}'
       '${start.day.toString().padLeft(2, '0')}';
   final nodes = (plan['nodes'] as List?) ?? const [];
-  String clean(dynamic n) =>
-      '${(n as Map)['name']}'.replaceAll(RegExp(r'\s+'), '').toUpperCase();
-  final hostStr = nodes.isNotEmpty ? _clip(clean(nodes[0]), 8) : 'HOST';
+  String name(dynamic n) => '${(n as Map)['name']}';
+  final hostStr = nodes.isNotEmpty && name(nodes[0]).isNotEmpty
+      ? planIdToken(name(nodes[0]), 8)
+      : 'HOST';
   final nodeStr = nodes.length > 1
-      ? _clip(nodes.skip(1).map((n) => _clip(clean(n), 4)).join('-'), 16)
+      ? _clip(nodes.skip(1).map((n) => planIdToken(name(n), 4)).join('-'), 16)
       : 'RX';
   final v = plan['v'];
   if (v is num && v >= 3) {

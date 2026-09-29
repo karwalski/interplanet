@@ -750,6 +750,31 @@ check("LtxJSON stringify round-trips escapes",
       LtxJSON.parse("{\"a\":\"x\\u0001\\b\\\"y\\ud83d\\ude80\",\"n\":[1,2.5,-0]}")?.stringify()
           == "{\"a\":\"x\\u0001\\b\\\"y\u{1F680}\",\"n\":[1,2.5,0]}")
 
+// ── Conformance: planId prefix vectors (spec/golden/plan-id-prefixes.json) ─
+// Unicode upper-casing and UTF-16 slicing of HOSTSTR / NODESTR (issue #37).
+// A Swift String cannot hold a lone surrogate, so the expected id is
+// planIdUtf8 (a surrogate pair split by the cut becomes U+FFFD).
+
+let prefixText = goldenCandidates.lazy
+    .compactMap { try? String(contentsOfFile: $0.replacingOccurrences(of: "plan-ids.json", with: "plan-id-prefixes.json"),
+                              encoding: .utf8) }.first
+check("prefix: spec/golden/plan-id-prefixes.json found", prefixText != nil)
+var prefixCount = 0
+if let text = prefixText, let root = LtxJSON.parse(text), case .array(let vs)? = root["vectors"] {
+    for v in vs {
+        guard case .string(let name)? = v["name"], let plan = v["plan"],
+              case .string(let want)? = v["planIdUtf8"] else { continue }
+        prefixCount += 1
+        let json = plan.stringify()
+        let got = InterplanetLTX.makePlanID(json: json)
+        check("prefix planId \(name) (got \(got ?? "nil"))", got == want)
+        let typed = InterplanetLTX.upgradeConfig(plan.foundationValue as? [String: Any] ?? [:])
+        let tid = InterplanetLTX.makePlanID(typed)
+        check("prefix typed planId \(name) (got \(tid))", tid.utf16.dropLast(12).elementsEqual(want.utf16.dropLast(12)))
+    }
+}
+check("prefix vectors present", prefixCount >= 18)
+
 // ── Plan validation: reserved streams / branching (§3.5, §7) ──────────────
 
 for gv in goldenVectors {

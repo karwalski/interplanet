@@ -96,6 +96,33 @@ fn test_golden_plan_ids() {
     c.done();
 }
 
+const PREFIX_GOLDEN: &str = include_str!("../../../spec/golden/plan-id-prefixes.json");
+
+// spec/golden/plan-id-prefixes.json (issue #37): Unicode upper-casing and
+// UTF-16 slicing of HOSTSTR / NODESTR. A Rust String cannot hold the lone
+// surrogate a cut can leave, so the expected id is planIdUtf8 (U+FFFD).
+#[test]
+fn test_golden_plan_id_prefixes() {
+    let mut c = Checker::new("test_golden_plan_id_prefixes");
+    let vs = parse_ordered_json(PREFIX_GOLDEN).unwrap().get("vectors").unwrap().as_array().unwrap().to_vec();
+    c.check("prefix vectors present", vs.len() >= 18);
+    for v in &vs {
+        let name = s(v, "name");
+        let want = s(v, "planIdUtf8");
+        let plan = v.get("plan").unwrap();
+        let id = make_plan_id_from_value(plan);
+        c.check(&format!("prefix planId {} ({:?})", name, id), id.as_deref() == Ok(want.as_str()));
+        let text = js_stringify(plan);
+        c.check(&format!("prefix planId from text {}", name), make_plan_id_from_json(&text).ok() == Some(want.clone()));
+        // Typed LtxPlan: same prefix (its key order and fields may differ).
+        let typed = plan_from_cjson(&cjson_parse(&text).unwrap()).unwrap();
+        let tid = make_plan_id(&typed);
+        let cut = |x: &str| x[..x.len() - 12].to_string();
+        c.check(&format!("prefix typed make_plan_id {} ({})", name, tid), cut(&tid) == cut(&want));
+    }
+    c.done();
+}
+
 #[test]
 fn test_validate_plan_reserved() {
     let mut c = Checker::new("test_validate_plan_reserved");

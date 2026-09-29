@@ -91,11 +91,12 @@ int main(int argc, char **argv) {
     itx_make_plan_id(&plan, id);
     printf("ID_V2 %s\n", id);
 
-    for (int v = 2; v <= 3; v++) {
-        snprintf(path, sizeof path, "%s/js-v%d.json", in_dir, v);
+    for (int v = 0; v < 3; v++) {
+        const char *tag = v == 0 ? "2" : v == 1 ? "3" : "P";
+        snprintf(path, sizeof path, "%s/js-v%s.json", in_dir, tag);
         char *json = read_file(path);
         if (itx_make_plan_id_json(json, id) != 0) { fprintf(stderr, "itx_make_plan_id_json failed\n"); return 1; }
-        printf("JS_V%d %s\n", v, id);
+        printf("JS_V%s %s\n", tag, id);
         free(json);
     }
     return 0;

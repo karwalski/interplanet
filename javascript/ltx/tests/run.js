@@ -789,6 +789,22 @@ check('golden v3 order-insensitive',       gvByName['v3-upgrade-delays'].planId 
 check('golden v3 amendment chain hash',    gvByName['v3-amendment'].plan.prevPlanHash === gvByName['v3-upgrade-delays'].planHash);
 check('createPlan default quantum is 5',   ltx.createPlan({}).quantum === 5 && ltx.DEFAULT_QUANTUM === 5);
 
+// ── Conformance: planId prefix vectors (spec/golden/plan-id-prefixes.json) ─
+// Unicode upper-casing and UTF-16 slicing of HOSTSTR / NODESTR (issue #37).
+
+console.log('\n── Conformance: planId prefix vectors ───────');
+const prefixGolden = require('../../../spec/golden/plan-id-prefixes.json');
+check('prefix vectors present',            prefixGolden.vectors.length >= 18);
+check('prefix vectors split a surrogate',  prefixGolden.vectors.filter(gv => gv.loneSurrogate).length >= 5);
+for (const gv of prefixGolden.vectors) {
+  check(`prefix planId ${gv.name}`,        ltx.makePlanId(gv.plan) === gv.planId);
+  check(`prefix planIdUtf8 ${gv.name}`,    Buffer.from(gv.planId, 'utf8').toString('utf8') === gv.planIdUtf8);
+  check(`prefix planIdWtf8Hex ${gv.name}`, gv.loneSurrogate || Buffer.from(gv.planId, 'utf8').toString('hex') === gv.planIdWtf8Hex);
+  const names = gv.plan.nodes.map(n => n.name);
+  const typed = ltx.createPlan({ title: gv.plan.title, start: gv.plan.start, nodes: gv.plan.nodes });
+  check(`prefix createPlan ${gv.name}`,    ltx.makePlanId(typed).slice(0, -12) === gv.planId.slice(0, -12) && names.length === typed.nodes.length);
+}
+
 // ── Plan validation: reserved streams / branching (§3.5, §7) ──────────────
 
 console.log('\n── Plan validation: reserved fields ─────────');

@@ -2864,6 +2864,56 @@ class TestGoldenPlanIds(unittest.TestCase):
         self.assertEqual(make_plan_id(plan), self.by_name['v2-freeze-check']['planId'])
 
 
+_PREFIX_GOLDEN_PATH = os.path.join(os.path.dirname(__file__), '..', '..', '..',
+                                   'spec', 'golden', 'plan-id-prefixes.json')
+
+
+class TestGoldenPlanIdPrefixes(unittest.TestCase):
+    """Conformance: spec/golden/plan-id-prefixes.json (issue #37, spec §4.3).
+
+    HOSTSTR / NODESTR: JS whitespace, full Unicode upper-casing (str.upper),
+    UTF-16 slicing. A Python str holds a lone surrogate, so the exact JS id
+    (planId) is expected, not the UTF-8 form.
+    """
+
+    def setUp(self):
+        with open(_PREFIX_GOLDEN_PATH, encoding='utf-8') as f:
+            self.vectors = json.load(f)['vectors']
+
+    def test_vector_count(self):
+        self.assertGreaterEqual(len(self.vectors), 18)
+        self.assertGreaterEqual(sum(1 for gv in self.vectors if gv['loneSurrogate']), 5)
+
+    def test_json_path(self):
+        for gv in self.vectors:
+            with self.subTest(gv['name']):
+                self.assertEqual(make_plan_id(gv['plan']), gv['planId'])
+                # the plan re-read from its JSON text
+                text = json.dumps(gv['plan'], ensure_ascii=False)
+                self.assertEqual(make_plan_id(json.loads(text)), gv['planId'])
+
+    def test_utf8_form(self):
+        for gv in self.vectors:
+            with self.subTest(gv['name']):
+                utf8 = gv['planId'].encode('utf-8', 'replace').decode('utf-8')
+                self.assertEqual(utf8.replace('?', '\ufffd') if gv['loneSurrogate'] else utf8,
+                                 gv['planIdUtf8'])
+
+    def test_typed_path(self):
+        for gv in self.vectors:
+            p = gv['plan']
+            if p['v'] != 2:
+                continue
+            with self.subTest(gv['name']):
+                typed = create_plan(title=p['title'], start=p['start'], quantum=p['quantum'],
+                                    mode=p['mode'], nodes=p['nodes'], segments=p['segments'])
+                got = make_plan_id(typed)
+                self.assertEqual(got[:-12], gv['planId'][:-12])
+                if list(p.keys()).index('nodes') < list(p.keys()).index('segments'):
+                    # nodes-first vectors are exactly what the typed plan serialises
+                    self.assertEqual(got, gv['planId'])
+
+
 class TestValidatePlan(unittest.TestCase):
     """validate_plan: reserved streams / branching (§3.5, §7) and wire format."""
 

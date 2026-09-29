@@ -24,3 +24,4 @@ export 'src/registers.dart';
 export 'src/cbor.dart';
 export 'src/cose.dart';
 export 'src/validate.dart';
+export 'src/upper.dart' show jsToUpperCase, planIdToken;

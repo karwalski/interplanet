@@ -33,7 +33,7 @@ File.write!(Path.join(out_dir, "wire-v3.json"), InterplanetLtx.Security.canonica
 IO.puts("ID_V3 " <> InterplanetLtx.Segments.make_plan_id(v3))
 IO.puts("NOTE v3 via Segments.upgrade_plan_to_v3 (plain map); wire via Security.canonical_json")
 
-for v <- ["2", "3"] do
+for v <- ["2", "3", "P"] do
   json = File.read!(Path.join(in_dir, "js-v#{v}.json"))
   IO.puts("JS_V#{v} " <> InterplanetLtx.Segments.plan_id_from_json(json))
 end

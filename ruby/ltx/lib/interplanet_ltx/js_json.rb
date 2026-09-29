@@ -123,15 +123,62 @@ module InterplanetLtx
       end
     end
 
-    # UTF-16 code units of s (what JavaScript's charCodeAt iterates).
+    # UTF-16 code units of s (what JavaScript's charCodeAt iterates). A WTF-8
+    # String (lone surrogates as ED A0..BF xx) gives those surrogates as
+    # single units; any other invalid byte raises.
     def utf16_units(s)
-      s.to_s.encode('UTF-16LE').unpack('v*')
+      s = s.to_s
+      return s.encode('UTF-16LE').unpack('v*') if s.valid_encoding?
+
+      bytes = s.b
+      units = []
+      i = 0
+      while i < bytes.bytesize
+        b = bytes.getbyte(i)
+        len = b < 0x80 ? 1 : b >= 0xF0 ? 4 : b >= 0xE0 ? 3 : 2
+        chunk = bytes.byteslice(i, len).force_encoding('UTF-8')
+        if chunk.valid_encoding?
+          units.concat(chunk.encode('UTF-16LE').unpack('v*'))
+        elsif len == 3 && b == 0xED && (0xA0..0xBF).cover?(bytes.getbyte(i + 1).to_i) &&
+              (0x80..0xBF).cover?(bytes.getbyte(i + 2).to_i)
+          units << (0xD000 | ((bytes.getbyte(i + 1) & 0x3F) << 6) | (bytes.getbyte(i + 2) & 0x3F))
+        else
+          raise ArgumentError, 'utf16_units: invalid UTF-8 (not WTF-8)'
+        end
+        i += len
+      end
+      units
     end
 
-    # s.slice(0, n) with JavaScript (UTF-16 code unit) semantics.
+    # String of UTF-16 code units: surrogate pairs joined, a lone surrogate
+    # kept as WTF-8 (the String is then not valid UTF-8, as the JS string is
+    # not well-formed UTF-16).
+    def from_utf16_units(units)
+      out = +''.b
+      i = 0
+      while i < units.size
+        u = units[i]
+        lo = units[i + 1]
+        if (0xD800..0xDBFF).cover?(u) && lo && (0xDC00..0xDFFF).cover?(lo)
+          out << (0x10000 + ((u - 0xD800) << 10) + (lo - 0xDC00)).chr(Encoding::UTF_8).b
+          i += 2
+          next
+        end
+        out << if (0xD800..0xDFFF).cover?(u)
+                 [0xE0 | (u >> 12), 0x80 | ((u >> 6) & 0x3F), 0x80 | (u & 0x3F)].pack('C*')
+               else
+                 u.chr(Encoding::UTF_8).b
+               end
+        i += 1
+      end
+      out.force_encoding('UTF-8')
+    end
+
+    # s.slice(0, n) with JavaScript (UTF-16 code unit) semantics. A cut that
+    # splits a surrogate pair keeps the lone high surrogate, as WTF-8
+    # (spec/golden/plan-id-prefixes.json planIdWtf8Hex).
     def utf16_slice(s, n)
-      units = utf16_units(s)[0, n]
-      units.pack('v*').force_encoding('UTF-16LE').encode('UTF-8', invalid: :replace)
+      from_utf16_units(utf16_units(s)[0, n])
     end
   end
 end
