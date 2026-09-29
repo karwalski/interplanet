@@ -1,0 +1,10 @@
+# InterPlanet: https://interplanet.live/
+# Live-session and developer views are not useful search results.
+# LTX plans live in the URL hash (#l=...), which crawlers ignore.
+User-agent: *
+Disallow: /dashboard.html
+Disallow: /playground.html
+Disallow: /api/
+Disallow: /*.php
+
+Sitemap: https://interplanet.live/sitemap.xml

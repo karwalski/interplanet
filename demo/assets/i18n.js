@@ -513,6 +513,12 @@
       'ltx.setup.one_way':            's one-way',
       'ltx.setup.pair_delays':        'Between-site delays (advanced)',
       'ltx.setup.pair_delays_hint':   'How long a signal takes between two remote sites, in seconds. We estimate it automatically — change it only if you know the real path.',
+      'ltx.setup.v3_notice':          'Edited between-site delays make this a new LTX v3 plan with a new plan ID. Every site will need the new link.',
+      'ltx.setup.v3_reverted':        'Automatic between-site delays restored. This is a v2 plan.',
+      'ltx.setup.v3_old_id':          'Plan ID without edited delays (v2)',
+      'ltx.setup.v3_new_id':          'Plan ID with your delays (v3)',
+      'ltx.setup.v3_revert':          'Use automatic delays (keep v2)',
+      'ltx.setup.v3_confirm':         'The loaded plan is LTX v2 ({old}).\n\nYour edited between-site delays create a new v3 plan ({new}). Other sites must use the new link.\n\nContinue with the v3 plan?',
       'ltx.tl.arrives_at':            'reaches you {time}',
 
       // Quantum options

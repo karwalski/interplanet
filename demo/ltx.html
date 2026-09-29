@@ -18,6 +18,18 @@
 <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
 <meta name="theme-color" content="#060614">
 <meta name="description" content="Plan meetings across Earth, Mars, and other worlds. Works even without a live connection.">
+<link rel="canonical" href="https://interplanet.live/ltx.html">
+<!-- Open Graph -->
+<meta property="og:type"        content="website">
+<meta property="og:url"         content="https://interplanet.live/ltx.html">
+<meta property="og:title"       content="LTX Meeting — InterPlanet">
+<meta property="og:description" content="Plan structured meetings across Earth, Mars, and other worlds with LTX, a proposed protocol for collaboration across long signal delays.">
+<meta property="og:image"       content="https://interplanet.live/assets/screenshot.png">
+<!-- Twitter / X -->
+<meta name="twitter:card"        content="summary_large_image">
+<meta name="twitter:title"       content="LTX Meeting — InterPlanet">
+<meta name="twitter:description" content="Plan structured meetings across Earth, Mars, and other worlds with LTX, a proposed protocol for collaboration across long signal delays.">
+<meta name="twitter:image"       content="https://interplanet.live/assets/screenshot.png">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
       media="print" onload="this.media='all'" crossorigin="anonymous"
       referrerpolicy="no-referrer">
@@ -240,6 +252,23 @@ html.light-mode .tl-arrival{color:#b26a00}
 html.light-mode .tpl-card{background:rgba(0,0,0,.03)}
 html.light-mode .tpl-card:hover{background:rgba(0,0,0,.06)}
 html.light-mode .tpl-card.selected{background:rgba(53,99,200,.06)}
+/* Explicit v2 -> v3 upgrade notice (IP-L3) */
+.v3-status:empty{display:none}
+.v3-status{margin-top:.75rem;font-size:.74rem;line-height:1.5;color:#ffb74d;background:rgba(255,152,0,.08);border:1px solid rgba(255,152,0,.25);border-radius:8px;padding:.55rem .7rem}
+html.light-mode .v3-status{color:#8a4b00}
+.v3-detail{margin-top:.45rem;font-size:.7rem;color:var(--text-muted);line-height:1.6}
+.v3-detail code{font-size:.7rem;color:var(--text);word-break:break-all}
+.v3-detail .btn-s{margin-top:.45rem;font-size:.72rem;padding:.3rem .6rem}
+/* About LTX: static explanatory copy (IP-D1) */
+.ltx-about{border-top:1px solid var(--border);margin-top:1rem;padding-top:2rem}
+.ltx-about h1{font-size:1.3rem;font-weight:700;letter-spacing:-.01em;line-height:1.3;margin-bottom:.75rem}
+.ltx-about h2{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin:1.25rem 0 .45rem}
+.ltx-about p,.ltx-about li{font-size:.84rem;line-height:1.6;color:var(--text)}
+.ltx-about ul{padding-left:1.1rem}
+.ltx-about a{color:rgba(91,141,239,.95)}
+html.light-mode .ltx-about a{color:#2a55b0}
+.ltx-about-links{display:flex;flex-wrap:wrap;gap:.5rem 1.25rem;margin-top:1.25rem;font-size:.82rem}
+.ltx-about-note{font-size:.74rem!important;color:var(--text-muted)!important;margin-top:.9rem}
 </style>
 </head>
 <body>
@@ -339,6 +368,13 @@ html.light-mode .tpl-card.selected{background:rgba(53,99,200,.06)}
       <p class="hint" id="pair-delay-hint" style="margin:.4rem 0 .5rem"></p>
       <div id="pair-delay-list" role="list" aria-label="Between-site signal delays"></div>
     </details>
+    <!-- Explicit v2 -> v3 notice (IP-L3): edited pair delays create a new v3 plan -->
+    <p id="pair-delay-v3-status" class="v3-status" aria-live="polite" aria-atomic="true"></p>
+    <div id="pair-delay-v3-detail" class="v3-detail" hidden>
+      <div><span id="v3-old-lbl">Plan ID without edited delays (v2)</span>: <code id="v3-old-id"></code></div>
+      <div><span id="v3-new-lbl">Plan ID with your delays (v3)</span>: <code id="v3-new-id"></code></div>
+      <button type="button" class="btn-s" id="v3-revert">Use automatic delays (keep v2)</button>
+    </div>
   </div>
 
   <!-- Segment builder -->
@@ -486,6 +522,49 @@ html.light-mode .tpl-card.selected{background:rgba(53,99,200,.06)}
     </button>
   </div>
 </div>
+
+<!-- ═══════════════════════════════════════════════
+     ABOUT LTX (static copy, present in the initial HTML)
+═══════════════════════════════════════════════ -->
+<section id="ltx-about" class="wrap ltx-about" aria-labelledby="ltx-about-title">
+  <h1 id="ltx-about-title">LTX: planning meetings across light-time delay</h1>
+  <p>
+    Light-Time eXchange (LTX) is a proposed community protocol for structured meetings between
+    people separated by long signal delays, such as a crew on Mars and a team on Earth. It is an
+    open draft published with InterPlanet. It has not been adopted or endorsed by any space agency
+    or standards body.
+  </p>
+  <h2>Why a protocol?</h2>
+  <p>
+    A radio signal takes roughly 3 to 22 minutes to travel one way between Earth and Mars, so an
+    ordinary conversation breaks down: a question and its answer can be 40 minutes apart. LTX
+    replaces free conversation with an agreed plan. Every site gets the same schedule of transmit,
+    receive, caucus and merge segments, sized to the real delay, and each participant runs this page
+    independently to follow it without a live connection.
+  </p>
+  <h2>What this page does</h2>
+  <ul>
+    <li>Builds a meeting plan with a host, remote sites and one-way signal delays</li>
+    <li>Creates a plan ID and share links, so every site can check it holds the same plan</li>
+    <li>Exports calendar (.ics) files for each participant</li>
+    <li>Runs a segment timer that shows when each transmission reaches each site</li>
+  </ul>
+  <h2>Who it is for</h2>
+  <p>
+    Researchers studying teamwork under communication delay, educators, developers implementing the
+    protocol, and teams running simulated missions or analog exercises.
+  </p>
+  <nav class="ltx-about-links" aria-label="More about LTX">
+    <a href="https://github.com/karwalski/interplanet/blob/main/docs/LTX-SPECIFICATION.md" rel="noopener">LTX specification</a>
+    <a href="https://github.com/karwalski/interplanet" rel="noopener">Source code on GitHub</a>
+    <a href="related-work.html">Related work</a>
+    <a href="index.html">InterPlanet clock</a>
+  </nav>
+  <p class="ltx-about-note">
+    InterPlanet and LTX are independent open-source work, not affiliated with or endorsed by NASA,
+    any other space agency or any standards body.
+  </p>
+</section>
 
 
 <script>
@@ -956,6 +1035,12 @@ function getT(key, vars) {
     'ltx.seg.merge':             'Reintegrate',
     'ltx.setup.ref_delay':       'Reference (0 s delay)',
     'ltx.setup.one_way':         's one-way',
+    'ltx.setup.v3_notice':       'Edited between-site delays make this a new LTX v3 plan with a new plan ID. Every site will need the new link.',
+    'ltx.setup.v3_reverted':     'Automatic between-site delays restored. This is a v2 plan.',
+    'ltx.setup.v3_old_id':       'Plan ID without edited delays (v2)',
+    'ltx.setup.v3_new_id':       'Plan ID with your delays (v3)',
+    'ltx.setup.v3_revert':       'Use automatic delays (keep v2)',
+    'ltx.setup.v3_confirm':      'The loaded plan is LTX v2 ({old}).\n\nYour edited between-site delays create a new v3 plan ({new}). Other sites must use the new link.\n\nContinue with the v3 plan?',
     'ltx.setup.host_badge':      'HOST',
     'ltx.setup.node_badge':      'NODE',
     'ltx.runner.plan_locked':    'PLAN LOCKED',
@@ -1547,7 +1632,7 @@ function renderPairDelayEditor() {
   if (!wrap || !list) return;
   const nodes = getCfgNodes();
   const remote = nodes.slice(1);
-  if (remote.length < 2) { wrap.hidden = true; _pairDelays = {}; return; }
+  if (remote.length < 2) { wrap.hidden = true; _pairDelays = {}; updateV3Notice(); return; }
   wrap.hidden = false;
   document.getElementById('pair-delay-summary').textContent = getT('ltx.setup.pair_delays');
   document.getElementById('pair-delay-hint').textContent = getT('ltx.setup.pair_delays_hint');
@@ -1581,6 +1666,7 @@ function renderPairDelayEditor() {
         const v = parseInt(inp.value);
         if (Number.isFinite(v) && v >= 0 && v !== fallback) _pairDelays[key] = v;
         else delete _pairDelays[key];
+        updateV3Notice();
       });
       const unit = document.createElement('span');
       unit.className = 'node-delay-lbl';
@@ -1589,6 +1675,79 @@ function renderPairDelayEditor() {
       list.appendChild(row);
     }
   }
+  updateV3Notice();
+}
+
+// ── Explicit v2 → v3 upgrade (IP-L3 · LTX-SPECIFICATION.md §4.3) ─────────────
+// Spec: implementations MUST NOT auto-upgrade v2 plans to v3. Edited pair
+// delays are the only thing that makes the form emit v3, so the user is told
+// as soon as it happens, shown both plan IDs, and offered a one-click revert.
+// A loaded v2 plan whose form fields are untouched is returned verbatim, so
+// its planId (and any fields the form does not edit) round-trip unchanged.
+
+let _loadedCfg = null;      // v2 plan last loaded into the form (deep copy)
+let _v3Confirmed = false;   // user accepted replacing _loadedCfg with a v3 plan
+let _v3WasShown = false;
+
+function editedPairDelays(nodes) {
+  const validIds = new Set(nodes.map(n => n.id));
+  const delays = {};
+  Object.keys(_pairDelays).sort().forEach(k => {
+    const [a, b] = k.split('|');
+    if (validIds.has(a) && validIds.has(b)) delays[k] = _pairDelays[k];
+  });
+  return delays;
+}
+
+// True when the form-editable fields of `built` match the loaded v2 plan.
+function sameAsLoaded(built, loaded) {
+  if (!loaded) return false;
+  const minute = iso => Math.floor(new Date(iso).getTime() / 60000);
+  const lNodes = loaded.nodes || [];
+  if ((String(loaded.title || '').trim() || 'LTX Meeting') !== built.title) return false;
+  if (minute(loaded.start) !== minute(built.start)) return false;
+  if ((loaded.quantum || 5) !== built.quantum) return false;
+  if ((loaded.mode || 'LTX-LIVE') !== built.mode) return false;
+  if (lNodes.length !== built.nodes.length) return false;
+  for (let i = 0; i < lNodes.length; i++) {
+    const a = lNodes[i], b = built.nodes[i];
+    const name = String(a.name || '').trim() || (i === 0 ? 'Earth HQ' : 'Remote Node');
+    if (a.id !== b.id || name !== b.name || (a.role || (i === 0 ? 'HOST' : 'PARTICIPANT')) !== b.role ||
+        (i === 0 ? 0 : (a.delay || 0)) !== b.delay || (a.location || 'earth') !== b.location) return false;
+  }
+  const lSegs = loaded.segments || [];
+  if (lSegs.length !== built.segments.length) return false;
+  return lSegs.every((sg, i) => sg.type === built.segments[i].type && sg.q === built.segments[i].q);
+}
+
+function updateV3Notice() {
+  const status = document.getElementById('pair-delay-v3-status');
+  const detail = document.getElementById('pair-delay-v3-detail');
+  if (!status || !detail) return;
+  const nodes = getCfgNodes();
+  const isV3 = Object.keys(editedPairDelays(nodes)).length > 0;
+  if (!isV3) {
+    detail.hidden = true;
+    // Announce the revert once, then clear so the empty notice collapses.
+    if (_v3WasShown) {
+      status.textContent = getT('ltx.setup.v3_reverted');
+      setTimeout(() => { if (detail.hidden) status.textContent = ''; }, 4000);
+    }
+    _v3WasShown = false;
+    _v3Confirmed = false;
+    return;
+  }
+  const v2 = cfgFromForm({ silent: true, ignoreDelays: true });
+  const v3 = cfgFromForm({ silent: true });
+  const msg = getT('ltx.setup.v3_notice');
+  if (status.textContent !== msg) status.textContent = msg;  // live region: announce on change only
+  document.getElementById('v3-old-lbl').textContent = getT('ltx.setup.v3_old_id');
+  document.getElementById('v3-new-lbl').textContent = getT('ltx.setup.v3_new_id');
+  document.getElementById('v3-revert').textContent  = getT('ltx.setup.v3_revert');
+  document.getElementById('v3-old-id').textContent = v2 ? makePlanId(v2) : '-';
+  document.getElementById('v3-new-id').textContent = v3 ? makePlanId(v3) : '-';
+  detail.hidden = false;
+  _v3WasShown = true;
 }
 
 // ── Segment computation ───────────────────────────────────────────────────────
@@ -1724,9 +1883,12 @@ function initDefaultNodes() {
 
 // ── Build config from form ────────────────────────────────────────────────────
 
-function cfgFromForm() {
+// opts.silent: no alerts or prompts (used for the live plan-ID preview)
+// opts.ignoreDelays: the v2 plan the form would give without edited pair delays
+function cfgFromForm(opts) {
+  opts = opts || {};
   const startVal = document.getElementById('f-start').value;
-  if (!startVal) { alert('Please set a start time.'); return null; }
+  if (!startVal) { if (!opts.silent) alert('Please set a start time.'); return null; }
   const startISO = startVal.length === 16 ? startVal + ':00Z' : startVal;
   const segs = [];
   document.querySelectorAll('.seg-row').forEach(row => {
@@ -1734,7 +1896,7 @@ function cfgFromForm() {
     const q    = Math.max(1, parseInt(row.querySelector('.seg-q').value) || 1);
     segs.push({ type, q });
   });
-  if (!segs.length) { alert('Add at least one segment.'); return null; }
+  if (!segs.length) { if (!opts.silent) alert('Add at least one segment.'); return null; }
   const cfg = {
     v:        2,
     title:    document.getElementById('f-title').value.trim() || 'LTX Meeting',
@@ -1745,17 +1907,21 @@ function cfgFromForm() {
     segments: segs,
   };
   // User-edited between-site delays make the plan v3 (delays is a v3-only
-  // field — LTX-SPECIFICATION.md §4.4; never injected into a v2 plan).
-  const validIds = new Set(cfg.nodes.map(n => n.id));
-  const delays = {};
-  Object.keys(_pairDelays).sort().forEach(k => {
-    const [a, b] = k.split('|');
-    if (validIds.has(a) && validIds.has(b)) delays[k] = _pairDelays[k];
-  });
-  if (Object.keys(delays).length) {
-    cfg.v = 3;
-    cfg.delays = delays;
-    cfg.planVersion = 1;
+  // field — LTX-SPECIFICATION.md §4.4; never injected into a v2 plan). The
+  // setup screen says so as soon as it happens (updateV3Notice) and, when it
+  // would replace a loaded v2 plan, asks before the new plan is used.
+  const delays = opts.ignoreDelays ? {} : editedPairDelays(cfg.nodes);
+  if (!Object.keys(delays).length) {
+    // Untouched loaded v2 plan: return it verbatim so its planId round-trips.
+    return sameAsLoaded(cfg, _loadedCfg) ? JSON.parse(JSON.stringify(_loadedCfg)) : cfg;
+  }
+  cfg.v = 3;
+  cfg.delays = delays;
+  cfg.planVersion = 1;
+  if (_loadedCfg && !opts.silent && !_v3Confirmed) {
+    const ok = confirm(getT('ltx.setup.v3_confirm', { old: makePlanId(_loadedCfg), new: makePlanId(cfg) }));
+    if (!ok) return null;
+    _v3Confirmed = true;
   }
   return cfg;
 }
@@ -1764,6 +1930,8 @@ function cfgFromForm() {
 
 function populateForm(cfg) {
   if (!cfg) return;
+  _loadedCfg = cfg.v === 2 ? JSON.parse(JSON.stringify(cfg)) : null;
+  _v3Confirmed = false;
   const c = upgradeConfig(cfg);
   document.getElementById('f-title').value   = c.title   || '';
   document.getElementById('f-quantum').value = String(c.quantum || 5);
@@ -2722,6 +2890,18 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
 });
 
 document.getElementById('f-quantum').addEventListener('change', updateTotals);
+
+// Keep the v2/v3 plan IDs in the upgrade notice current as the form changes.
+['input', 'change', 'click'].forEach(ev =>
+  document.getElementById('setup-screen').addEventListener(ev, e => {
+    if (e.target.closest && e.target.closest('#v3-revert')) return;
+    if (!document.getElementById('pair-delay-v3-detail').hidden) updateV3Notice();
+  }));
+
+document.getElementById('v3-revert').addEventListener('click', () => {
+  _pairDelays = {};
+  renderPairDelayEditor();   // restores automatic values and updates the notice
+});
 
 document.getElementById('setup-start').addEventListener('click', () => {
   const cfg = cfgFromForm();
