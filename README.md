@@ -220,8 +220,11 @@ import { getPlanetTime, lightTravelSeconds, findMeetingWindows } from '@interpla
 
 ## Language ports
 
-All ports implement the same API surface as `planet-time.js` and are
-cross-validated against `c/planet-time/fixtures/reference.json` (54 entries).
+All ports implement the same API surface as `planet-time.js`, and each has a
+fixture runner that checks it against `c/planet-time/fixtures/reference.json`
+(54 entries). Not every port passes yet: see
+[Conformance in LANGUAGE-SUPPORT.md](LANGUAGE-SUPPORT.md#conformance) for the
+latest local results and the CI workflow.
 
 ### JavaScript / TypeScript (native)
 
@@ -377,19 +380,23 @@ Source: `r/planet-time/` · R 4.1+ · base R only
 
 ### Port comparison
 
-| Port | Language | Min version | Stdlib only | Fixture tested |
+| Port | Language | Min version | Stdlib only | Fixtures (local, 29 Sep 2026) |
 |------|----------|:-----------:|:-----------:|:--------------:|
 | `planet-time.js` | JavaScript | Node ≥ 16 | ✅ | ✅ 54 |
 | `@interplanet/time` | TypeScript | Node ≥ 16 | ✅ | ✅ 54 |
 | `interplanet-time` | Python | 3.10+ | ✅ | ✅ 54 |
-| `InterplanetTime` | Java | 16+ | ✅ | ✅ 54 |
-| `libinterplanet` | C / C++ | C99 / C++17 | ✅ | ✅ 54 |
-| `interplanet/time` | PHP | 8.1+ | ✅ | ✅ 54 |
-| `interplanet_time` | Ruby | 2.6+ | ✅ | ✅ 54 |
+| `InterplanetTime` | Java | 16+ | ✅ | ❌ 9 of 150 checks fail |
+| `libinterplanet` | C / C++ | C99 / C++17 | ✅ | no runner |
+| `interplanet/time` | PHP | 8.1+ | ✅ | ❌ 64 of 150 checks fail |
+| `interplanet_time` | Ruby | 2.6+ | ✅ | ❌ 9 of 150 checks fail |
 | `github.com/interplanet/time` | Go | 1.21+ | ✅ | ✅ 54 |
-| `InterplanetTime` | Swift | 5.9+ | ✅ | ✅ 54 |
+| `InterplanetTime` | Swift | 5.9+ | ✅ | not run |
 | `interplanet-time` | Rust | 1.70+ | ✅ | ✅ 54 |
 | `interplanet.time` | R | 4.1+ | ✅ | ✅ 54 |
+
+Fixture results are from a local run on 29 September 2026. The
+[Conformance workflow](https://github.com/karwalski/interplanet/actions/workflows/conformance.yml)
+runs every port in CI; details are in [LANGUAGE-SUPPORT.md](LANGUAGE-SUPPORT.md#conformance).
 
 ---
 

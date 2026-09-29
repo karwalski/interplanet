@@ -8,4 +8,4 @@ lint:
 	sbt compile 2>&1
 
 fixtures:
-	sbt "run ../../c/fixtures/reference.json" 2>&1
+	sbt "run ../../c/planet-time/fixtures/reference.json" 2>&1

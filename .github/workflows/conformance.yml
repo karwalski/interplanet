@@ -1,0 +1,262 @@
+# Runs each port's planet-time fixture runner against the shared reference
+# fixtures in c/planet-time/fixtures/reference.json (54 entries generated from
+# javascript/planet-time/planet-time.js) and publishes a per-port results table
+# in the run summary.
+#
+# Every port runs with continue-on-error, so one failing port does not hide the
+# others. Read the "Conformance summary" table in the run summary for the
+# result of each port; a red port job means that port failed or could not run.
+name: Conformance
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 4 * * 1'   # weekly, Monday 04:17 UTC
+
+permissions:
+  contents: read
+
+env:
+  FIXTURE: ${{ github.workspace }}/c/planet-time/fixtures/reference.json
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  DOTNET_NOLOGO: '1'
+
+jobs:
+  fixtures:
+    name: ${{ matrix.port }}
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - port: JavaScript
+            toolchain: node
+            dir: .
+            cmd: node scripts/conformance/js-reference-check.js
+            note: regenerates reference.json from planet-time.js and compares
+          - port: TypeScript
+            toolchain: node
+            dir: typescript/planet-time
+            cmd: npm ci && npm run build && node tests/fixtures.js
+          - port: Python
+            toolchain: python
+            dir: python/planet-time
+            cmd: pip install -e ".[dev]" && python -m pytest tests/test_fixtures.py -v
+          - port: Java
+            toolchain: java
+            dir: java/planet-time
+            cmd: mkdir -p out/classes && javac -d out/classes src/com/interplanet/time/*.java tests/*.java && java -cp out/classes TestFixtures "$FIXTURE"
+          - port: C
+            toolchain: none
+            dir: c/planet-time
+            cmd: cc -std=c11 -O2 -Iinclude -o "$RUNNER_TEMP/test_libinterplanet" tests/test_libinterplanet.c src/libinterplanet.c -lm && "$RUNNER_TEMP/test_libinterplanet"
+            note: unit tests only; the C port has no reference.json runner
+          - port: PHP
+            toolchain: php
+            dir: php/planet-time
+            cmd: php tests/FixtureTest.php "$FIXTURE"
+          - port: Ruby
+            toolchain: ruby
+            dir: ruby/planet-time
+            cmd: ruby -Ilib test/fixture_test.rb "$FIXTURE"
+          - port: Go
+            toolchain: go
+            dir: go/planet-time
+            cmd: go run fixture_runner.go "$FIXTURE"
+          - port: Swift
+            toolchain: swift
+            dir: swift/planet-time
+            cmd: mkdir -p .build && swiftc -module-name InterplanetTime Sources/InterplanetTime/*.swift Sources/RunTests/main.swift -o .build/RunTests && .build/RunTests "$FIXTURE"
+          - port: Rust
+            toolchain: rust
+            dir: rust/planet-time
+            cmd: cargo run --quiet --bin fixture_check
+          - port: R
+            toolchain: r
+            dir: r/planet-time
+            cmd: Rscript -e 'install.packages("jsonlite", repos = "https://cloud.r-project.org")' && Rscript test/test_fixtures.R "$FIXTURE"
+          - port: 'C#'
+            toolchain: dotnet
+            dir: csharp/planet-time
+            cmd: dotnet run --project FixtureTest "$FIXTURE"
+          - port: Dart
+            toolchain: dart
+            dir: dart/planet-time
+            cmd: dart pub get && dart run bin/fixture_runner.dart "$FIXTURE"
+          - port: Elixir
+            toolchain: elixir
+            dir: elixir/planet-time
+            cmd: mix deps.get && mix run fixture_runner/fixture_runner.exs "$FIXTURE"
+          - port: 'F#'
+            toolchain: dotnet
+            dir: fsharp/planet-time
+            cmd: dotnet run --project FixtureTest "$FIXTURE"
+          - port: Kotlin
+            toolchain: java
+            dir: kotlin/planet-time
+            cmd: ./gradlew run --no-daemon --args="$FIXTURE"
+          - port: Scala
+            toolchain: scala
+            dir: scala/planet-time
+            cmd: sbt "run $FIXTURE"
+          - port: Lua
+            toolchain: lua
+            dir: lua/planet-time
+            cmd: lua test/fixture_runner.lua "$FIXTURE"
+          - port: OCaml
+            toolchain: ocaml
+            dir: ocaml/planet-time
+            cmd: make test
+            note: fixture check is part of the unit test binary
+          - port: Zig
+            toolchain: zig
+            dir: zig/planet-time
+            cmd: zig run --dep interplanet_time -Mroot=test/fixture_runner.zig -Minterplanet_time=src/interplanet_time.zig -- --fixture "$FIXTURE"
+          - port: Julia
+            toolchain: julia
+            dir: julia/planet-time
+            cmd: julia --project=. -e 'import Pkg; Pkg.instantiate()' && julia --project=. fixture_runner.jl "$FIXTURE"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Record "setup failed" first, so a port whose toolchain fails to install
+      # still appears in the summary.
+      - name: Initialise result
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/result"
+          printf '%s\t%s\t%s\t%s\n' "${{ matrix.port }}" "setup failed" "toolchain setup did not complete" "${{ matrix.note }}" \
+            > "$RUNNER_TEMP/result/result.tsv"
+
+      - if: matrix.toolchain == 'node'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - if: matrix.toolchain == 'python'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - if: matrix.toolchain == 'java' || matrix.toolchain == 'scala'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - if: matrix.toolchain == 'scala'
+        uses: sbt/setup-sbt@v1
+      - if: matrix.toolchain == 'php'
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+      - if: matrix.toolchain == 'ruby'
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+      - if: matrix.toolchain == 'go'
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - if: matrix.toolchain == 'swift'
+        uses: swift-actions/setup-swift@v2
+      - if: matrix.toolchain == 'rust'
+        uses: dtolnay/rust-toolchain@stable
+      - if: matrix.toolchain == 'r'
+        uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - if: matrix.toolchain == 'dotnet'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - if: matrix.toolchain == 'dart'
+        uses: dart-lang/setup-dart@v1
+      - if: matrix.toolchain == 'elixir'
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: '26'
+          elixir-version: '1.16'
+      - if: matrix.toolchain == 'lua'
+        uses: leafo/gh-actions-lua@v10
+        with:
+          luaVersion: '5.4'
+      - if: matrix.toolchain == 'ocaml'
+        run: sudo apt-get update && sudo apt-get install -y ocaml-nox
+      - if: matrix.toolchain == 'zig'
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.1
+      - if: matrix.toolchain == 'julia'
+        uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.10'
+
+      - name: Run fixture runner
+        working-directory: ${{ matrix.dir }}
+        shell: bash
+        env:
+          CMD: ${{ matrix.cmd }}
+        run: |
+          set +e
+          bash -c "$CMD" 2>&1 | tee "$RUNNER_TEMP/output.txt"
+          code=${PIPESTATUS[0]}
+          # Last line that reports pass/fail counts, whatever the runner's wording.
+          counts=$(grep -iE '[0-9]+ passed' "$RUNNER_TEMP/output.txt" | tail -n 1 | tr -d '\t=' | sed 's/^ *//; s/ *$//')
+          if grep -qE '^SKIP' "$RUNNER_TEMP/output.txt"; then
+            status="skipped"
+          elif [ "$code" -eq 0 ]; then
+            status="pass"
+          else
+            status="fail"
+          fi
+          [ -n "$counts" ] || counts="(no count reported; exit code $code)"
+          printf '%s\t%s\t%s\t%s\n' "${{ matrix.port }}" "$status" "$counts" "${{ matrix.note }}" \
+            > "$RUNNER_TEMP/result/result.tsv"
+          exit "$code"
+
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conformance-${{ strategy.job-index }}
+          path: ${{ runner.temp }}/result/result.tsv
+          retention-days: 30
+
+  summary:
+    name: Conformance summary
+    needs: fixtures
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: conformance-*
+          path: results
+      - name: Write results table
+        shell: bash
+        run: |
+          {
+            echo "## Planet-time conformance against c/planet-time/fixtures/reference.json"
+            echo
+            echo "Commit \`${GITHUB_SHA}\`, run on $(date -u +'%Y-%m-%d %H:%M UTC')."
+            echo
+            echo "| Port | Result | Runner output | Note |"
+            echo "|------|--------|---------------|------|"
+            pass=0; total=0
+            while IFS=$'\t' read -r port status counts note; do
+              total=$((total + 1))
+              case "$status" in
+                pass) icon="✅ pass"; pass=$((pass + 1)) ;;
+                fail) icon="❌ fail" ;;
+                skipped) icon="⚠️ skipped" ;;
+                *) icon="⚠️ $status" ;;
+              esac
+              echo "| $port | $icon | $counts | $note |"
+            done < <(cat results/*/result.tsv | sort -f)
+            echo
+            echo "**$pass of $total ports passed.** Expected 21 ports; a missing port means its job did not upload a result."
+          } >> "$GITHUB_STEP_SUMMARY"

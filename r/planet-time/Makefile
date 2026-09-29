@@ -4,7 +4,7 @@ test:
 	Rscript test/test_unit.R
 
 fixture:
-	Rscript test/test_fixtures.R ../c/fixtures/reference.json
+	Rscript test/test_fixtures.R ../../c/planet-time/fixtures/reference.json
 
 lint:
 	Rscript -e "source('R/interplanet_time.R'); cat('OK\n')"

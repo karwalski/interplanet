@@ -10,7 +10,7 @@ lint:
 
 # Run cross-language fixture validation (requires reference.json)
 fixtures:
-	julia --project=. fixture_runner.jl ../../c/fixtures/reference.json 2>&1
+	julia --project=. fixture_runner.jl ../../c/planet-time/fixtures/reference.json 2>&1
 
 # Download/instantiate dependencies
 instantiate:

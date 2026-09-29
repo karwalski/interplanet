@@ -11,7 +11,7 @@ test:
 fixture:
 	@echo ""
 	@echo "── Running fixture tests ────────────────────────────────────────"
-	ruby -Ilib test/fixture_test.rb ../c/fixtures/reference.json
+	ruby -Ilib test/fixture_test.rb ../../c/planet-time/fixtures/reference.json
 
 lint:
 	ruby -c lib/interplanet_time.rb

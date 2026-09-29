@@ -63,7 +63,9 @@ Before tagging:
       `LANGUAGE-SUPPORT.md` and `README.md` match it
       (`node scripts/check-versions.js` passes).
 - [ ] The port's tests and its fixture runner pass against
-      `c/planet-time/fixtures/reference.json`.
+      `c/planet-time/fixtures/reference.json` (see the
+      [Conformance workflow](../.github/workflows/conformance.yml) and
+      [LANGUAGE-SUPPORT.md](../LANGUAGE-SUPPORT.md#conformance)).
 - [ ] A local dry run of the package contents looks right:
       `npm pack --dry-run` for npm, `python -m build` then inspect `dist/` for PyPI.
       Known gap: `javascript/ltx/package.json` declares `types: dist/ltx-sdk.d.ts`,

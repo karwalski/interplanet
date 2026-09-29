@@ -22,7 +22,7 @@ test: build
 	$(JAVA) -cp $(OUT_DIR) TestInterplanetTime
 	@echo ""
 	@echo "── Running fixture tests ────────────────────────────────────────"
-	$(JAVA) -cp $(OUT_DIR) TestFixtures ../c/fixtures/reference.json
+	$(JAVA) -cp $(OUT_DIR) TestFixtures ../../c/planet-time/fixtures/reference.json
 
 clean:
 	rm -rf out/

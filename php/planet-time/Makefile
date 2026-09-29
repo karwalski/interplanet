@@ -13,7 +13,7 @@ test: install
 	./vendor/bin/phpunit tests/UnitTest.php --testdox
 	@echo ""
 	@echo "── Running fixture tests ────────────────────────────────────────"
-	php tests/FixtureTest.php ../c/fixtures/reference.json
+	php tests/FixtureTest.php ../../c/planet-time/fixtures/reference.json
 
 lint:
 	php -l src/autoload.php
