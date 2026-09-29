@@ -6,7 +6,11 @@
 // Swift 5.9+ · Foundation + CryptoKit only.
 
 import Foundation
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto  // swift-crypto on Linux (same API as CryptoKit)
+#endif
 
 // ── Viewer-perspective segments ─────────────────────────────────────────────
 

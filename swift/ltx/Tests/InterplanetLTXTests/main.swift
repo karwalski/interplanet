@@ -1,7 +1,7 @@
 // InterplanetLTXTests — standalone test runner (no XCTest needed)
 // Run with: swift run InterplanetLTXTests
 import Foundation
-import InterplanetLTX
+@testable import InterplanetLTX
 
 var passed = 0
 var failed = 0
@@ -320,12 +320,25 @@ check("checkSeq missing_seq", !cr_missing.accepted && cr_missing.reason == "miss
 // LTX v1.1 core subset — golden conformance vectors (Epic 72.4)
 // ═══════════════════════════════════════════════════════════════════════════
 
-let vectorsPath = "../../../conformance/vectors.json"
-let vectorsData = FileManager.default.contents(atPath: vectorsPath)
-check("v11: conformance/vectors.json found", vectorsData != nil)
+// Tests/v11.json is a copy of the .v11 section of conformance/vectors.json
+// (identical to go/ltx/testdata/v11.json and rust/ltx/tests/v11.json).
+// Paths are relative to swift/ltx, the directory the runner is started from.
+let vectorsCandidates = [
+    "Tests/v11.json",
+    URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        .deletingLastPathComponent().appendingPathComponent("v11.json").path,
+    "../../../conformance/vectors.json",
+]
+let vectorsData = vectorsCandidates.lazy
+    .compactMap { FileManager.default.contents(atPath: $0) }.first
+check("v11: v11 conformance vectors found", vectorsData != nil)
 let vectorsRoot = (try? JSONSerialization.jsonObject(with: vectorsData ?? Data())) as? [String: Any]
-let v11 = vectorsRoot?["v11"] as? [String: Any] ?? [:]
+let v11 = (vectorsRoot?["v11"] as? [String: Any]) ?? vectorsRoot ?? [:]
 check("v11: v11 section parsed", !v11.isEmpty)
+if v11.isEmpty {
+    print("\n\(passed) passed  \(failed) failed")
+    exit(1)
+}
 
 let keyVec = v11["key"] as? [String: Any] ?? [:]
 let nikVec = keyVec["nik"] as? [String: Any] ?? [:]

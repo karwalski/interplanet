@@ -16,15 +16,16 @@ final class FixtureTests: XCTestCase {
     struct Fixture: Decodable { let entries: [Entry] }
 
     func testCrossLanguageFixtures() throws {
-        // Path: two dirs up from the test file, then c/fixtures/reference.json
-        let base = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent() // FixtureTests.swift dir
+        // Path: repo root is five components up from this file, then
+        // c/planet-time/fixtures/reference.json
+        let repoRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent() // InterplanetTimeTests/
             .deletingLastPathComponent() // Tests/
+            .deletingLastPathComponent() // planet-time/
             .deletingLastPathComponent() // swift/
-            .deletingLastPathComponent() // interplanet-github/
-        let fixturePath = base
-            .appendingPathComponent("interplanet-github/c/fixtures/reference.json")
+            .deletingLastPathComponent() // repo root
+        let fixturePath = repoRoot
+            .appendingPathComponent("c/planet-time/fixtures/reference.json")
 
         guard FileManager.default.fileExists(atPath: fixturePath.path) else {
             print("SKIP: reference.json not found at \(fixturePath.path)")

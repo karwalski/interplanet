@@ -4,7 +4,14 @@
 // Pure port of the Ruby/JS LTX SDK.
 
 import Foundation
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto  // swift-crypto on Linux (same API as CryptoKit)
+#endif
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 // ── Error types ─────────────────────────────────────────────────────────────
 
@@ -497,7 +504,7 @@ public enum InterplanetLTX {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let planJSON = planToJSON(plan)
         req.httpBody = Data("{\"plan\":\(planJSON)}".utf8)
-        let (data, _) = try await URLSession.shared.data(for: req)
+        let (data, _) = try await httpData(req)
         return (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
     }
 
@@ -506,7 +513,7 @@ public enum InterplanetLTX {
         let base    = (apiBase ?? defaultAPIBase).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         let encoded = planID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? planID
         let url     = URL(string: "\(base)/session/\(encoded)")!
-        let (data, _) = try await URLSession.shared.data(from: url)
+        let (data, _) = try await httpData(URLRequest(url: url))
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
         let planData = (obj["plan"] as? [String: Any]) ?? obj
         // Re-encode through hash round-trip to normalise
@@ -548,7 +555,7 @@ public enum InterplanetLTX {
             urlStr += "?node=\(encNid)"
         }
         guard let url = URL(string: urlStr) else { return "" }
-        let (data, _) = try await URLSession.shared.data(from: url)
+        let (data, _) = try await httpData(URLRequest(url: url))
         return String(data: data, encoding: .utf8) ?? ""
     }
 
@@ -561,11 +568,22 @@ public enum InterplanetLTX {
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try? JSONSerialization.data(withJSONObject: payload)
-        let (data, _) = try await URLSession.shared.data(for: req)
+        let (data, _) = try await httpData(req)
         return (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
     }
 
     // ── Private helpers ──────────────────────────────────────────────────────
+
+    /// Portable async HTTP fetch. swift-corelibs-foundation (Linux) lacks the
+    /// async URLSession.data(for:) overload, so wrap dataTask instead.
+    static func httpData(_ req: URLRequest) async throws -> (Data, URLResponse?) {
+        try await withCheckedThrowingContinuation { cont in
+            URLSession.shared.dataTask(with: req) { data, resp, err in
+                if let err = err { cont.resume(throwing: err) }
+                else { cont.resume(returning: (data ?? Data(), resp)) }
+            }.resume()
+        }
+    }
 
     /// Parse an ISO-8601 UTC string to epoch milliseconds.
     static func parseISOMs(_ iso: String) -> Int64 {
@@ -699,7 +717,7 @@ public enum InterplanetLTX {
         // NSNumber for every scalar, and `as? Bool` would also match 0/1
         // integers. Inspect the underlying CF type / objCType instead.
         if let num = value as? NSNumber {
-            if CFGetTypeID(num) == CFBooleanGetTypeID() {
+            if isBooleanNumber(num) {
                 return num.boolValue ? "true" : "false"
             }
             let objCType = String(cString: num.objCType)
@@ -716,6 +734,15 @@ public enum InterplanetLTX {
         if let n = value as? Int64   { return "\(n)" }
         if let n = value as? Double  { return "\(n)" }
         return "null"
+    }
+
+    private static func isBooleanNumber(_ num: NSNumber) -> Bool {
+        #if canImport(Darwin)
+        return CFGetTypeID(num) == CFBooleanGetTypeID()
+        #else
+        // swift-corelibs-foundation boxes booleans as __NSCFBoolean.
+        return String(describing: type(of: num)) == "__NSCFBoolean"
+        #endif
     }
 
     private static func canonicalJSONStr(_ s: String) -> String {
