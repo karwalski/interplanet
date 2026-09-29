@@ -33,7 +33,7 @@ data class LtxPlan(
     val title: String,
     val start: String,
     val quantum: Int = 5,
-    val mode: String = "async",
+    val mode: String = "LTX",
     val nodes: List<LtxNode>,
     val segments: List<LtxSegmentTemplate>
 )

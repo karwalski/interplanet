@@ -34,7 +34,7 @@ fun main() {
     check("plan.nodes[1].name == Mars Base", plan.nodes[1].name == "Mars Base")
     check("plan.nodes[0].role == host", plan.nodes[0].role == "host")
     check("plan.nodes[1].delay == 1240", plan.nodes[1].delay == 1240)
-    check("plan.mode == async", plan.mode == "async")
+    check("plan.mode == LTX (JS default)", plan.mode == "LTX")
     check("plan.quantum == 5", plan.quantum == 5)
     check("plan.start not empty", plan.start.isNotEmpty())
     check("plan.start contains T", plan.start.contains("T"))

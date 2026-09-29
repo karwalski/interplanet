@@ -51,7 +51,7 @@ object InterplanetLTX {
      * @param title     Session title
      * @param nodes     List of participant nodes
      * @param quantum   Minutes per quantum (default: 5)
-     * @param mode      Protocol mode (default: "async")
+     * @param mode      Protocol mode (default: "LTX", as in the JS SDK)
      * @param start     ISO 8601 UTC start time (default: 5 min from now, rounded to minute)
      * @param segments  Segment template (default: DEFAULT_SEGMENTS)
      */
@@ -59,7 +59,7 @@ object InterplanetLTX {
         title: String,
         nodes: List<LtxNode>,
         quantum: Int = DEFAULT_QUANTUM,
-        mode: String = "async",
+        mode: String = "LTX",
         start: String? = null,
         segments: List<LtxSegmentTemplate> = DEFAULT_SEGMENTS
     ): LtxPlan {
@@ -102,7 +102,7 @@ object InterplanetLTX {
             is Number -> q.toInt()
             else -> DEFAULT_QUANTUM
         }
-        val mode = old["mode"]?.toString() ?: "async"
+        val mode = old["mode"]?.toString() ?: "LTX"
 
         val nodes: List<LtxNode> = when (val rawNodes = old["nodes"]) {
             is List<*> -> rawNodes.mapNotNull { n ->
