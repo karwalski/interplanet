@@ -19,5 +19,6 @@
     <Compile Include="tests/SecurityTests.cs" />
     <Compile Include="tests/V11Tests.cs" />
     <Compile Include="tests/ParityTests.cs" />
+    <Compile Include="tests/PrefixTests.cs" />
   </ItemGroup>
 </Project>

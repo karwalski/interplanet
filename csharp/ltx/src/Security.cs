@@ -116,10 +116,11 @@ public static class LtxSecurity
 
     /// <summary>
     /// s.replace(/\s+/g, '').toUpperCase() as in ltx-sdk.js makePlanId.
-    /// (char.IsWhiteSpace differs from JS \s: it includes U+0085 and not U+FEFF.)
+    /// (char.IsWhiteSpace differs from JS \s: it includes U+0085 and not U+FEFF;
+    /// ToUpperInvariant has no special casing, so JsUpper does the upper-casing.)
     /// </summary>
     public static string StripJsSpaceUpper(string s) =>
-        string.Concat(s.Where(c => !IsJsSpace(c))).ToUpperInvariant();
+        JsUpper.ToUpper(string.Concat(s.Where(c => !IsJsSpace(c))));
 
     public static string CanonicalJSON(JsonElement element)
     {

@@ -57,7 +57,7 @@ else
     Console.WriteLine("NOTE PlanV11: v2 wire via ToJsonV2, v3 wire via CanonicalJSON(ToDict()); v3 via `with`");
 }
 
-foreach (var v in new[] { "2", "3" })
+foreach (var v in new[] { "2", "3", "P" })
 {
     string json = File.ReadAllText(Path.Combine(inDir, $"js-v{v}.json"), Encoding.UTF8);
     Console.WriteLine($"JS_V{v} " + LtxPlanJson.MakePlanIdFromJson(json));

@@ -250,8 +250,9 @@ public static class LtxV11
     public static string MakePlanId(PlanV11 plan)
     {
         string date = plan.Start.Substring(0, 10).Replace("-", "");
-        string hostStr = plan.Nodes.Count > 0
-            ? LtxSecurity.StripJsSpaceUpper(plan.Nodes[0].Name) : "HOST";
+        // (nodes[0]?.name || 'HOST') as in ltx-sdk.js: an empty name is HOST too.
+        string hostStr = LtxSecurity.StripJsSpaceUpper(
+            plan.Nodes.Count > 0 && !string.IsNullOrEmpty(plan.Nodes[0].Name) ? plan.Nodes[0].Name : "HOST");
         if (hostStr.Length > 8) hostStr = hostStr.Substring(0, 8);
         string nodeStr;
         if (plan.Nodes.Count > 1)

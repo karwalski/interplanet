@@ -15,8 +15,9 @@
  *            cp in first..last with (cp - first) % stride == 0 maps to cp + delta
  *
  * Julia, whose Base.uppercase(::Char) has current 1:1 mappings but no
- * special casing, takes SPECIAL only; the others (C, OCaml, R, Lua, Zig, and
- * Dart, whose String.toUpperCase tables predate Unicode 7) take both.
+ * special casing, takes SPECIAL only; the others (C, OCaml, R, Lua, Zig,
+ * Dart, whose String.toUpperCase tables predate Unicode 7, and C#, F# and
+ * Go, whose upper-casing is 1:1 only) take both.
  *
  * Usage:
  *   node scripts/conformance/gen-upper-tables.js --lang c        print one block
@@ -146,6 +147,46 @@ const FORMATS = {
     ...rows(special, 3, ([cp, u]) => `${hex(cp)}: [${u.map(hex).join(', ')}]`, '  ', ', ').map(l => l + ','),
     '};',
   ],
+  // C#: flat int arrays (ToUpperInvariant is 1:1 only and has older tables).
+  csharp: () => [
+    `    // ${HEADER}`,
+    '    // first, last, stride, delta (4 per run)',
+    '    private static readonly int[] UpperRuns =',
+    '    {',
+    ...rows(runs, 3, r => `${hex(r.first)}, ${hex(r.last)}, ${r.stride}, ${r.delta}`, '        ', ', ').map(l => l + ','),
+    '    };',
+    '    // code point, up to 3 code points (0 = none)',
+    '    private static readonly int[] UpperSpecial =',
+    '    {',
+    ...rows(special, 3, ([cp, u]) => [cp, ...pad3(u)].map(hex).join(', '), '        ', ', ').map(l => l + ','),
+    '    };',
+  ],
+  // F#: flat int arrays, as for C#.
+  fsharp: () => [
+    `// ${HEADER}`,
+    '// first, last, stride, delta (4 per run)',
+    'let private upperRuns : int[] = [|',
+    ...rows(runs, 3, r => `${hex(r.first)}; ${hex(r.last)}; ${r.stride}; ${r.delta}`, '    ', '; ').map(l => l + ';'),
+    '|]',
+    '// code point, up to 3 code points (0 = none)',
+    'let private upperSpecial : int[] = [|',
+    ...rows(special, 3, ([cp, u]) => [cp, ...pad3(u)].map(hex).join('; '), '    ', '; ').map(l => l + ';'),
+    '|]',
+  ],
+  // Go: unicode.ToUpper is 1:1 only (and strings.ToUpper has no special casing).
+  go: () => [
+    `// ${HEADER}`,
+    '',
+    '// upperRuns: first, last, stride, delta.',
+    'var upperRuns = [...][4]int32{',
+    ...rows(runs, 3, r => `{${hex(r.first)}, ${hex(r.last)}, ${r.stride}, ${r.delta}}`, '\t', ', ').map(l => l + ','),
+    '}',
+    '',
+    '// upperSpecial: code point to 2 or 3 code points.',
+    'var upperSpecial = map[rune][]rune{',
+    ...rows(special, 3, ([cp, u]) => `${hex(cp)}: {${u.map(hex).join(', ')}}`, '\t', ', ').map(l => l + ','),
+    '}',
+  ],
   // Julia: special casing only (Base.uppercase(::Char) does the 1:1 mappings).
   julia: () => [
     `# ${HEADER}`,
@@ -165,6 +206,9 @@ const TARGETS = {
   zig: ['zig/ltx/src/interplanet_ltx.zig', 'zig/ltx/src/ltx_v11.zig'],
   dart: 'dart/ltx/lib/src/upper.dart',
   julia: 'julia/ltx/src/upper.jl',
+  csharp: 'csharp/ltx/src/Upper.cs',
+  fsharp: 'fsharp/ltx/src/Upper.fs',
+  go: 'go/ltx/ltx_upper.go',
 };
 
 function splice(text, block, file) {

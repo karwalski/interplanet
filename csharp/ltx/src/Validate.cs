@@ -344,7 +344,8 @@ public static class LtxPlanJson
         var names = Get(plan, "nodes") is { ValueKind: JsonValueKind.Array } nodes
             ? nodes.EnumerateArray().Select(n => Str(Get(n, "name")) ?? "").ToList()
             : new List<string>();
-        string hostStr = names.Count > 0 ? Slice(CompactUpper(names[0]), 8) : "HOST";
+        // (nodes[0]?.name || 'HOST') as in ltx-sdk.js: an empty name is HOST too.
+        string hostStr = Slice(CompactUpper(names.Count > 0 && names[0].Length > 0 ? names[0] : "HOST"), 8);
         string nodeStr = names.Count > 1
             ? Slice(string.Join("-", names.Skip(1).Select(n => Slice(CompactUpper(n), 4))), 16)
             : "RX";
