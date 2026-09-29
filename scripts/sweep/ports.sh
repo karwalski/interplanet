@@ -189,7 +189,8 @@ dotnet build -nologo -v q InterplanetTime
 dotnet run --project FixtureTest "$FIXTURE"
 '
 sweep_add ports csharp/ltx csharp/ltx dotnet '
-dotnet run --project .   # unit, security, v11, parity, prefix
+dotnet build -nologo -v q -warnaserror InterplanetLTX.csproj
+dotnet run --project tests   # unit, security, v11, parity, prefix
 '
 
 # ── F# ──────────────────────────────────────────────────────────────────────
@@ -299,6 +300,7 @@ julia --startup-file=no --project=. test/runtests.jl   # includes parity_tests.j
 # TKC names the compiler; else `tkc` on PATH. The binary goes to $SWEEP_TMP.
 sweep_add ports toke toke "python3 clang" '
 tkc=${TKC:-$(command -v tkc || true)}
+[ -z "$tkc" ] && [ -x .toolchain/toke/tkc ] && tkc=$PWD/.toolchain/toke/tkc   # built by build.sh
 if [ -z "$tkc" ]; then echo "SKIP: no tkc (set TKC)"; exit 0; fi
 "$tkc" --diag-text src/interplanet.tk --out "$SWEEP_TMP/interplanet" >"$SWEEP_TMP/tkc.log" 2>&1 || { cat "$SWEEP_TMP/tkc.log"; exit 1; }
 python3 verify.py "$SWEEP_TMP/interplanet"   # reference.json + v2 plan-ids.json
