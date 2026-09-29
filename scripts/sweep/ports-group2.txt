@@ -1,0 +1,48 @@
+# Issue #38 sweep, group 2: ruby php csharp fsharp dart swift elixir lua ocaml r julia toke.
+# Format: name<TAB>dir (from the repo root)<TAB>command (run in dir with bash).
+# Every command below exited 0 on 2026-09-29 (Linux x86_64) with: ruby 3.3.6,
+# PHP 8.4 + composer, .NET 10.0.112, Dart 3.13.5, Swift 5.10.1, Elixir 1.14 /
+# OTP 24, Lua 5.4.6 (no luacheck: make lint falls back to lua/lint.sh), OCaml
+# 4.14.1 + ocamlfind (no dune: the Makefiles call ocamlfind ocamlopt), R 4.3.3
+# (LC_ALL=C.UTF-8), Julia 1.10, tkc at the pinned toke revision.
+# Environment notes:
+# - elixir-planet-time needs Hex (jason, test/dev only). Where hex.pm is
+#   unreachable, point the jason dep at a local clone (v1.4.4) instead.
+# - toke: build.sh clones and builds tkc unless TKC=/path/to/tkc is set.
+# - the accuracy-* lines compare each port with javascript/planet-time/planet-time.js
+#   at the 200 instants of scripts/sweep/accuracy/instants-group2.txt (node required).
+ruby-planet-time	ruby/planet-time	make test && make fixture && make lint && make build && make clean
+ruby-ltx	ruby/ltx	make test && make lint && make build && make clean
+php-planet-time	php/planet-time	make test && make lint && make validate
+php-ltx	php/ltx	make test && make lint && make validate
+csharp-planet-time	csharp/planet-time	make lint && make fixtures && make pack
+csharp-ltx	csharp/ltx	make lint && make test && make pack
+fsharp-planet-time	fsharp/planet-time	make lint && make fixtures && make pack
+fsharp-ltx	fsharp/ltx	make lint && make test && make pack
+dart-planet-time	dart/planet-time	dart pub get && dart analyze && dart test && make fixtures && make publish-check
+dart-ltx	dart/ltx	dart pub get && dart analyze && make test && make publish-check
+swift-planet-time	swift/planet-time	make test && .build/RunTests ../../c/planet-time/fixtures/reference.json && make lint && make release && make xctest
+swift-ltx	swift/ltx	make test && make release
+elixir-planet-time	elixir/planet-time	mix deps.get && mix compile --warnings-as-errors && mix test && make fixtures
+elixir-ltx	elixir/ltx	make lint && make test && mix test
+lua-planet-time	lua/planet-time	make test && make fixture && make lint
+lua-ltx	lua/ltx	make test && make lint
+ocaml-planet-time	ocaml/planet-time	make test && make lint && make clean
+ocaml-ltx	ocaml/ltx	make test && make lint && make build && make clean
+r-planet-time	r/planet-time	LC_ALL=C.UTF-8 make test fixture lint check clean
+r-ltx	r/ltx	LC_ALL=C.UTF-8 make test lint check clean
+julia-planet-time	julia/planet-time	julia --project=. -e 'import Pkg; Pkg.instantiate(); Pkg.test()' && make fixtures
+julia-ltx	julia/ltx	julia --project=. -e 'import Pkg; Pkg.instantiate()' && make test && make pkgtest
+toke	toke	./build.sh && python3 verify.py
+accuracy-ruby	ruby/planet-time	ruby -Ilib ../../scripts/sweep/accuracy/ruby/accuracy.rb ../../scripts/sweep/accuracy/instants-group2.txt | node ../../scripts/sweep/accuracy/gen-cases-group2.js --compare -
+accuracy-php	php/planet-time	php ../../scripts/sweep/accuracy/php/accuracy.php ../../scripts/sweep/accuracy/instants-group2.txt | node ../../scripts/sweep/accuracy/gen-cases-group2.js --compare -
+accuracy-csharp	.	dotnet run --project scripts/sweep/accuracy/csharp -- scripts/sweep/accuracy/instants-group2.txt | node scripts/sweep/accuracy/gen-cases-group2.js --compare -
+accuracy-fsharp	.	dotnet run --project scripts/sweep/accuracy/fsharp -- scripts/sweep/accuracy/instants-group2.txt | node scripts/sweep/accuracy/gen-cases-group2.js --compare -
+accuracy-dart	dart/planet-time	dart pub get && dart --packages=.dart_tool/package_config.json ../../scripts/sweep/accuracy/dart/accuracy.dart ../../scripts/sweep/accuracy/instants-group2.txt | node ../../scripts/sweep/accuracy/gen-cases-group2.js --compare -
+accuracy-swift	swift/planet-time	mkdir -p .build && swiftc -module-name InterplanetTime Sources/InterplanetTime/*.swift ../../scripts/sweep/accuracy/swift/main.swift -o .build/Accuracy && .build/Accuracy ../../scripts/sweep/accuracy/instants-group2.txt | node ../../scripts/sweep/accuracy/gen-cases-group2.js --compare -
+accuracy-elixir	elixir/planet-time	mix run ../../scripts/sweep/accuracy/elixir/accuracy.exs ../../scripts/sweep/accuracy/instants-group2.txt | node ../../scripts/sweep/accuracy/gen-cases-group2.js --compare -
+accuracy-lua	lua/planet-time	lua ../../scripts/sweep/accuracy/lua/accuracy.lua ../../scripts/sweep/accuracy/instants-group2.txt | node ../../scripts/sweep/accuracy/gen-cases-group2.js --compare -
+accuracy-ocaml	ocaml/planet-time	mkdir -p _build && ocamlopt -I lib lib/constants.ml lib/orbital.ml lib/time_calc.ml lib/interplanet_time.ml ../../scripts/sweep/accuracy/ocaml/accuracy.ml -o _build/accuracy && ./_build/accuracy ../../scripts/sweep/accuracy/instants-group2.txt | node ../../scripts/sweep/accuracy/gen-cases-group2.js --compare - && make clean
+accuracy-r	r/planet-time	LC_ALL=C.UTF-8 Rscript ../../scripts/sweep/accuracy/r/accuracy.R ../../scripts/sweep/accuracy/instants-group2.txt | node ../../scripts/sweep/accuracy/gen-cases-group2.js --compare -
+accuracy-julia	julia/planet-time	julia --project=. ../../scripts/sweep/accuracy/julia/accuracy.jl ../../scripts/sweep/accuracy/instants-group2.txt | node ../../scripts/sweep/accuracy/gen-cases-group2.js --compare -
+accuracy-toke	.	python3 scripts/sweep/accuracy/toke/accuracy.py toke/interplanet scripts/sweep/accuracy/instants-group2.txt | node scripts/sweep/accuracy/gen-cases-group2.js --compare -
