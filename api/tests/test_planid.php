@@ -3,11 +3,14 @@
  * test_planid.php: the web API computes spec planIds
  * (docs/LTX-SPECIFICATION.md sections 4.3 and 4.5).
  *
- * Feeds every golden vector in spec/golden/plan-ids.json to
+ * Feeds every golden vector in spec/golden/plan-ids.json and
+ * spec/golden/plan-id-prefixes.json to
  *   1. ltx_make_plan_id() in api/ltx-planid.php, and
  *   2. POST api/ltx.php?action=session (and demo/relay-server.php
  *      POST /relay/session), each run under PHP's built-in web server,
- * and asserts the planId. CLI only.
+ * and asserts the planId. The prefix vectors (issue #37: JS whitespace, JS
+ * toUpperCase, UTF-16 slicing) expect the planIdWtf8Hex bytes from the
+ * library and planIdUtf8 over HTTP (a lone surrogate as U+FFFD). CLI only.
  *
  * Run: php api/tests/test_planid.php
  */
@@ -23,6 +26,10 @@ require_once __DIR__ . '/../ltx-planid.php';
 
 $repo   = dirname(__DIR__, 2);
 $golden = ltx_plan_decode((string)file_get_contents($repo . '/spec/golden/plan-ids.json'));
+// json_decode rejects a lone surrogate escape (JSON_ERROR_UTF16); only the
+// exact JS planId fields carry one (\ud83d), and they are not used here.
+$prefixGolden = ltx_plan_decode((string)preg_replace('/\\\\u[dD][89abAB][0-9a-fA-F]{2}(?!\\\\u[dD][c-fC-F])/',
+    '\\\\ufffd', (string)file_get_contents($repo . '/spec/golden/plan-id-prefixes.json')));
 
 $passed = 0;
 $failed = 0;
@@ -42,6 +49,19 @@ foreach ($golden->vectors as $v) {
     $plan = ltx_plan_decode(ltx_js_stringify($v->plan));
     same("ltx_make_plan_id {$v->name}", $v->planId, ltx_make_plan_id($plan));
     check("ltx_is_plan_id {$v->name}", ltx_is_plan_id($v->planId));
+}
+
+// ── 1b. Library: planId prefix vectors (issue #37) ──────────────────────────
+
+check('prefix vectors present (>= 18)', count($prefixGolden->vectors ?? []) >= 18);
+foreach ($prefixGolden->vectors as $v) {
+    $plan = ltx_plan_decode(ltx_js_stringify($v->plan));
+    $id   = ltx_make_plan_id($plan);
+    same("ltx_make_plan_id prefix {$v->name} (WTF-8)", $v->planIdWtf8Hex, bin2hex($id));
+    same("ltx_plan_id_utf8 prefix {$v->name}", $v->planIdUtf8, ltx_plan_id_utf8($id));
+    check("ltx_make_plan_id prefix {$v->name} is UTF-8 iff no lone surrogate",
+        mb_check_encoding($id, 'UTF-8') === !$v->loneSurrogate);
+    check("ltx_is_plan_id prefix {$v->name}", ltx_is_plan_id($v->planIdUtf8));
 }
 
 // ── 2. Library: JavaScript compatibility beyond the vectors ─────────────────
@@ -119,6 +139,13 @@ try {
         same("POST api/ltx.php?action=session {$v->name}", $v->planId, $r['plan_id'] ?? null);
         $r = postJson("http://127.0.0.1:$relayPort/relay-server.php/relay/session", $body);
         same("POST relay-server.php/relay/session {$v->name}", $v->planId, $r['sessionId'] ?? null);
+    }
+    foreach ($prefixGolden->vectors as $v) {
+        $body = ltx_js_stringify($v->plan);
+        $r = postJson("http://127.0.0.1:$apiPort/api/ltx.php?action=session", $body);
+        same("POST api/ltx.php?action=session prefix {$v->name}", $v->planIdUtf8, $r['plan_id'] ?? null);
+        $r = postJson("http://127.0.0.1:$relayPort/relay-server.php/relay/session", $body);
+        same("POST relay-server.php/relay/session prefix {$v->name}", $v->planIdUtf8, $r['sessionId'] ?? null);
     }
     $r = postJson("http://127.0.0.1:$apiPort/api/ltx.php?action=session", $extraText);
     same('POST api/ltx.php?action=session non-ASCII plan', 'LTX-20260502-BASEÉTOI-CERE-v2-69555394', $r['plan_id'] ?? null);

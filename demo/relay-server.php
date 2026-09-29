@@ -101,7 +101,7 @@ function makePlanId(string $rawJson): ?string {
     $plan = ltx_plan_decode($rawJson);
     if (!($plan instanceof stdClass)) return null;
     try {
-        return ltx_make_plan_id($plan);
+        return ltx_plan_id_utf8(ltx_make_plan_id($plan));
     } catch (Throwable) {
         return null;
     }

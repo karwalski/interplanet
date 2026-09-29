@@ -128,19 +128,77 @@ function ltx_js_stringify(mixed $v): string
     throw new InvalidArgumentException('ltx_js_stringify: unsupported type ' . get_debug_type($v));
 }
 
-/** UTF-16 code units of a UTF-8 string (what JavaScript's charCodeAt iterates). */
+/**
+ * JavaScript's \s (ECMAScript WhiteSpace and LineTerminator). PCRE's /\s/u
+ * differs: it also matches U+0085 and misses U+FEFF.
+ */
+const LTX_JS_WHITESPACE = '/[\x{0009}-\x{000D}\x{0020}\x{00A0}\x{1680}\x{2000}-\x{200A}'
+    . '\x{2028}\x{2029}\x{202F}\x{205F}\x{3000}\x{FEFF}]+/u';
+
+/**
+ * UTF-16 code units of a UTF-8 string (what JavaScript's charCodeAt iterates).
+ * A WTF-8 string (a lone surrogate as ED A0..BF xx, as ltx_utf16_slice
+ * leaves it) gives each lone surrogate as one unit; any other invalid byte
+ * throws.
+ */
 function ltx_utf16_units(string $s): array
 {
     if ($s === '') return [];
-    return array_values(unpack('v*', mb_convert_encoding($s, 'UTF-16LE', 'UTF-8')));
+    if (mb_check_encoding($s, 'UTF-8')) {
+        return array_values(unpack('v*', mb_convert_encoding($s, 'UTF-16LE', 'UTF-8')));
+    }
+    $units = [];
+    $len = strlen($s);
+    for ($i = 0; $i < $len; $i += $n) {
+        $b = ord($s[$i]);
+        $n = $b < 0x80 ? 1 : ($b >= 0xF0 ? 4 : ($b >= 0xE0 ? 3 : 2));
+        $chunk = substr($s, $i, $n);
+        if (strlen($chunk) === $n && mb_check_encoding($chunk, 'UTF-8')) {
+            array_push($units, ...array_values(unpack('v*', mb_convert_encoding($chunk, 'UTF-16LE', 'UTF-8'))));
+        } elseif ($n === 3 && strlen($chunk) === 3 && $b === 0xED
+            && (ord($chunk[1]) & 0xE0) === 0xA0 && (ord($chunk[2]) & 0xC0) === 0x80) {
+            $units[] = 0xD000 | ((ord($chunk[1]) & 0x3F) << 6) | (ord($chunk[2]) & 0x3F);
+        } else {
+            throw new InvalidArgumentException('Malformed UTF-8 characters, possibly incorrectly encoded');
+        }
+    }
+    return $units;
 }
 
-/** $s.slice(0, $n) with JavaScript (UTF-16 code unit) semantics. */
+/**
+ * $s.slice(0, $n) with JavaScript (UTF-16 code unit) semantics. A cut that
+ * splits a surrogate pair keeps the lone high surrogate as WTF-8 (bytes
+ * ED A0..AF xx), the planIdWtf8Hex form of spec/golden/plan-id-prefixes.json;
+ * mb_convert_encoding would substitute '?'.
+ */
 function ltx_utf16_slice(string $s, int $n): string
 {
     $units = array_slice(ltx_utf16_units($s), 0, $n);
-    if (!$units) return '';
-    return mb_convert_encoding(pack('v*', ...$units), 'UTF-8', 'UTF-16LE');
+    $out = '';
+    $count = count($units);
+    for ($i = 0; $i < $count; $i++) {
+        $u = $units[$i];
+        if ($u >= 0xD800 && $u <= 0xDBFF && $i + 1 < $count
+            && $units[$i + 1] >= 0xDC00 && $units[$i + 1] <= 0xDFFF) {
+            $out .= mb_chr(0x10000 + (($u - 0xD800) << 10) + ($units[++$i] - 0xDC00), 'UTF-8');
+        } elseif ($u >= 0xD800 && $u <= 0xDFFF) {
+            $out .= chr(0xE0 | ($u >> 12)) . chr(0x80 | (($u >> 6) & 0x3F)) . chr(0x80 | ($u & 0x3F));
+        } else {
+            $out .= mb_chr($u, 'UTF-8');
+        }
+    }
+    return $out;
+}
+
+/**
+ * The planId as UTF-8 text: each lone surrogate (WTF-8 ED A0..BF xx) becomes
+ * U+FFFD, as JavaScript's TextEncoder / Buffer / HTTP body encoding does
+ * (planIdUtf8 in spec/golden/plan-id-prefixes.json). Use it wherever the id
+ * leaves PHP: JSON responses, database columns, URLs.
+ */
+function ltx_plan_id_utf8(string $planId): string
+{
+    return preg_replace('/\xED[\xA0-\xBF][\x80-\xBF]/', "\u{FFFD}", $planId) ?? $planId;
 }
 
 function ltx_utf16_compare(string $a, string $b): int
@@ -200,17 +258,26 @@ function ltx_upgrade_config(array|stdClass $cfg): array|stdClass
     return (object)$a;
 }
 
-/** Name part of a planId: whitespace removed, upper-cased, first $n UTF-16 units. */
+/**
+ * Name part of a planId: (name || default).replace(/\s+/g, '').toUpperCase()
+ * .slice(0, n). JavaScript's \s; mb_strtoupper is the full Unicode mapping
+ * with the special casings (ß to SS, ﬁ to FI, ΐ to Ϊ́ ...) as toUpperCase.
+ */
 function ltx_id_part(mixed $name, int $n, string $default): string
 {
     $s = (is_string($name) && $name !== '') ? $name : $default;
-    return ltx_utf16_slice(mb_strtoupper(preg_replace('/\s+/u', '', $s) ?? $s, 'UTF-8'), $n);
+    return ltx_utf16_slice(mb_strtoupper(preg_replace(LTX_JS_WHITESPACE, '', $s) ?? $s, 'UTF-8'), $n);
 }
 
 /**
  * Spec planId (sections 4.3 and 4.5) of a plan decoded by ltx_plan_decode().
  * Associative arrays are accepted too, but only a stdClass decode keeps an
  * empty object ({}) distinct from an empty array ([]).
+ *
+ * The id is the exact JavaScript string as a PHP byte string: when the
+ * UTF-16 slicing of HOSTSTR / NODESTR splits a surrogate pair, the lone high
+ * surrogate is kept as WTF-8 (as php/ltx does), so the result is not valid
+ * UTF-8. Pass it through ltx_plan_id_utf8() before it leaves PHP.
  *
  * @throws InvalidArgumentException when start is not a parseable timestamp
  */
@@ -252,11 +319,14 @@ function ltx_make_plan_id(array|stdClass $plan): string
 }
 
 /**
- * Shape check for a plan_id query parameter. Host and node parts are
- * upper-cased node names (any non-whitespace text) and the hash is lowercase
- * hex after "-v2-" or "-v3-". Queries use prepared statements.
+ * Shape check for a plan_id query parameter (the ltx_plan_id_utf8() form).
+ * Host and node parts are upper-cased node names: any text without JS
+ * whitespace (control characters such as U+001C, which PCRE's \s matches,
+ * can remain in a JS planId), and the hash is lowercase hex after "-v2-" or
+ * "-v3-". Queries use prepared statements.
  */
 function ltx_is_plan_id(string $planId): bool {
     return strlen($planId) <= 100
-        && preg_match('/^LTX-[0-9]{8}-\S+-v[23]-[0-9a-f]{8}$/u', $planId) === 1;
+        && preg_match('/^LTX-[0-9]{8}-[^\x{0009}-\x{000D}\x{0020}\x{00A0}\x{1680}\x{2000}-\x{200A}'
+            . '\x{2028}\x{2029}\x{202F}\x{205F}\x{3000}\x{FEFF}]+-v[23]-[0-9a-f]{8}$/u', $planId) === 1;
 }

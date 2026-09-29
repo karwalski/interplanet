@@ -73,7 +73,7 @@ function makePlanIdFromJson(string $raw): string {
     $plan = ltx_plan_decode($raw);
     if (!($plan instanceof stdClass)) jsonError('Invalid JSON body');
     try {
-        return ltx_make_plan_id($plan);
+        return ltx_plan_id_utf8(ltx_make_plan_id($plan));
     } catch (Throwable) {
         jsonError('Invalid plan: cannot compute plan_id');
     }
