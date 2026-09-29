@@ -520,17 +520,37 @@ extension InterplanetLTX {
 
     // ── planId over the wire form ───────────────────────────────────────────
 
-    /// JS String.prototype.slice(0, n) on UTF-16 code units.
+    /// JS String.prototype.slice(0, n) on UTF-16 code units. A Swift String
+    /// cannot hold the lone surrogate JS leaves when the cut splits a
+    /// surrogate pair; decoding repairs it to U+FFFD, the UTF-8 form of the
+    /// JS id (planIdUtf8 in spec/golden/plan-id-prefixes.json).
     static func jsSlice(_ s: String, _ n: Int) -> String {
         let u = Array(s.utf16)
         return u.count <= n ? s : String(decoding: u[0..<n], as: UTF16.self)
     }
 
-    /// JS name.replace(/\s+/g, '').toUpperCase().
+    /// ECMAScript \s (WhiteSpace and LineTerminator). Unicode White_Space
+    /// (`properties.isWhitespace`) differs: it has U+0085 and not U+FEFF.
+    static func isJSWhitespace(_ c: Unicode.Scalar) -> Bool {
+        switch c.value {
+        case 0x09...0x0D, 0x20, 0xA0, 0x1680, 0x2000...0x200A, 0x2028, 0x2029,
+             0x202F, 0x205F, 0x3000, 0xFEFF: return true
+        default: return false
+        }
+    }
+
+    /// JS name.replace(/\s+/g, '').toUpperCase(). `uppercased()` is the full,
+    /// locale-independent Unicode mapping (special casing included).
     static func jsCompactUpper(_ s: String) -> String {
         var out = String.UnicodeScalarView()
-        for c in s.unicodeScalars where !c.properties.isWhitespace { out.append(c) }
+        for c in s.unicodeScalars where !isJSWhitespace(c) { out.append(c) }
         return String(out).uppercased()
+    }
+
+    /// HOSTSTR: (name || 'HOST') compacted, upper-cased, 8 UTF-16 units.
+    static func jsHostStr(_ name: String?) -> String {
+        guard let name = name, !name.isEmpty else { return "HOST" }
+        return jsSlice(jsCompactUpper(name), 8)
     }
 
     /// makePlanId over plan JSON text, parsed with key order preserved.
@@ -556,7 +576,7 @@ extension InterplanetLTX {
                 if case .string(let name)? = n["name"] { names.append(name) } else { names.append("") }
             }
         }
-        let hostStr = names.first.map { jsSlice(jsCompactUpper($0), 8) } ?? "HOST"
+        let hostStr = jsHostStr(names.first)
         let nodeStr = names.count > 1
             ? jsSlice(names.dropFirst().map { jsSlice(jsCompactUpper($0), 4) }.joined(separator: "-"), 16)
             : "RX"
