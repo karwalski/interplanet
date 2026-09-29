@@ -1,0 +1,70 @@
+{
+  "id": "o2-pressure",
+  "version": 1,
+  "title": "Scenario B: oxygen generation and cabin pressure faults",
+  "note": "Parallel form of scenario A for counterbalancing when delay is varied within teams. Fictional spacecraft and procedures written for this kit. They are not taken from any real vehicle or from the Fischer and Mosier materials. Equivalence with scenario A in difficulty has not been established and must be piloted.",
+  "durationMin": 150,
+  "roles": {
+    "crew1": { "site": "spacecraft", "label": "Crew member 1" },
+    "crew2": { "site": "spacecraft", "label": "Crew member 2" },
+    "fc":    { "site": "ground",     "label": "Flight controller" }
+  },
+  "briefing": {
+    "all": "You are operating a fictional long-duration spacecraft. The crew can see onboard displays. The flight controller has the troubleshooting reference. Neither side can solve the faults alone. Diagnose each fault and choose the correct procedure. Submit answers with the answer form using the fault and item ids shown in the alerts.",
+    "spacecraft": "You are the crew. You see telemetry and alerts. You do not have the troubleshooting tables.",
+    "ground": "You are the flight controller. You have the troubleshooting tables. You do not see live telemetry except what the crew sends you."
+  },
+  "faults": [
+    {
+      "id": "F1",
+      "title": "Oxygen generator shutdown",
+      "resolveByMin": 90,
+      "injections": [
+        { "id": "F1-a", "atMin": 2, "to": "spacecraft",
+          "text": "CAUTION F1: oxygen generator OFF. Fault code 17. Cell stack voltage 0 V. Water feed pressure 45 kPa. Cabin ppO2 20.6 kPa and slowly falling. Answer items: F1/diagnosis, F1/procedure." },
+        { "id": "F1-ref", "atMin": 2, "to": "ground",
+          "text": "REFERENCE F1 (oxygen generator troubleshooting). (a) Code 17 AND water feed pressure below 60 kPa: water feed low, procedure OG-3 (refill feed tank and restart). (b) Code 17 AND water feed pressure 60 kPa or more: cell stack fault, procedure OG-6 (switch to backup stack). (c) Code 22: hydrogen sensor trip, procedure OG-8 (sensor purge and reset). (d) No code: power supply fault, procedure OG-11 (check breaker). A crew alert is in progress; the crew holds the telemetry." },
+        { "id": "F1-b", "atMin": 12, "to": "spacecraft",
+          "text": "UPDATE F1: water feed pressure 44 kPa. Fault code 17 persists. Cabin ppO2 20.4 kPa." }
+      ],
+      "items": [
+        { "id": "diagnosis",
+          "options": ["water feed low", "cell stack fault", "hydrogen sensor trip", "power supply fault"],
+          "accepted": ["water feed low", "water feed", "low water feed", "a"] },
+        { "id": "procedure",
+          "options": ["OG-3", "OG-6", "OG-8", "OG-11"],
+          "accepted": ["OG-3", "OG3"] }
+      ],
+      "contextKeywords": ["F1", "oxygen", "O2", "generator", "code 17", "feed", "OG-"]
+    },
+    {
+      "id": "F2",
+      "title": "Slow cabin pressure decrease",
+      "resolveByMin": 140,
+      "injections": [
+        { "id": "F2-a", "atMin": 40, "to": "spacecraft",
+          "text": "CAUTION F2: cabin pressure 99.1 kPa, falling about 0.2 kPa per hour. Nitrogen supply pressure 8.1 MPa. Answer items: F2/diagnosis, F2/first_procedure." },
+        { "id": "F2-ref", "atMin": 40, "to": "ground",
+          "text": "REFERENCE F2 (pressure control troubleshooting). (a) Cabin pressure falling AND nitrogen supply pressure falling: nitrogen regulator leak, first procedure PR-4 (isolate nitrogen line). (b) Cabin pressure falling AND nitrogen supply steady: cabin leak, first procedure PR-2 (module isolation leak check). (c) Cabin pressure rising: regulator stuck open, first procedure PR-6 (close manual valve). A crew alert is in progress; the crew holds the telemetry." },
+        { "id": "F2-b", "atMin": 55, "to": "spacecraft",
+          "text": "UPDATE F2: cabin pressure 99.0 kPa. Nitrogen supply pressure 7.6 MPa." }
+      ],
+      "items": [
+        { "id": "diagnosis",
+          "options": ["nitrogen regulator leak", "cabin leak", "regulator stuck open"],
+          "accepted": ["nitrogen regulator leak", "regulator leak", "n2 regulator leak", "a"] },
+        { "id": "first_procedure",
+          "options": ["PR-2", "PR-4", "PR-6"],
+          "accepted": ["PR-4", "PR4"] }
+      ],
+      "contextKeywords": ["F2", "pressure", "nitrogen", "N2", "regulator", "leak", "PR-"]
+    }
+  ],
+  "scoring": {
+    "clarificationPatterns": [
+      "say again", "please repeat", "what do you mean", "which (fault|one|reading|procedure)",
+      "can you clarify", "clarif", "not sure what", "did you mean", "which .* do you mean"
+    ],
+    "note": "Automatic markers are provisional. Human coders should confirm each flagged message using the exported coding sheet."
+  }
+}

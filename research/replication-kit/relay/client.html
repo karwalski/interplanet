@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Replication kit client</title>
+<style>
+  :root { --bg: #fff; --fg: #111; --muted: #666; --line: #ccc; --accent: #0b5; --sim: #fff4d6; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #111; --fg: #eee; --muted: #999; --line: #444; --accent: #3d8; --sim: #3a3220; }
+  }
+  body { background: var(--bg); color: var(--fg); font: 15px/1.4 system-ui, sans-serif; margin: 0 auto; max-width: 760px; padding: 16px; }
+  #log { border: 1px solid var(--line); height: 50vh; overflow-y: auto; padding: 8px; white-space: pre-wrap; }
+  .msg { border-bottom: 1px solid var(--line); padding: 6px 0; }
+  .sim { background: var(--sim); }
+  .meta { color: var(--muted); font-size: 12px; }
+  textarea { width: 100%; box-sizing: border-box; min-height: 120px; font: inherit; }
+  fieldset { border: 1px solid var(--line); margin-top: 12px; }
+  button, select, input { font: inherit; }
+  #templates { display: none; }
+</style>
+</head>
+<body>
+<h1>Mission communication</h1>
+<p class="meta">Text only. Messages to the other site arrive after a signal delay. Answers are sent to the experimenter immediately.</p>
+<label>I am <select id="me"></select></label>
+<div id="log" aria-live="polite"></div>
+
+<fieldset>
+  <legend>Send message</legend>
+  <label>To <select id="to"></select></label>
+  <span id="templates">
+    Insert template:
+    <button type="button" data-t="question">Question</button>
+    <button type="button" data-t="action">Action</button>
+    <button type="button" data-t="status">Status</button>
+    <button type="button" data-t="ack">Acknowledgement</button>
+  </span>
+  <textarea id="text"></textarea>
+  <button id="send" type="button">Send</button>
+</fieldset>
+
+<fieldset>
+  <legend>Submit answer (scored)</legend>
+  <label>Fault <input id="fault" size="6"></label>
+  <label>Item <input id="item" size="6"></label>
+  <label>Answer <input id="answer" size="20"></label>
+  <button id="submit" type="button">Submit</button>
+</fieldset>
+
+<script>
+(function () {
+  'use strict';
+  // Plain-text skeletons for the protocol-on condition. They follow the same
+  // parts as javascript/ltx/ltx-protocol-templates.js.
+  var SKELETONS = {
+    question: 'QUESTION\nContext: \nAlready tried: \nQuestions:\n1. \n2. \nReply requested by (UTC): ',
+    action: 'ACTION REQUEST\nContext: \nOwner: \nSteps:\n1. \n2. \nDue (UTC): \nPlease acknowledge with a readback of the steps.',
+    status: 'STATUS UPDATE for \nContext: \nStatus: \nCompleted:\n1. \nRemaining:\n1. \nNext update by (UTC): ',
+    ack: 'ACKNOWLEDGEMENT of \nReadback: \nAnswers:\n1. \n2. \nFollow-up by (UTC): '
+  };
+  var $ = function (id) { return document.getElementById(id); };
+  var roles = {}, es = null;
+
+  function add(m) {
+    var d = document.createElement('div');
+    d.className = 'msg' + (m.from === 'sim' ? ' sim' : '');
+    var meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.textContent = (m.from === 'sim' ? 'SYSTEM' : (roles[m.from] ? roles[m.from].label : m.from)) +
+      ' at ' + new Date().toISOString().slice(11, 19) + ' UTC';
+    var body = document.createElement('div');
+    body.textContent = m.text;
+    d.appendChild(meta); d.appendChild(body);
+    $('log').appendChild(d);
+    $('log').scrollTop = $('log').scrollHeight;
+  }
+
+  function connect() {
+    if (es) es.close();
+    $('log').textContent = '';
+    var me = $('me').value;
+    var to = $('to'); to.textContent = '';
+    Object.keys(roles).forEach(function (r) {
+      if (r !== me) { var o = document.createElement('option'); o.value = r; o.textContent = roles[r].label; to.appendChild(o); }
+    });
+    var all = document.createElement('option'); all.value = 'all'; all.textContent = 'Everyone'; to.appendChild(all);
+    fetch('/inbox?participant=' + encodeURIComponent(me)).then(function (r) { return r.json(); })
+      .then(function (j) { j.messages.forEach(add); });
+    es = new EventSource('/events?participant=' + encodeURIComponent(me));
+    es.onmessage = function (e) { add(JSON.parse(e.data)); };
+  }
+
+  function post(url, body) {
+    return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { if (j.error) alert(j.error); return j; });
+  }
+
+  fetch('/config').then(function (r) { return r.json(); }).then(function (cfg) {
+    roles = cfg.roles;
+    if (cfg.protocol) $('templates').style.display = 'inline';
+    Object.keys(roles).forEach(function (r) {
+      var o = document.createElement('option'); o.value = r; o.textContent = roles[r].label; $('me').appendChild(o);
+    });
+    var q = new URLSearchParams(location.search).get('role');
+    if (q && roles[q]) $('me').value = q;
+    connect();
+  });
+
+  $('me').addEventListener('change', connect);
+  $('templates').addEventListener('click', function (e) {
+    var t = e.target.getAttribute('data-t');
+    if (t) { $('text').value = SKELETONS[t]; $('text').focus(); }
+  });
+  $('send').addEventListener('click', function () {
+    var text = $('text').value;
+    if (!text.trim()) return;
+    post('/send', { from: $('me').value, to: $('to').value, text: text }).then(function (j) {
+      if (!j.error) { add({ from: $('me').value, text: '(sent to ' + $('to').value + ')\n' + text }); $('text').value = ''; }
+    });
+  });
+  $('submit').addEventListener('click', function () {
+    post('/answer', { from: $('me').value, faultId: $('fault').value, itemId: $('item').value, answer: $('answer').value })
+      .then(function (j) { if (!j.error) { $('answer').value = ''; } });
+  });
+}());
+</script>
+</body>
+</html>

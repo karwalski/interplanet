@@ -1,0 +1,70 @@
+{
+  "id": "co2-removal",
+  "version": 1,
+  "title": "Scenario A: CO2 removal and condensate faults",
+  "note": "Fictional spacecraft and procedures written for this kit. They are not taken from any real vehicle or from the Fischer and Mosier materials.",
+  "durationMin": 150,
+  "roles": {
+    "crew1": { "site": "spacecraft", "label": "Crew member 1" },
+    "crew2": { "site": "spacecraft", "label": "Crew member 2" },
+    "fc":    { "site": "ground",     "label": "Flight controller" }
+  },
+  "briefing": {
+    "all": "You are operating a fictional long-duration spacecraft. The crew can see onboard displays. The flight controller has the troubleshooting reference. Neither side can solve the faults alone. Diagnose each fault and choose the correct procedure. Submit answers with the answer form using the fault and item ids shown in the alerts.",
+    "spacecraft": "You are the crew. You see telemetry and alerts. You do not have the troubleshooting tables.",
+    "ground": "You are the flight controller. You have the troubleshooting tables. You do not see live telemetry except what the crew sends you."
+  },
+  "faults": [
+    {
+      "id": "F1",
+      "title": "CO2 removal degradation",
+      "resolveByMin": 90,
+      "injections": [
+        { "id": "F1-a", "atMin": 2, "to": "spacecraft",
+          "text": "CAUTION F1: cabin ppCO2 3.9 mmHg and rising (limit 3.0). CO2 scrubber B: RUNNING. Scrubber B fan current 1.2 A (placard nominal 2.0 A). Scrubber B inlet delta-P 0.4 kPa. Answer items: F1/diagnosis, F1/procedure." },
+        { "id": "F1-ref", "atMin": 2, "to": "ground",
+          "text": "REFERENCE F1 (CO2 scrubber troubleshooting). Nominal inlet delta-P 0.8 to 1.2 kPa. (a) Low fan current AND high inlet delta-P: inlet filter blockage, procedure LS-4 (replace inlet filter). (b) Low fan current AND low inlet delta-P: fan motor degradation, procedure LS-7 (switch to backup fan). (c) Normal fan current AND ppCO2 rising: sorbent bed saturation, procedure LS-9 (start bed regeneration). (d) Readings inconsistent with a to c: suspect sensor, procedure LS-12 (cross-check with portable CO2 monitor). A crew alert is in progress; the crew holds the telemetry." },
+        { "id": "F1-b", "atMin": 12, "to": "spacecraft",
+          "text": "UPDATE F1: scrubber B fan current 1.0 A. Cabin ppCO2 4.3 mmHg. Portable CO2 monitor agrees with cabin sensor within 0.1 mmHg." }
+      ],
+      "items": [
+        { "id": "diagnosis",
+          "options": ["inlet filter blockage", "fan motor degradation", "sorbent bed saturation", "sensor fault"],
+          "accepted": ["fan motor degradation", "fan motor", "b"] },
+        { "id": "procedure",
+          "options": ["LS-4", "LS-7", "LS-9", "LS-12"],
+          "accepted": ["LS-7", "LS7"] }
+      ],
+      "contextKeywords": ["F1", "CO2", "scrubber", "fan", "delta-P", "LS-"]
+    },
+    {
+      "id": "F2",
+      "title": "Condensate separator stopped",
+      "resolveByMin": 140,
+      "injections": [
+        { "id": "F2-a", "atMin": 40, "to": "spacecraft",
+          "text": "CAUTION F2: cabin relative humidity 74% and rising (limit 70%). Condensate separator speed 0 rpm. Condensate tank level 95%. Answer items: F2/diagnosis, F2/first_procedure." },
+        { "id": "F2-ref", "atMin": 40, "to": "ground",
+          "text": "REFERENCE F2 (humidity control troubleshooting). (a) Separator speed 0 AND tank level 90% or more: tank-full interlock, first procedure WS-2 (transfer condensate to storage), then WS-3 (restart separator). (b) Separator speed 0 AND tank level below 90%: separator motor fault, first procedure WS-5 (switch to backup separator). (c) Separator speed nominal AND humidity rising: heat exchanger icing or bypass, first procedure WS-8 (check coolant setpoint). A crew alert is in progress; the crew holds the telemetry." },
+        { "id": "F2-b", "atMin": 55, "to": "spacecraft",
+          "text": "UPDATE F2: cabin relative humidity 77%. Condensate tank level 96%. Separator speed 0 rpm." }
+      ],
+      "items": [
+        { "id": "diagnosis",
+          "options": ["tank-full interlock", "separator motor fault", "heat exchanger icing"],
+          "accepted": ["tank-full interlock", "tank full interlock", "tank full", "a"] },
+        { "id": "first_procedure",
+          "options": ["WS-2", "WS-3", "WS-5", "WS-8"],
+          "accepted": ["WS-2", "WS2"] }
+      ],
+      "contextKeywords": ["F2", "humidity", "separator", "condensate", "tank", "WS-"]
+    }
+  ],
+  "scoring": {
+    "clarificationPatterns": [
+      "say again", "please repeat", "what do you mean", "which (fault|one|reading|procedure)",
+      "can you clarify", "clarif", "not sure what", "did you mean", "which .* do you mean"
+    ],
+    "note": "Automatic markers are provisional. Human coders should confirm each flagged message using the exported coding sheet."
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "interplanet-replication-kit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Delay-injecting text relay, scenarios and scoring for replicating delay x protocol team communication studies.",
+  "license": "GPL-3.0",
+  "scripts": {
+    "test": "node tests/run.js",
+    "relay": "node relay/relay.js",
+    "score": "node scoring/score.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
