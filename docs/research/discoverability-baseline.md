@@ -129,3 +129,71 @@ actual collection date if it differs.
 | M13 Top queries | | |
 | M14 Analytics visitors / top pages | | |
 | M15 New mentions and backlinks | | |
+
+---
+
+## 4. Owner actions
+
+These settings can only be changed by the repository owner. No change was made
+to them on 29 September 2026. Record the date each one is done, so the
+checkpoints above can be read against it.
+
+### About description
+
+Paste into **Settings > General > Description** (or the About panel on the
+repository page). It is 138 characters, within GitHub's 350-character limit:
+
+```
+Open-source planetary clocks, Earth-Mars meeting planning and LTX, a proposed protocol for collaboration across long communication delays.
+```
+
+The homepage field is already set to `https://interplanet.live/`.
+
+### Topics
+
+Add these 14 topics in the About panel. Each is lowercase with hyphens, within
+GitHub's limit of 20 topics of up to 50 characters, and backed by content in the
+repository:
+
+```
+interplanetary mars mars-time planetary-time timekeeping meeting-scheduler asynchronous-communication space-communications delay-tolerant ltx astronomy javascript typescript multi-language
+```
+
+Or with the GitHub CLI:
+
+```bash
+gh repo edit karwalski/interplanet \
+  --description "Open-source planetary clocks, Earth-Mars meeting planning and LTX, a proposed protocol for collaboration across long communication delays." \
+  --add-topic interplanetary,mars,mars-time,planetary-time,timekeeping,meeting-scheduler \
+  --add-topic asynchronous-communication,space-communications,delay-tolerant,ltx \
+  --add-topic astronomy,javascript,typescript,multi-language
+```
+
+### Discussions
+
+Enable Discussions (**Settings > General > Features > Discussions**) with
+categories for **Q&A**, **Research** and **Interoperability**.
+[CONTRIBUTING.md](../../CONTRIBUTING.md) already points people to Discussions and
+says it is disabled until then; remove that note once it is enabled.
+
+### Labels
+
+Add the `good first issue` label to at least five backlog issues. The
+"Contribution Entry Points" section of CONTRIBUTING.md lists suitable areas
+(for example the Kotlin fixture runner crash and the missing C `reference.json`
+runner).
+
+### Measurement
+
+Decide whether to set up Google Search Console for `https://interplanet.live/`
+and a privacy-respecting analytics tool, then replace the **unknown** entries in
+the baseline with "configured on <date>" or "not configured".
+
+| Action | Done on | Notes |
+|--------|---------|-------|
+| About description set | | |
+| Topics set | | |
+| Discussions enabled with categories | | |
+| `good first issue` on 5 or more issues | | |
+| Search Console status recorded | | |
+| Analytics status recorded | | |
