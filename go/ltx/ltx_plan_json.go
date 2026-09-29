@@ -23,7 +23,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
 	"unicode/utf16"
 )
 
@@ -340,9 +339,21 @@ func imul31(s string) uint32 {
 
 // ── makePlanId / planHash over the wire plan ────────────────────────────────
 
+// isJSSpace reports whether r is in JS \s (ECMAScript WhiteSpace and
+// LineTerminator). unicode.IsSpace differs: it includes U+0085 (NEL) and
+// excludes U+FEFF.
+func isJSSpace(r rune) bool {
+	switch r {
+	case '\t', '\n', '\v', '\f', '\r', ' ', 0x00A0, 0x1680, 0x2028, 0x2029, 0x202F, 0x205F, 0x3000, 0xFEFF:
+		return true
+	}
+	return r >= 0x2000 && r <= 0x200A
+}
+
+// jsNameToken is name.replace(/\s+/g, "").toUpperCase().slice(0, max).
 func jsNameToken(name string, max int) string {
 	stripped := strings.Map(func(r rune) rune {
-		if unicode.IsSpace(r) || r == 0xFEFF {
+		if isJSSpace(r) {
 			return -1
 		}
 		return r
