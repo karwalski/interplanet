@@ -33,9 +33,9 @@ function syncHash() {
     if (location.hash) history.replaceState(null, '', location.pathname + location.search);
     return;
   }
-  history.replaceState(null, '', '#c=' + _toBase64url(
-    JSON.stringify({ version: 2, cities: getCompactCities() })
-  ));
+  const data = { version: 2, cities: getCompactCities() };
+  if (STATE.settings.manualOrder) data.manualOrder = true;   // keep a dragged order in shared links
+  history.replaceState(null, '', '#c=' + _toBase64url(JSON.stringify(data)));
 }
 function loadFromHash() {
   const m = location.hash.match(/^#c=([A-Za-z0-9_\-]+)$/);
@@ -46,6 +46,7 @@ function loadFromHash() {
     const data = JSON.parse(json);
     if (!data || !data.cities) return false;
     if (data.version >= 2) {
+      if (data.manualOrder) STATE.settings.manualOrder = true;   // sortCities keeps the link's order
       data.cities.forEach(loadCityFromCompact);   // new compact format
     } else {
       data.cities.forEach(d => addCityFromData(d)); // old v1 — cities only, settings ignored
@@ -1017,12 +1018,16 @@ function saveState() {
   // sky_settings cookie removed — settings now live in localStorage
 }
 
-function loadState() {
+function loadConsent() {
   // Read consent from cookie with localStorage fallback (file:// protocol doesn't support cookies)
   const cookieVal = getCookie('sky_consent');
   const lsVal = (() => { try { return localStorage.getItem('sky_consent'); } catch(_) { return null; } })();
   const raw = cookieVal !== null ? cookieVal : lsVal;
   STATE.cookieConsent = raw === '1' ? true : raw === '0' ? false : null;
+}
+
+function loadState() {
+  loadConsent();
 
   if (STATE.cookieConsent) {
     try {
@@ -2421,7 +2426,7 @@ function downloadBlackoutCalendar(planet) {
 
   lines.push('END:VCALENDAR');
 
-  const ics  = lines.join('\r\n');
+  const ics  = _icsFold(lines);
   const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
@@ -2493,7 +2498,7 @@ function openLtxMeeting(startMs, delayMin, cities) {
 function _makeMeetingLtxLines(startDate, durationMin, cities) {
   if (!cities || !cities.length) return [];
   const hasPlanet = cities.some(c => c.type === 'planet');
-  const mode = hasPlanet ? 'RELAY' : 'LIVE';
+  const mode = hasPlanet ? 'LTX-RELAY' : 'LTX-LIVE';   // spec mode strings (section 3.6)
   // Deterministic plan ID
   const dateStr = startDate.toISOString().slice(0, 10).replace(/-/g, '');
   const hostId  = (cities[0].customName || cities[0].city || cities[0].planet || 'HOST')
@@ -2510,21 +2515,41 @@ function _makeMeetingLtxLines(startDate, durationMin, cities) {
     `LTX-PLANID:${planId}`,
     'LTX-QUANTUM:PT15M',
     `LTX-MODE:${mode}`,
-    'LTX-SEGMENT-TEMPLATE:A-W-R',
+    'LTX-SEGMENT-TEMPLATE:TX,RX',
   ];
   cities.forEach((c, i) => {
-    const nodeId = (c.customName || c.city || c.planet || 'NODE').replace(/\s+/g, '-').toUpperCase();
-    lines.push(`LTX-NODE:ID=${nodeId};ROLE=${i === 0 ? 'HOST' : 'NODE'}`);
+    const nodeId = _icsText((c.customName || c.city || c.planet || 'NODE').replace(/\s+/g, '-').toUpperCase());
+    lines.push(`LTX-NODE:ID=${nodeId};ROLE=${i === 0 ? 'HOST' : 'PARTICIPANT'}`);
     if (c.type === 'planet') {
-      const oneWaySec = PlanetTime.lightTravelSeconds('earth', c.planet);
-      const assumed   = (oneWaySec / 60).toFixed(1);
-      const max       = (oneWaySec / 60 + 2).toFixed(1);
-      lines.push(`LTX-DELAY;NODEID=${nodeId}:ONEWAY-MIN=${assumed};ONEWAY-MAX=${max};ONEWAY-ASSUMED=${assumed}`);
+      // Delays are integer seconds (RFC5545-EXTENSION.md 5.4), at the meeting time.
+      const planetKey = PlanetTime.PLANETS[c.planet] ? c.planet : 'earth';
+      const oneWaySec = Math.round(PlanetTime.lightTravelSeconds('earth', planetKey, startDate));
+      lines.push(`LTX-DELAY;NODEID=${nodeId}:ONEWAY-MIN=${oneWaySec};ONEWAY-MAX=${oneWaySec + 120};ONEWAY-ASSUMED=${oneWaySec}`);
     }
   });
   return lines;
 }
 
+/** RFC 5545 section 3.3.11 TEXT escaping: backslash, semicolon, comma, newline. */
+function _icsText(str) {
+  return String(str).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+}
+
+/** Fold content lines at 75 octets (RFC 5545 section 3.1), never inside a UTF-8 character. */
+function _icsFold(lines) {
+  const enc = new TextEncoder();
+  return lines.map(line => {
+    let out = '', cur = '', curLen = 0, limit = 75;
+    for (const ch of line) {
+      const n = enc.encode(ch).length;
+      if (curLen + n > limit) { out += cur + '\r\n '; cur = ''; curLen = 0; limit = 74; }
+      cur += ch; curLen += n;
+    }
+    return out + cur;
+  }).join('\r\n') + '\r\n';
+}
+
+/** description: plain text (real newlines); both title and description are TEXT-escaped here. */
 function generateICS(startDate, durationMinutes, title, description, ltxLines) {
   const pad = n => String(n).padStart(2, '0');
   const fmt = d =>
@@ -2532,8 +2557,8 @@ function generateICS(startDate, durationMinutes, title, description, ltxLines) {
     `T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}00Z`;
   const endDate     = new Date(startDate.getTime() + durationMinutes * 60000);
   const uid         = `${startDate.getTime()}-ip@interplanet.live`;
-  const safeDesc    = (description || '').replace(/\n/g, '\\n').replace(/,/g, '\\,');
-  const safeSummary = (title || '').replace(/,/g, '\\,');
+  const safeDesc    = _icsText(description || '');
+  const safeSummary = _icsText(title || '');
   const lines = [
     'BEGIN:VCALENDAR', 'VERSION:2.0',
     'PRODID:-//InterPlanet//LTX v1.1//EN',
@@ -2548,7 +2573,7 @@ function generateICS(startDate, durationMinutes, title, description, ltxLines) {
   ];
   if (ltxLines && ltxLines.length) lines.push(...ltxLines);
   lines.push('END:VEVENT', 'END:VCALENDAR');
-  return lines.join('\r\n');
+  return _icsFold(lines);
 }
 
 function downloadICS(startDate, durationMinutes, cities) {
@@ -2557,12 +2582,12 @@ function downloadICS(startDate, durationMinutes, cities) {
   const title     = `Meeting — ${cityNames}`;
   const planets   = list.filter(c => c.type === 'planet');
   const delayNote = planets.length
-    ? '\\nSignal delays: ' + planets.map(c => {
-        const s = PlanetTime.lightTravelSeconds('earth', c.planet);
+    ? '\nSignal delays: ' + planets.map(c => {
+        const s = PlanetTime.lightTravelSeconds('earth', PlanetTime.PLANETS[c.planet] ? c.planet : 'earth', startDate);
         return (c.customName || c.planet) + ' ' + Math.round(s / 60) + ' min one-way';
       }).join(', ')
     : '';
-  const desc  = `InterPlanet scheduled meeting across: ${cityNames}.${delayNote}\\nScheduled via interplanet.live`;
+  const desc  = `InterPlanet scheduled meeting across: ${cityNames}.${delayNote}\nScheduled via interplanet.live`;
   const ltxLines = _makeMeetingLtxLines(startDate, durationMinutes, list);
   const ics   = generateICS(startDate, durationMinutes, title, desc, ltxLines);
   const blob  = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
@@ -2587,8 +2612,8 @@ function downloadRecurringICS(dates, durMin, cities) {
 
   const cityNames = (cities || STATE.cities).map(c => c.customName || c.city || c.planet).join(', ');
   const title     = `Meeting — ${cityNames}`;
-  const safeTitle = title.replace(/,/g, '\\,');
-  const safeDesc  = `Recurring InterPlanet meeting: ${cityNames}\\nScheduled via interplanet.live`.replace(/\n/g, '\\n');
+  const safeTitle = _icsText(title);
+  const safeDesc  = _icsText(`Recurring InterPlanet meeting: ${cityNames}\nScheduled via interplanet.live`);
   const durationMs = (durMin || 60) * 60000;
 
   const lines = [
@@ -2615,7 +2640,7 @@ function downloadRecurringICS(dates, durMin, cities) {
 
   lines.push('END:VCALENDAR');
 
-  const ics  = lines.join('\r\n');
+  const ics  = _icsFold(lines);
   const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
@@ -3491,8 +3516,13 @@ function renderSearchResults(q) {
   });
 
   // ── Natural satellites (Moon + custom) — with accordion zone picker ─────────
+  // Match the body name or any of its zones (a zone-only query such as
+  // "Arabia" must still list the body with the matching zones).
+  const _zoneHit = (zones) => !!zones && zones.some(z =>
+    z.id.toLowerCase().includes(q) || z.name.toLowerCase().includes(q));
   const localEntries = Object.entries(LOCAL_PLANETS).filter(([k,p]) =>
-    !q || p.name.toLowerCase().includes(q) || k.includes(q)
+    !q || p.name.toLowerCase().includes(q) || k.includes(q) ||
+    _zoneHit(PlanetTime.PLANET_ZONES[k] || p.zones)
   );
   if (localEntries.length) {
     html += `<div class="sr-section-header" role="presentation">${t('search.satellites_header')}</div>`;
@@ -3533,7 +3563,8 @@ function renderSearchResults(q) {
 
   // ── Planets with accordion zone picker ───────────────────────────────────
   const planets = Object.entries(PlanetTime.PLANETS).filter(([k,p]) =>
-    !q || p.name.toLowerCase().includes(q) || k.includes(q)
+    !q || p.name.toLowerCase().includes(q) || k.includes(q) ||
+    _zoneHit(k === 'mars' ? PlanetTime.MARS_ZONES : PlanetTime.PLANET_ZONES[k])
   );
   if (planets.length) {
     html += `<div class="sr-section-header" role="presentation">${t('search.planets_header')}</div>`;
@@ -5833,6 +5864,9 @@ function init() {
   loadSettings();
   loadLocation();   // restore cached user location (no prompt needed)
   // Load from URL hash first; fall back to cookie state
+  // Consent is read even for #c= links, so the cookie bar does not return
+  // for a visitor who already answered it.
+  loadConsent();
   const _loadedFromHash = loadFromHash();
   if (!_loadedFromHash) loadState();
   if (window.I18N) { window.I18N.applyTranslations(); buildLangSelector(); }

@@ -223,11 +223,17 @@
 </main>
 
 <script>
-  // Inherit light mode from the main app
-  try {
-    const s = JSON.parse(localStorage.getItem('sky_settings') || '{}');
-    if (s.lightMode) document.documentElement.classList.add('light-mode');
-  } catch (_) {}
+  // Inherit the main app's theme (sky_settings.theme: light, dark or system)
+  (function () {
+    try {
+      const s = JSON.parse(localStorage.getItem('sky_settings') || '{}');
+      const th = s.theme || 'system';
+      if (th === 'light' || (th === 'system' && window.matchMedia &&
+          window.matchMedia('(prefers-color-scheme: light)').matches)) {
+        document.documentElement.classList.add('light-mode');
+      }
+    } catch (_) {}
+  })();
 </script>
 </body>
 </html>

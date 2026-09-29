@@ -45,7 +45,8 @@ const AU_KM        = 149597870.7;
 const AU_SECONDS   = 499.004785;
 const PLANET_KEYS  = ['mercury','venus','earth','mars','jupiter','saturn','uranus','neptune','moon'];
 
-function toPlanetKey(string $name): ?string {
+function toPlanetKey(mixed $name): ?string {
+    if (!is_string($name)) return null;
     $lower = strtolower(trim($name));
     return in_array($lower, PLANET_KEYS, true) ? $lower : null;
 }
@@ -200,13 +201,15 @@ function handleGetLightTravel($id, array $p): void {
 
 function handleGetMTC($id, array $p): void {
     if (!isset($p['utc_ms'])) { toolError($id, 'utc_ms is required'); return; }
-    $mtc = InterplanetTime::getMTC((int)$p['utc_ms']);
+    // MTC is Mars time at offset 0 in Mars hours (sol / 24), as planet-time.js
+    // getMTC; derived from getPlanetTime('mars') so it matches get_planet_time.
+    $pt = InterplanetTime::getPlanetTime('mars', (int)$p['utc_ms'], 0.0);
     toolResult($id, [
-        'sol'      => $mtc->sol,
-        'hour'     => $mtc->hour,
-        'minute'   => $mtc->minute,
-        'second'   => $mtc->second,
-        'time_str' => $mtc->mtcStr,
+        'sol'      => $pt->dayNumber,
+        'hour'     => $pt->hour,
+        'minute'   => $pt->minute,
+        'second'   => $pt->second,
+        'time_str' => sprintf('%02d:%02d', $pt->hour, $pt->minute),
     ]);
 }
 
@@ -229,7 +232,7 @@ function handleFindMeetingWindows($id, array $p): void {
     if (!$keyA) { toolError($id, 'Unknown planet_a: ' . ($p['planet_a'] ?? '')); return; }
     if (!$keyB) { toolError($id, 'Unknown planet_b: ' . ($p['planet_b'] ?? '')); return; }
     if (!isset($p['from_ms'])) { toolError($id, 'from_ms is required'); return; }
-    $days = isset($p['days']) ? max(1, (int)$p['days']) : 7;
+    $days = isset($p['days']) ? min(90, max(1, (int)$p['days'])) : 7;
     $wins = InterplanetTime::findMeetingWindows($keyA, $keyB, (int)$p['from_ms'], $days);
     $result = array_map(fn($w) => [
         'start_ms'         => $w->startMs,
@@ -269,9 +272,18 @@ if (json_last_error() !== JSON_ERROR_NONE) {
     jsonErr(null, -32700, 'Parse error: ' . json_last_error_msg());
 }
 
+if (!is_array($req) || array_is_list($req) && $req !== []) {
+    jsonErr(null, -32600, 'Invalid Request');
+}
 $id     = $req['id']     ?? null;
-$method = $req['method'] ?? '';
-$params = $req['params'] ?? [];
+$method = is_string($req['method'] ?? null) ? $req['method'] : '';
+$params = is_array($req['params'] ?? null) ? $req['params'] : [];
+
+// Notifications (no id) never get a response body (JSON-RPC 2.0 section 4.1).
+if (!array_key_exists('id', $req)) {
+    http_response_code(202);
+    exit;
+}
 
 switch ($method) {
     case 'initialize':
@@ -286,9 +298,9 @@ switch ($method) {
         ]);
         break;
 
-    case 'notifications/initialized':
-        http_response_code(204);
-        exit;
+    case 'ping':
+        jsonOut(['jsonrpc' => '2.0', 'id' => $id, 'result' => new stdClass()]);
+        break;
 
     case 'tools/list':
         jsonOut(['jsonrpc' => '2.0', 'id' => $id, 'result' => ['tools' => TOOLS]]);
@@ -296,7 +308,7 @@ switch ($method) {
 
     case 'tools/call':
         $toolName   = $params['name']      ?? '';
-        $toolParams = $params['arguments'] ?? [];
+        $toolParams = is_array($params['arguments'] ?? null) ? $params['arguments'] : [];
         switch ($toolName) {
             case 'get_planet_time':      handleGetPlanetTime($id, $toolParams);      break;
             case 'get_light_travel':     handleGetLightTravel($id, $toolParams);     break;

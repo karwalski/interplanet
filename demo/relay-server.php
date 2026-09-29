@@ -135,9 +135,22 @@ function handleRegisterSession(): void {
     $delayS       = isset($participants[0]['delay']) ? (float)$participants[0]['delay'] : 0;
     $delay_ms     = (int)round($delayS * 1000);
 
-    $tls_fingerprint = (isset($body['relay']['tls_fingerprint']) && $body['relay']['tls_fingerprint'])
-        ? $body['relay']['tls_fingerprint']
-        : bin2hex(random_bytes(16));
+    $bodyFp = $body['relay']['tls_fingerprint'] ?? null;
+    $bodyFp = (is_scalar($bodyFp) && (string)$bodyFp !== '') ? (string)$bodyFp : null;
+
+    // Re-registering a live session must not hand it to a new token: only the
+    // holder of its token (Bearer, or the same relay.tls_fingerprint) may.
+    $st = $db->prepare('SELECT tls_fingerprint FROM relay_sessions WHERE session_id = :id');
+    $st->bindValue(':id', $sessionId);
+    $existing = $st->execute()->fetchArray(SQLITE3_ASSOC);
+    if ($existing) {
+        $token = extractBearer();
+        $owner = ($token !== null && safeEqual($token, $existing['tls_fingerprint']))
+              || ($bodyFp !== null && safeEqual($bodyFp, $existing['tls_fingerprint']));
+        if (!$owner) sendJSON(409, ['error' => 'Session already registered', 'sessionId' => $sessionId, 'planId' => $sessionId]);
+    }
+    // The owner re-registering keeps its token unless the plan names one.
+    $tls_fingerprint = $bodyFp ?? ($existing ? $existing['tls_fingerprint'] : bin2hex(random_bytes(16)));
 
     $stmt = $db->prepare('
         INSERT OR REPLACE INTO relay_sessions (session_id, nodes, delay_ms, tls_fingerprint, created_at, plan)
@@ -157,8 +170,12 @@ function handleRegisterSession(): void {
 function handleDeleteSession(string $sessionId): void {
     global $db;
     $sid = SQLite3::escapeString($sessionId);
-    $row = $db->querySingle("SELECT session_id FROM relay_sessions WHERE session_id = '$sid'");
+    $row = $db->querySingle("SELECT tls_fingerprint FROM relay_sessions WHERE session_id = '$sid'");
     if (!$row) sendJSON(404, ['error' => 'Session not found']);
+    $token = extractBearer();
+    if (!$token || !safeEqual($token, $row)) {
+        sendJSON(401, ['error' => 'Invalid or missing Authorization token']);
+    }
     $db->exec("DELETE FROM relay_sessions WHERE session_id = '$sid'");
     $db->exec("DELETE FROM relay_frames WHERE session_id = '$sid'");
     sendJSON(200, ['deleted' => true, 'sessionId' => $sessionId]);
@@ -177,8 +194,8 @@ function handleSend(string $sessionId): void {
     $body = readBody();
     if (!$body) sendJSON(400, ['error' => 'Invalid JSON body']);
 
-    $nodeId       = $body['nodeId']       ?? null;
-    $targetNodeId = $body['targetNodeId'] ?? null;
+    $nodeId       = is_string($body['nodeId'] ?? null) ? $body['nodeId'] : null;
+    $targetNodeId = is_string($body['targetNodeId'] ?? null) ? $body['targetNodeId'] : null;
     $data         = $body['data']         ?? null;
     $timestamp_ms = isset($body['timestamp_ms']) ? (int)$body['timestamp_ms'] : (int)(microtime(true) * 1000);
 
@@ -217,7 +234,7 @@ function handleReceive(string $sessionId): void {
         sendJSON(401, ['error' => 'Invalid or missing Authorization token']);
     }
 
-    $nodeId = $_GET['node'] ?? null;
+    $nodeId = is_string($_GET['node'] ?? null) ? $_GET['node'] : null;
     if (!$nodeId) sendJSON(400, ['error' => 'node query param required']);
 
     $nodes   = json_decode($row['nodes'], true);

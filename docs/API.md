@@ -73,7 +73,7 @@ Conversion between these epochs is not provided by this library but MAY be added
    - [lightTravelSeconds](#lighttravelseconds)
    - [formatLightTime](#formatlighttime)
    - [checkLineOfSight](#checklineofsight)
-   - [lowerQuartileLightTime](#lowerquartilighttime)
+   - [lowerQuartileLightTime](#lowerquartilelighttime)
    - [nextFavourableLightTime](#nextfavourablelighttime)
 6. [Meeting Windows](#meeting-windows)
    - [findMeetingWindows](#findmeetingwindows)

@@ -346,6 +346,17 @@
 
 <script>
 'use strict';
+// Inherit the main app's theme (sky_settings.theme: light, dark or system)
+(function () {
+  try {
+    const s = JSON.parse(localStorage.getItem('sky_settings') || '{}');
+    const th = s.theme || 'system';
+    if (th === 'light' || (th === 'system' && window.matchMedia &&
+        window.matchMedia('(prefers-color-scheme: light)').matches)) {
+      document.documentElement.classList.add('light-mode');
+    }
+  } catch (_) {}
+})();
 
 // ── Planet keys (from planet-time.js PLANETS object) ─────────────────────────
 var PT = window.PlanetTime;

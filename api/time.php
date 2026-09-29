@@ -36,7 +36,14 @@ function jsonError(string $msg, int $code = 400): never {
     exit;
 }
 
-function parseAt(?string $s): float {
+/** A query-string parameter as a string ('' when absent or not a scalar, e.g. body[]=x). */
+function qs(string $key): string {
+    $v = $_GET[$key] ?? '';
+    return is_scalar($v) ? trim((string)$v) : '';
+}
+
+function parseAt(mixed $s): float {
+    if ($s !== null && !is_string($s)) jsonError("Invalid 'at' timestamp");
     if (!$s) return (float)time();
     try {
         $dt = new DateTimeImmutable($s, new DateTimeZone('UTC'));
@@ -63,7 +70,7 @@ const C_KMS        = 299792.458;    // km/s (SI exact)
 const AU_SECONDS   = 499.004784;    // AU_KM / C_KMS
 const EARTH_DAY_S  = 86400.0;       // seconds in an Earth day
 const TAI_UTC_2026 = 37;            // current TAI−UTC offset (seconds, since 2017-01-01)
-const MARS_EPOCH   = -524559361.536;// Unix s: 1953-05-24 09:03:58.464 UTC (MY0)
+const MARS_EPOCH   = -524069761.536;// Unix s: 1953-05-24 09:03:58.464 UTC (MY0), planet-time.js MARS_EPOCH_MS
 const MARS_SOL_S   = 88775.244;     // seconds per Mars sol
 
 // Orbital elements — Meeus Table 31.a (J2000.0 epoch)
@@ -96,7 +103,7 @@ const PLANETS = [
                   'dPP'=>1,'pPW'=>7,'wPPW'=>5,'wStart'=>9,'wEnd'=>17,'epoch'=>MARS_EPOCH],
     'jupiter' => ['name'=>'Jupiter','solarDay'=>9.9250*3600,'siderealYr'=>4332.589*EARTH_DAY_S,
                   'dPP'=>2.5,'pPW'=>7,'wPPW'=>5,'wStart'=>8,'wEnd'=>16,'epoch'=>J2000_UNIX],
-    'saturn'  => ['name'=>'Saturn', 'solarDay'=>10.5606*3600,'siderealYr'=>10759.22*EARTH_DAY_S,
+    'saturn'  => ['name'=>'Saturn', 'solarDay'=>38080.8,     'siderealYr'=>10759.22*EARTH_DAY_S,
                   'dPP'=>2.25,'pPW'=>7,'wPPW'=>5,'wStart'=>8,'wEnd'=>16,'epoch'=>J2000_UNIX],
     'uranus'  => ['name'=>'Uranus', 'solarDay'=>17.2479*3600,'siderealYr'=>30688.5*EARTH_DAY_S,
                   'dPP'=>1,'pPW'=>7,'wPPW'=>5,'wStart'=>8,'wEnd'=>16,'epoch'=>J2000_UNIX],
@@ -166,16 +173,27 @@ function lightTravelS(string $from, string $to, float $unixS): float {
     return bodyDistanceAU($from, $to, $unixS) * AU_SECONDS;
 }
 
-/** Conjunction countdown: days until Earth-body distance is maximised (superior conjunction proxy). */
+/**
+ * Conjunction countdown: days until the Earth-body distance next peaks
+ * (superior conjunction proxy), scanning 6-hour steps up to 800 days (longer
+ * than the longest synodic period of the inner-planet pairs, Mars 780 d).
+ * Returns 800.0 when no peak is found (outer planets near a flat maximum).
+ */
 function conjunctionInDays(string $body, float $unixS): float {
-    $step  = 6.0 * 3600.0;
-    $cur   = bodyDistanceAU('earth', $body, $unixS);
-    for ($d = 1; $d <= 365; $d++) {
-        $dist = bodyDistanceAU('earth', $body, $unixS + $d * $step);
-        if ($dist < $cur) return $d * $step / EARTH_DAY_S;
-        $cur = $dist;
+    if ($body === 'earth' || $body === 'moon') return 0.0;
+    $step   = 6.0 * 3600.0;
+    $prev   = bodyDistanceAU('earth', $body, $unixS);
+    $rising = false;
+    for ($i = 1; $i <= 3200; $i++) {
+        $dist = bodyDistanceAU('earth', $body, $unixS + $i * $step);
+        if ($dist > $prev) {
+            $rising = true;
+        } elseif ($rising && $dist < $prev) {
+            return ($i - 1) * $step / EARTH_DAY_S;
+        }
+        $prev = $dist;
     }
-    return 365.0;
+    return 800.0;
 }
 
 // ── Mars time ─────────────────────────────────────────────────────────────────
@@ -191,18 +209,20 @@ function getMTC(float $unixS): array {
             'timeString' => sprintf('%02d:%02d', $h, $m)];
 }
 
+/** Mars local time at a zone offset in Mars hours (planet-time.js getPlanetTime('mars', d, tz)). */
 function getMarsLocalTime(float $unixS, float $tzOffsetHours): array {
-    $mtc = getMTC($unixS);
-    $h   = $mtc['hour'] + $tzOffsetHours;
-    $solDelta = 0;
-    if ($h >= 24) { $h -= 24; $solDelta =  1; }
-    if ($h <   0) { $h += 24; $solDelta = -1; }
+    $totalSols = ($unixS - MARS_EPOCH) / MARS_SOL_S + $tzOffsetHours / 24.0;
+    $sol  = (int)floor($totalSols);
+    $frac = $totalSols - $sol;
+    $h = (int)floor($frac * 24);
+    $m = (int)floor(($frac * 24 - $h) * 60);
+    $s = (int)floor((($frac * 24 - $h) * 60 - $m) * 60);
     return [
-        'sol'        => $mtc['sol'] + $solDelta,
-        'hour'       => (int)floor($h),
-        'minute'     => $mtc['minute'],
-        'second'     => $mtc['second'],
-        'timeString' => sprintf('%02d:%02d', (int)floor($h), $mtc['minute']),
+        'sol'        => $sol,
+        'hour'       => $h,
+        'minute'     => $m,
+        'second'     => $s,
+        'timeString' => sprintf('%02d:%02d', $h, $m),
         'tzOffset'   => $tzOffsetHours,
     ];
 }
@@ -335,15 +355,11 @@ function makeWindow(float $startS, float $endS, array $locations): array {
 // ── Route handlers ────────────────────────────────────────────────────────────
 
 function handlePlanet(): void {
-    $body     = strtolower(trim($_GET['body'] ?? ''));
-    $tzOffset = (float)($_GET['tz_offset'] ?? 0);
-    $atS      = parseAt($_GET['at'] ?? null);
+    $body     = strtolower(qs('body'));
+    $tzOffset = (float)qs('tz_offset');
+    $atS      = parseAt(qs('at') ?: null);
 
     if (!$body) jsonError("'body' parameter required");
-
-    if (($PLANETS[$body] ?? null) && ($body === 'earth' || !isset(ORBITAL_ELEMENTS[$body === 'moon' ? 'earth' : $body]))) {
-        // planet without orbital elements (shouldn't happen with current set)
-    }
 
     // Validate body
     if (!isset(PLANETS[$body])) jsonError("Unknown body: $body. Valid: " . implode(', ', array_keys(PLANETS)));
@@ -386,9 +402,9 @@ function handlePlanet(): void {
 }
 
 function handleDistance(): void {
-    $from = strtolower(trim($_GET['from'] ?? ''));
-    $to   = strtolower(trim($_GET['to']   ?? ''));
-    $atS  = parseAt($_GET['at'] ?? null);
+    $from = strtolower(qs('from'));
+    $to   = strtolower(qs('to'));
+    $atS  = parseAt(qs('at') ?: null);
 
     if (!$from || !$to) jsonError("'from' and 'to' parameters required");
 
@@ -420,6 +436,18 @@ function handleWindows(): void {
     if (!is_array($locations) || count($locations) < 1) jsonError("'locations' array required with at least 1 entry");
     if ($horizonDays < 1 || $horizonDays > 90)          jsonError("'horizon_days' must be 1–90");
     if ($minDurMin < 5 || $minDurMin > 480)             jsonError("'min_duration_minutes' must be 5–480");
+    foreach ($locations as $i => $loc) {
+        if (!is_array($loc)) jsonError("locations[$i] must be an object");
+        if (($loc['type'] ?? 'earth') === 'planet') {
+            $pl = $loc['planet'] ?? 'mars';
+            if (!is_string($pl) || !isset(PLANETS[$pl])) jsonError("locations[$i]: unknown planet");
+        } else {
+            $tz = $loc['tz'] ?? 'UTC';
+            if (!is_string($tz) || !in_array($tz, DateTimeZone::listIdentifiers(DateTimeZone::ALL_WITH_BC), true) && $tz !== 'UTC') {
+                jsonError("locations[$i]: unknown tz");
+            }
+        }
+    }
 
     $fromS   = parseAt($fromUtc);
     $windows = findMeetingWindows($locations, $fromS, $horizonDays, $minDurMin);
@@ -436,7 +464,7 @@ function handleWindows(): void {
 
 // ── Router ────────────────────────────────────────────────────────────────────
 
-$action = strtolower(trim($_GET['action'] ?? ''));
+$action = strtolower(qs('action'));
 match ($action) {
     'planet'   => handlePlanet(),
     'distance' => handleDistance(),
