@@ -984,7 +984,12 @@ function renderShareQR(cfg) {
 // ── i18n helper ──────────────────────────────────────────────────────────────
 
 function getT(key, vars) {
-  if (window.I18N) return window.I18N.t(key, vars);
+  if (window.I18N) {
+    const tr = window.I18N.t(key, vars);
+    if (tr !== key) return tr;
+    // Key not in i18n.js (e.g. the conference and async banners): use the
+    // inline English below instead of showing the raw key.
+  }
   // Minimal inline English fallback (if i18n.js somehow unavailable)
   const FB = {
     'ltx.banner.plan_confirm':   'PLAN VERIFICATION',

@@ -57,6 +57,8 @@
       'search.modal_aria': 'Search cities and planets',
       'search.results_aria': 'Search results',
       'search.no_results': 'No results',
+      'search.adv_city_placeholder': 'Type city name…',
+      'settings.demo_video': 'Watch Demo',
       'search.satellites_header': 'Natural Satellites & Custom Bodies',
       'search.planets_header': 'Planets',
       'search.add': 'Add',
