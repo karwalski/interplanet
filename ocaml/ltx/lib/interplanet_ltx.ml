@@ -91,16 +91,45 @@ let b64decode (s : string) : string =
 
 (* ── JSON serialiser ─────────────────────────────────────────────────────── *)
 
+(* JSON.stringify string escaping: quote, backslash, b t n f r, other C0 controls
+   as lowercase \u00xx, everything else (DEL, U+2028, U+2029) raw. A lone
+   UTF-16 surrogate, which a UTF-8 string can only hold as WTF-8 (bytes
+   ED A0..BF 80..BF), is written as \udxxx as JSON.stringify writes it; a
+   CESU-8 surrogate pair becomes the UTF-8 of its code point. *)
 let json_escape s =
-  let buf = Buffer.create (String.length s + 4) in
-  String.iter (fun c -> match c with
-    | '"'  -> Buffer.add_string buf "\\\""
-    | '\\' -> Buffer.add_string buf "\\\\"
-    | '\n' -> Buffer.add_string buf "\\n"
-    | '\r' -> Buffer.add_string buf "\\r"
-    | '\t' -> Buffer.add_string buf "\\t"
-    | c    -> Buffer.add_char   buf c
-  ) s;
+  let n = String.length s in
+  let buf = Buffer.create (n + 4) in
+  let byte i = if i < n then Char.code s.[i] else 0 in
+  let surrogate i =
+    if byte i = 0xED && byte (i + 1) land 0xE0 = 0xA0 && byte (i + 2) land 0xC0 = 0x80
+    then Some (0xD000 lor ((byte (i + 1) land 0x3F) lsl 6) lor (byte (i + 2) land 0x3F))
+    else None
+  in
+  let i = ref 0 in
+  while !i < n do
+    (match surrogate !i with
+     | Some hi ->
+       (match surrogate (!i + 3) with
+        | Some lo when hi < 0xDC00 && lo >= 0xDC00 ->
+          Buffer.add_utf_8_uchar buf
+            (Uchar.of_int (0x10000 + ((hi - 0xD800) lsl 10) + (lo - 0xDC00)));
+          i := !i + 6
+        | _ ->
+          Buffer.add_string buf (Printf.sprintf "\\u%04x" hi);
+          i := !i + 3)
+     | None ->
+       (match s.[!i] with
+        | '"'  -> Buffer.add_string buf "\\\""
+        | '\\' -> Buffer.add_string buf "\\\\"
+        | '\b' -> Buffer.add_string buf "\\b"
+        | '\012' -> Buffer.add_string buf "\\f"
+        | '\n' -> Buffer.add_string buf "\\n"
+        | '\r' -> Buffer.add_string buf "\\r"
+        | '\t' -> Buffer.add_string buf "\\t"
+        | c when Char.code c < 0x20 -> Buffer.add_string buf (Printf.sprintf "\\u%04x" (Char.code c))
+        | c -> Buffer.add_char buf c);
+       incr i)
+  done;
   Buffer.contents buf
 
 let json_string s = "\"" ^ json_escape s ^ "\""
@@ -112,8 +141,14 @@ let plan_to_json (plan : ltx_plan) : string =
       (json_string n.id) (json_string n.name) (json_string n.role)
       n.delay (json_string n.location)
   in
+  (* {type, q, speaker?, label?}: ltx-sdk.js key order, absent fields omitted *)
   let seg_to_json (s : Models.ltx_segment_template) =
-    Printf.sprintf "{\"type\":%s,\"q\":%d}" (json_string s.seg_type) s.q
+    let opt key = function
+      | Some v -> Printf.sprintf ",\"%s\":%s" key (json_string v)
+      | None -> ""
+    in
+    Printf.sprintf "{\"type\":%s,\"q\":%d%s%s}" (json_string s.seg_type) s.q
+      (opt "speaker" s.speaker) (opt "label" s.label)
   in
   let nodes_json = "[" ^ String.concat "," (List.map node_to_json plan.nodes) ^ "]" in
   let segs_json  = "[" ^ String.concat "," (List.map seg_to_json  plan.segments) ^ "]" in
@@ -124,30 +159,60 @@ let plan_to_json (plan : ltx_plan) : string =
 
 (* ── Minimal JSON parser ─────────────────────────────────────────────────── *)
 
-let find_string json key =
+(* The decoded string value of the first key/string member in json, if any.
+   Escapes are decoded as JSON.parse does; a lone \uD8xx surrogate is kept
+   as WTF-8 so that json_escape writes it back unchanged. *)
+let find_string_opt json key =
   let pattern = "\"" ^ key ^ "\":\"" in
   let plen = String.length pattern in
   let jlen = String.length json in
-  let result = ref "" in
-  let i = ref 0 in
-  while !i <= jlen - plen do
-    if String.sub json !i plen = pattern then begin
-      let j   = ref (!i + plen) in
+  let hex4 j =
+    if j + 4 > jlen then None
+    else int_of_string_opt ("0x" ^ String.sub json j 4)
+  in
+  let rec search i =
+    if i > jlen - plen then None
+    else if String.sub json i plen = pattern then begin
       let buf = Buffer.create 16 in
+      let add_cp cp =
+        if cp >= 0xD800 && cp < 0xE000 then begin
+          (* WTF-8: Buffer.add_utf_8_uchar rejects surrogates *)
+          Buffer.add_char buf (Char.chr (0xE0 lor (cp lsr 12)));
+          Buffer.add_char buf (Char.chr (0x80 lor ((cp lsr 6) land 0x3F)));
+          Buffer.add_char buf (Char.chr (0x80 lor (cp land 0x3F)))
+        end else Buffer.add_utf_8_uchar buf (Uchar.of_int cp)
+      in
+      let j = ref (i + plen) in
       let stop = ref false in
       while !j < jlen && not !stop do
         let c = json.[!j] in
-        if c = '\\' && !j + 1 < jlen then begin
-          Buffer.add_char buf json.[!j + 1]; j := !j + 2
-        end else if c = '"' then stop := true
-        else begin Buffer.add_char buf c; j := !j + 1 end
+        if c = '"' then stop := true
+        else if c = '\\' && !j + 1 < jlen then begin
+          (match json.[!j + 1] with
+           | 'b' -> Buffer.add_char buf '\b'; j := !j + 2
+           | 'f' -> Buffer.add_char buf '\012'; j := !j + 2
+           | 'n' -> Buffer.add_char buf '\n'; j := !j + 2
+           | 'r' -> Buffer.add_char buf '\r'; j := !j + 2
+           | 't' -> Buffer.add_char buf '\t'; j := !j + 2
+           | 'u' ->
+             (match hex4 (!j + 2) with
+              | Some hi when hi >= 0xD800 && hi < 0xDC00
+                             && !j + 12 <= jlen && json.[!j + 6] = '\\' && json.[!j + 7] = 'u' ->
+                (match hex4 (!j + 8) with
+                 | Some lo when lo >= 0xDC00 && lo < 0xE000 ->
+                   add_cp (0x10000 + ((hi - 0xD800) lsl 10) + (lo - 0xDC00)); j := !j + 12
+                 | _ -> add_cp hi; j := !j + 6)
+              | Some cp -> add_cp cp; j := !j + 6
+              | None -> Buffer.add_char buf 'u'; j := !j + 2)
+           | e -> Buffer.add_char buf e; j := !j + 2)
+        end else begin Buffer.add_char buf c; incr j end
       done;
-      result := Buffer.contents buf;
-      i := jlen (* stop outer loop *)
-    end else
-      i := !i + 1
-  done;
-  !result
+      Some (Buffer.contents buf)
+    end else search (i + 1)
+  in
+  search 0
+
+let find_string json key = Option.value (find_string_opt json key) ~default:""
 
 let find_int json key =
   let pattern = "\"" ^ key ^ "\":" in
@@ -180,8 +245,18 @@ let find_array json key =
       let start = !i + plen - 1 in
       let depth = ref 1 in
       let j = ref (start + 1) in
+      let in_str = ref false and esc = ref false in
       while !j < jlen && !depth > 0 do
-        (match json.[!j] with '[' -> incr depth | ']' -> decr depth | _ -> ());
+        let c = json.[!j] in
+        (if !in_str then begin
+           if !esc then esc := false
+           else if c = '\\' then esc := true
+           else if c = '"' then in_str := false
+         end else match c with
+           | '"' -> in_str := true
+           | '[' -> incr depth
+           | ']' -> decr depth
+           | _ -> ());
         j := !j + 1
       done;
       result := String.sub json start (!j - start);
@@ -199,7 +274,14 @@ let split_objects arr =
   let objs  = ref [] in
   let depth = ref 0 in
   let start = ref 0 in
-  String.iteri (fun i c -> match c with
+  let in_str = ref false and esc = ref false in
+  String.iteri (fun i c ->
+    if !in_str then begin
+      if !esc then esc := false
+      else if c = '\\' then esc := true
+      else if c = '"' then in_str := false
+    end else match c with
+    | '"' -> in_str := true
     | '{' -> if !depth = 0 then start := i; incr depth
     | '}' -> decr depth;
              if !depth = 0 then
@@ -216,7 +298,9 @@ let plan_of_json json =
       ; role = find_string j "role"; delay = find_int j "delay"
       ; location = find_string j "location" }
     in
-    let parse_seg j : Models.ltx_segment_template = { seg_type = find_string j "type"; q = find_int j "q" } in
+    let parse_seg j : Models.ltx_segment_template =
+      { seg_type = find_string j "type"; q = find_int j "q"
+      ; speaker = find_string_opt j "speaker"; label = find_string_opt j "label" } in
     let nodes = List.map parse_node (split_objects (find_array json "nodes")) in
     let segs  = List.map parse_seg  (split_objects (find_array json "segments")) in
     let q     = find_int json "quantum" in
@@ -283,7 +367,7 @@ let create_plan
   ] in
   let segs = if segments <> [] then segments
              else List.map (fun (s : Constants.segment_template) ->
-               { Models.seg_type = s.seg_type; q = s.q }) Constants.default_segments in
+               Models.segment s.seg_type s.q) Constants.default_segments in
   { v = 2; title; start = start_str; quantum; mode; nodes = nodes'; segments = segs }
 
 (* ── ISO 8601 ────────────────────────────────────────────────────────────── *)
@@ -412,33 +496,67 @@ let djb_hash s =
   done;
   Int32.of_int !h
 
+(* ECMAScript \s: WhiteSpace and LineTerminator code points *)
+let is_js_space cp =
+  cp = 0x20 || (cp >= 0x09 && cp <= 0x0D) || cp = 0xA0 || cp = 0x1680
+  || (cp >= 0x2000 && cp <= 0x200A) || cp = 0x2028 || cp = 0x2029
+  || cp = 0x202F || cp = 0x205F || cp = 0x3000 || cp = 0xFEFF
+
+(* Fold over the UTF-8 code points of s: f acc cp byte_offset byte_length *)
+let fold_utf8 f acc s =
+  let n = String.length s in
+  let rec go acc i =
+    if i >= n then acc
+    else
+      let d = String.get_utf_8_uchar s i in
+      let len = Uchar.utf_decode_length d in
+      let cp = Uchar.to_int (Uchar.utf_decode_uchar d) in
+      go (f acc cp i len) (i + len)
+  in
+  go acc 0
+
+(* name.replace(/\s+/g, '').toUpperCase() with ASCII case mapping *)
+let strip_js_space name =
+  let buf = Buffer.create (String.length name) in
+  fold_utf8 (fun () cp i len ->
+    if not (is_js_space cp) then
+      Buffer.add_string buf (String.uppercase_ascii (String.sub name i len))) () name;
+  Buffer.contents buf
+
+(* s.slice(0, n) in UTF-16 code units (a pair that does not fit is dropped) *)
+let utf16_take s n =
+  let units, stop =
+    fold_utf8 (fun (units, stop) cp i _ ->
+      match stop with
+      | Some _ -> (units, stop)
+      | None ->
+        let need = if cp >= 0x10000 then 2 else 1 in
+        if units + need > n then (units, Some i) else (units + need, None)) (0, None) s
+  in
+  ignore units;
+  match stop with Some i -> String.sub s 0 i | None -> s
+
 let make_plan_id (plan : ltx_plan) : string =
   let open Models in
   let date =
     String.concat ""
       (String.split_on_char '-' (String.sub plan.start 0 (min 10 (String.length plan.start))))
   in
-  (* JS: name.replace(/\s+/g, '').toUpperCase() *)
-  let up n =
-    String.uppercase_ascii
-      (String.concat "" (List.map (String.make 1)
-         (List.filter (fun c -> not (List.mem c [' '; '\t'; '\n'; '\r'; '\012'; '\011']))
-            (List.init (String.length n) (String.get n)))))
-  in
-  let host_name = (List.hd plan.nodes).name in
+  (* JS: name.replace(/\s+/g, '').toUpperCase().slice(0, n), with JS \s,
+     ASCII case mapping and slices counted in UTF-16 code units *)
   let host_str =
-    let s = up host_name in String.sub s 0 (min 8 (String.length s))
+    match plan.nodes with
+    | h :: _ when h.name <> "" -> utf16_take (strip_js_space h.name) 8
+    | _ -> "HOST"
   in
   let node_str =
-    match List.tl plan.nodes with
-    | [] -> "RX"
-    | parts ->
+    match plan.nodes with
+    | [] | [ _ ] -> "RX"
+    | _ :: parts ->
       let joined = String.concat "-"
-        (List.map (fun (n : Models.ltx_node) ->
-          let s = up n.name in String.sub s 0 (min 4 (String.length s))
-        ) parts)
+        (List.map (fun (n : Models.ltx_node) -> utf16_take (strip_js_space n.name) 4) parts)
       in
-      String.sub joined 0 (min 16 (String.length joined))
+      utf16_take joined 16
   in
   let raw  = plan_to_json plan in
   let hash = djb_hash raw in
@@ -472,8 +590,16 @@ let build_node_urls (plan : ltx_plan) (base_url : string) : ltx_node_url list =
 
 (* ── ICS generation ──────────────────────────────────────────────────────── *)
 
+(* name.replace(/\s+/g, '-').toUpperCase() (ltx-sdk.js toId), ASCII case *)
 let to_ics_id name =
-  String.map (fun c -> if c = ' ' then '-' else Char.uppercase_ascii c) name
+  let buf = Buffer.create (String.length name) in
+  let _ = fold_utf8 (fun in_space cp i len ->
+    if is_js_space cp then begin
+      if not in_space then Buffer.add_char buf '-'; true
+    end else begin
+      Buffer.add_string buf (String.uppercase_ascii (String.sub name i len)); false
+    end) false name in
+  Buffer.contents buf
 
 let fmt_dt iso =
   let s = ref "" in

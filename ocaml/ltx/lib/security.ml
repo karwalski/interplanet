@@ -178,21 +178,46 @@ let rec canonical_json (v : json_val) : string =
               (List.map (fun (k,v2) -> json_str k ^ ":" ^ canonical_json v2) sorted)
            ^ "}"
 
+(* A lone UTF-16 surrogate can only be held in a UTF-8 string as WTF-8
+   (bytes ED A0..BF 80..BF, as parse_json keeps one); JSON.stringify writes
+   it as a lowercase \udxxx escape, and a CESU-8 pair as its code point. *)
 and json_str s =
-  let buf = Buffer.create (String.length s + 4) in
+  let n = String.length s in
+  let buf = Buffer.create (n + 4) in
+  let byte i = if i < n then Char.code s.[i] else 0 in
+  let surrogate i =
+    if byte i = 0xED && byte (i + 1) land 0xE0 = 0xA0 && byte (i + 2) land 0xC0 = 0x80
+    then Some (0xD000 lor ((byte (i + 1) land 0x3F) lsl 6) lor (byte (i + 2) land 0x3F))
+    else None
+  in
   Buffer.add_char buf '"';
-  String.iter (fun c -> match c with
-    | '"'  -> Buffer.add_string buf "\\\""
-    | '\\'  -> Buffer.add_string buf "\\\\"
-    | '\n' -> Buffer.add_string buf "\\n"
-    | '\r' -> Buffer.add_string buf "\\r"
-    | '\t' -> Buffer.add_string buf "\\t"
-    | '\b' -> Buffer.add_string buf "\\b"
-    | '\012' -> Buffer.add_string buf "\\f"
-    | c when Char.code c < 0x20 ->
-      (* RFC 8785 / JSON.stringify: other control characters as \u00xx *)
-      Buffer.add_string buf (Printf.sprintf "\\u%04x" (Char.code c))
-    | c    -> Buffer.add_char buf c) s;
+  let i = ref 0 in
+  while !i < n do
+    match surrogate !i with
+    | Some hi ->
+      (match surrogate (!i + 3) with
+       | Some lo when hi < 0xDC00 && lo >= 0xDC00 ->
+         Buffer.add_utf_8_uchar buf
+           (Uchar.of_int (0x10000 + ((hi - 0xD800) lsl 10) + (lo - 0xDC00)));
+         i := !i + 6
+       | _ ->
+         Buffer.add_string buf (Printf.sprintf "\\u%04x" hi);
+         i := !i + 3)
+    | None ->
+      (match s.[!i] with
+       | '"'  -> Buffer.add_string buf "\\\""
+       | '\\'  -> Buffer.add_string buf "\\\\"
+       | '\n' -> Buffer.add_string buf "\\n"
+       | '\r' -> Buffer.add_string buf "\\r"
+       | '\t' -> Buffer.add_string buf "\\t"
+       | '\b' -> Buffer.add_string buf "\\b"
+       | '\012' -> Buffer.add_string buf "\\f"
+       | c when Char.code c < 0x20 ->
+         (* RFC 8785 / JSON.stringify: other control characters as \u00xx *)
+         Buffer.add_string buf (Printf.sprintf "\\u%04x" (Char.code c))
+       | c    -> Buffer.add_char buf c);
+      incr i
+  done;
   Buffer.add_char buf '"';
   Buffer.contents buf
 

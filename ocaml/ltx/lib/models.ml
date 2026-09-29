@@ -8,10 +8,19 @@ type ltx_node = {
   location: string;
 }
 
+(* speaker (a node id) and label (an agenda title) are the optional
+   attribution of LTX-SPECIFICATION.md 3.4.1; None is absent and is not
+   serialised. *)
 type ltx_segment_template = {
   seg_type: string;
   q:        int;
+  speaker:  string option;
+  label:    string option;
 }
+
+(* A segment template; speaker and label default to absent. *)
+let segment ?speaker ?label seg_type q : ltx_segment_template =
+  { seg_type; q; speaker; label }
 
 type ltx_plan = {
   v:        int;
