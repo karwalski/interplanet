@@ -7,6 +7,10 @@ final class InterplanetTimeTests: XCTestCase {
 
     // MARK: - 1. Constants
 
+    func testVersion() {
+        XCTAssertEqual(InterplanetTime.version, "1.0.0")
+    }
+
     func testJ2000Ms() {
         XCTAssertEqual(InterplanetTime.j2000Ms, 946_728_000_000)
     }

@@ -6,7 +6,11 @@
 // Swift 5.9+ · Foundation + CryptoKit only.
 
 import Foundation
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto  // swift-crypto on Linux (same API as CryptoKit)
+#endif
 
 // ── Viewer-perspective segments ─────────────────────────────────────────────
 
@@ -194,7 +198,11 @@ extension InterplanetLTX {
 
     /// Create a session context in DRAFT state. `planId` is supplied by the
     /// caller (makePlanID) so this module stays pure.
-    public static func createSession(_ plan: LtxPlan, planId: String, quorum: LtxQuorum = .all) -> LtxSessionContext {
+    /// Throws LtxReservedFieldError if the plan carries reserved streams or
+    /// branching fields (§3.5, §7). The typed LtxPlan has no such fields
+    /// today, so this guards its dictionary projection against model growth.
+    public static func createSession(_ plan: LtxPlan, planId: String, quorum: LtxQuorum = .all) throws -> LtxSessionContext {
+        try assertNoReservedFields(planToDict(plan), "createSession")
         return LtxSessionContext(
             state: "DRAFT",
             plan: plan,
@@ -523,9 +531,12 @@ extension InterplanetLTX {
     /// Create a signed amendment of `signedPlan` with `changes` applied.
     /// The successor is always a v3 plan (§4.4); fields managed here
     /// ('v', 'planVersion', 'prevPlanHash') cannot be overridden.
+    /// Throws LtxReservedFieldError (code 'reserved_streams' or
+    /// 'reserved_branching') if the successor would carry reserved fields
+    /// (§3.5, §7). Returns nil if the key cannot sign.
     public static func createAmendment(_ signedPlan: LtxSignedPlan,
                                        changes: [String: Any],
-                                       privateKeyB64: String) -> LtxSignedPlan? {
+                                       privateKeyB64: String) throws -> LtxSignedPlan? {
         let prev = signedPlan.plan
         let prevVersion = prev["planVersion"] as? Int ?? 1
         var successor = prev
@@ -533,6 +544,7 @@ extension InterplanetLTX {
         successor["v"] = 3
         successor["planVersion"] = prevVersion + 1
         successor["prevPlanHash"] = planHash(prev)
+        try assertNoReservedFields(successor, "createAmendment")
         return signPlan(successor, privateKeyB64: privateKeyB64)
     }
 
@@ -580,7 +592,7 @@ extension InterplanetLTX {
         "question": "QST", "question_response": "QST",
         "action": "ACT", "action_update": "ACT",
         "amendment": "AMD", "state_transition": "STA",
-        "merge_snapshot": "MRG", "decision": "DEC",
+        "merge_snapshot": "MRG", "decision": "DEC", "decision_update": "DEC",
     ]
 
     /// Create a signed register entry (LTX-SECURITY.md §9.5). The signature
@@ -761,6 +773,114 @@ extension InterplanetLTX {
             }
         }
         return LtxRegisterReduction(byId: byId, superseded: superseded)
+    }
+
+    static let decisionStatuses = ["RECORDED", "RESCINDED"]
+
+    /// Reduce decision register state from log entries (§10.3). Pure.
+    /// `decision` entries record a decision (did = entryId, version 1);
+    /// `decision_update` entries reference content.did and revise
+    /// text/rationale or rescind it. Conflicts follow §8.2 exactly as for
+    /// questions and actions: higher object version wins, then the lowest
+    /// editor nodeId; losers are returned in `superseded`.
+    public static func reduceDecisions(_ entries: [[String: Any]]) -> LtxRegisterReduction {
+        var byId: [String: [String: Any]] = [:]
+        var winners: [String: (version: Int, editor: String, entryId: String)] = [:]
+        var superseded: [String] = []
+
+        for e in orderEntries(entries) {
+            let content = e["content"] as? [String: Any] ?? [:]
+            let nodeId = e["nodeId"] as? String ?? ""
+            let entryId = e["entryId"] as? String ?? ""
+            if e["type"] as? String == "decision" {
+                let did = entryId
+                if byId[did] != nil { superseded.append(entryId); continue }
+                winners[did] = (1, nodeId, entryId)
+                var d: [String: Any] = [
+                    "did": did,
+                    "text": content["text"].map { "\($0)" } ?? "",
+                    "recordedBy": nodeId,
+                    "status": "RECORDED",
+                    "version": 1,
+                ]
+                if let r = content["rationale"] { d["rationale"] = "\(r)" }
+                if let w = content["originWindow"] { d["originWindow"] = "\(w)" }
+                byId[did] = d
+            } else if e["type"] as? String == "decision_update" {
+                let did = content["did"].map { "\($0)" } ?? ""
+                guard var d = byId[did] else { superseded.append(entryId); continue }
+                let version = jsonNumber(content["version"]).map { Int($0) }
+                    ?? ((d["version"] as? Int ?? 1) + 1)
+                if let current = winners[did],
+                   !conflictWins(version, nodeId, current.version, current.editor) {
+                    superseded.append(entryId)
+                    continue
+                }
+                if let current = winners[did], current.entryId != did {
+                    superseded.append(current.entryId)
+                }
+                winners[did] = (version, nodeId, entryId)
+                if let s = content["status"] as? String, decisionStatuses.contains(s) {
+                    d["status"] = s
+                }
+                if let t = content["text"] { d["text"] = "\(t)" }
+                if let r = content["rationale"] { d["rationale"] = "\(r)" }
+                d["editor"] = nodeId
+                d["version"] = version
+                byId[did] = d
+            }
+        }
+        return LtxRegisterReduction(byId: byId, superseded: superseded)
+    }
+
+    /// Result of mergeLogs: verified entries in §8.2 order, plus the
+    /// rejected ones with the verification failure reason.
+    public struct LtxMergedLogs {
+        public var entries: [[String: Any]]
+        public var rejected: [(entry: [String: Any], reason: String)]
+    }
+
+    /// Deterministic merge of two entry logs (§8.2): verify, union
+    /// de-duplicated by (nodeId, seq), order totally. Symmetric.
+    public static func mergeLogs(_ entriesA: [[String: Any]], _ entriesB: [[String: Any]],
+                                 keyCache: [String: LtxNIK]) -> LtxMergedLogs {
+        var verified: [[String: Any]] = []
+        var rejected: [(entry: [String: Any], reason: String)] = []
+        for entry in entriesA + entriesB {
+            let v = verifyRegisterEntry(entry, keyCache: keyCache)
+            if v.valid { verified.append(entry) }
+            else { rejected.append((entry, v.reason.isEmpty ? "invalid" : v.reason)) }
+        }
+        return LtxMergedLogs(entries: orderEntries(verified), rejected: rejected)
+    }
+
+    /// MERGE segment (§8.4): merge plus a HOST-signed merge_snapshot entry
+    /// carrying the question, action and decision registers and every
+    /// superseded entryId. `snapshot` is nil if the key cannot sign.
+    public static func runMergeSegment(_ localEntries: [[String: Any]],
+                                       _ remoteEntries: [[String: Any]],
+                                       keyCache: [String: LtxNIK],
+                                       sessionId: String,
+                                       nodeId: String,
+                                       seq: Int,
+                                       timestamp: String,
+                                       privateKeyB64: String)
+        -> (merged: LtxMergedLogs, snapshot: [String: Any]?) {
+        let merged = mergeLogs(localEntries, remoteEntries, keyCache: keyCache)
+        let questions = reduceQuestions(merged.entries)
+        let actions = reduceActions(merged.entries)
+        let decisions = reduceDecisions(merged.entries)
+        let snapshot = createRegisterEntry(type: "merge_snapshot", content: [
+            "mergedRoot": entriesRoot(merged.entries),
+            "entryCount": merged.entries.count,
+            "rejectedCount": merged.rejected.count,
+            "questionRegister": questions.byId,
+            "actionRegister": actions.byId,
+            "decisionRegister": decisions.byId,
+            "superseded": questions.superseded + actions.superseded + decisions.superseded,
+        ], sessionId: sessionId, nodeId: nodeId, seq: seq,
+           timestamp: timestamp, privateKeyB64: privateKeyB64)
+        return (merged, snapshot)
     }
 
     // ── Merkle audit-log root (RFC 9162 style) ─────────────────────────────

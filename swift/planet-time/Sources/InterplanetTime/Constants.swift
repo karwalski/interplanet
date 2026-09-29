@@ -5,6 +5,11 @@ import Foundation
 
 public enum InterplanetTime {
 
+    /// Library version. Package.swift has no version field (SwiftPM takes
+    /// versions from repository tags), so this constant is the declared
+    /// version of the Swift planet-time port.
+    public static let version = "1.0.0"
+
     // MARK: - Fundamental constants
 
     public static let j2000Ms:     Int64  = 946_728_000_000

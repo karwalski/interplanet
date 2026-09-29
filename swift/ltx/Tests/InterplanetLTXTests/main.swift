@@ -1,12 +1,13 @@
 // InterplanetLTXTests — standalone test runner (no XCTest needed)
 // Run with: swift run InterplanetLTXTests
 import Foundation
-import InterplanetLTX
+@testable import InterplanetLTX
 
 var passed = 0
 var failed = 0
 
 func check(_ name: String, _ cond: Bool) {
+    if ProcessInfo.processInfo.environment["LTX_VERBOSE"] != nil { print("CHECK: \(name)") }
     if cond {
         passed += 1
     } else {
@@ -320,12 +321,25 @@ check("checkSeq missing_seq", !cr_missing.accepted && cr_missing.reason == "miss
 // LTX v1.1 core subset — golden conformance vectors (Epic 72.4)
 // ═══════════════════════════════════════════════════════════════════════════
 
-let vectorsPath = "../../../conformance/vectors.json"
-let vectorsData = FileManager.default.contents(atPath: vectorsPath)
-check("v11: conformance/vectors.json found", vectorsData != nil)
+// Tests/v11.json is a copy of the .v11 section of conformance/vectors.json
+// (identical to go/ltx/testdata/v11.json and rust/ltx/tests/v11.json).
+// Paths are relative to swift/ltx, the directory the runner is started from.
+let vectorsCandidates = [
+    "Tests/v11.json",
+    URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        .deletingLastPathComponent().appendingPathComponent("v11.json").path,
+    "../../../conformance/vectors.json",
+]
+let vectorsData = vectorsCandidates.lazy
+    .compactMap { FileManager.default.contents(atPath: $0) }.first
+check("v11: v11 conformance vectors found", vectorsData != nil)
 let vectorsRoot = (try? JSONSerialization.jsonObject(with: vectorsData ?? Data())) as? [String: Any]
-let v11 = vectorsRoot?["v11"] as? [String: Any] ?? [:]
+let v11 = (vectorsRoot?["v11"] as? [String: Any]) ?? vectorsRoot ?? [:]
 check("v11: v11 section parsed", !v11.isEmpty)
+if v11.isEmpty {
+    print("\n\(passed) passed  \(failed) failed")
+    exit(1)
+}
 
 let keyVec = v11["key"] as? [String: Any] ?? [:]
 let nikVec = keyVec["nik"] as? [String: Any] ?? [:]
@@ -425,7 +439,7 @@ let signedRoot = InterplanetLTX.signPlan(rootPlan, privateKeyB64: seedB64)
 check("v11: signPlan(root) kid matches vector nodeId",
       signedRoot?.coseSign1.unprotected["kid"] == vecNIK.nodeId)
 if let signedRoot = signedRoot,
-   let amended = InterplanetLTX.createAmendment(signedRoot,
+   let amended = try? InterplanetLTX.createAmendment(signedRoot,
        changes: ["title": "Vector Summit (amended)"], privateKeyB64: seedB64) {
     check("v11: createAmendment sets planVersion+1 and prevPlanHash",
           amended.plan["planVersion"] as? Int == 2
@@ -554,7 +568,7 @@ let smVec = v11["stateMachine"] as? [String: Any] ?? [:]
 let smPlan = InterplanetLTX.upgradeConfig(smVec["plan"] as? [String: Any] ?? [:])
 let smPlanId = smVec["planId"] as? String ?? ""
 check("v11: state machine planId matches vector", InterplanetLTX.makePlanID(smPlan) == smPlanId)
-var smCtx = InterplanetLTX.createSession(smPlan, planId: smPlanId,
+var smCtx = try! InterplanetLTX.createSession(smPlan, planId: smPlanId,
                                          quorum: .count(smVec["quorum"] as? Int ?? 1))
 check("v11: createSession starts DRAFT", smCtx.state == "DRAFT" && smCtx.lock == nil)
 check("v11: lock timeout 2×maxDelay", smCtx.lockTimeoutMs == 1_800_000)
@@ -582,7 +596,7 @@ check("v11: invalid event ignored in COMPLETE",
           && afterEnd.effects.contains { $0["code"] as? String == "INVALID_EVENT" })
 
 // EOK override + resume + amendment path (not covered by the golden table).
-var eokCtx = InterplanetLTX.createSession(smPlan, planId: smPlanId, quorum: .all)
+var eokCtx = try! InterplanetLTX.createSession(smPlan, planId: smPlanId, quorum: .all)
 eokCtx = InterplanetLTX.transition(eokCtx, ["type": "START_LOCK", "nowMs": 0]).ctx
 for nid in ["N1", "N2"] {
     eokCtx = InterplanetLTX.transition(eokCtx,
@@ -613,6 +627,280 @@ check("v11: amendment applied after all confirms",
 eokCtx = InterplanetLTX.transition(eokCtx,
     ["type": "HOST_DECISION", "nowMs": 8, "decision": "abort"]).ctx
 check("v11: HOST abort", eokCtx.state == "ABORTED")
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Sequence tracker reorder window (LTX-SECURITY.md §11.2)
+// ═══════════════════════════════════════════════════════════════════════════
+
+let rwTracker = InterplanetLTX.createSequenceTracker(planId: "plan-abc")
+for s in [1, 2, 5] { _ = rwTracker.recordSeq(nodeId: "N0", seq: s) }
+let rw6 = rwTracker.recordSeq(nodeId: "N0", seq: 6)
+check("seq: recordSeq after gap accepted", rw6.accepted && !rw6.gap && !rw6.late)
+check("seq: missingSeqs lists gap", rwTracker.missingSeqs(nodeId: "N0") == [3, 4])
+let late4 = rwTracker.recordSeq(nodeId: "N0", seq: 4)
+check("seq: late seq accepted", late4.accepted && late4.late)
+check("seq: late seq no gap, no reason", !late4.gap && late4.gapSize == 0 && late4.reason == "")
+check("seq: late seq keeps high-water mark", rwTracker.lastSeenSeq(nodeId: "N0") == 6)
+let dup4 = rwTracker.recordSeq(nodeId: "N0", seq: 4)
+check("seq: late seq duplicate is replay", !dup4.accepted && dup4.reason == "replay" && !dup4.late)
+check("seq: in-order result late=false", !rwTracker.recordSeq(nodeId: "N0", seq: 7).late)
+check("seq: duplicate of in-order is replay", rwTracker.recordSeq(nodeId: "N0", seq: 6).reason == "replay")
+check("seq: missingSeqs after late", rwTracker.missingSeqs(nodeId: "N0") == [3])
+check("seq: invalid seq rejected",
+      InterplanetLTX.checkSeq(["seq": 1.5], tracker: rwTracker, senderNodeId: "N0").reason == "invalid_seq"
+          && !InterplanetLTX.checkSeq(["seq": Double.nan], tracker: rwTracker, senderNodeId: "N0").accepted)
+check("seq: integral double seq accepted",
+      InterplanetLTX.checkSeq(["seq": 8.0], tracker: rwTracker, senderNodeId: "N0").accepted)
+check("seq: default reorder window", InterplanetLTX.seqReorderWindow == 64 && rwTracker.reorderWindow == 64)
+
+let trackerW = try! InterplanetLTX.createSequenceTracker(planId: "plan-window", storage: nil, reorderWindow: 4)
+_ = trackerW.recordSeq(nodeId: "N1", seq: 1)
+let bigGap = trackerW.recordSeq(nodeId: "N1", seq: 10)   // skips 2..9; only 7,8,9 fit
+check("seq: window gap reported in full", bigGap.gap && bigGap.gapSize == 8)
+check("seq: window bounds missing markers", trackerW.missingSeqs(nodeId: "N1") == [7, 8, 9])
+check("seq: below window rejected", trackerW.recordSeq(nodeId: "N1", seq: 5).reason == "replay")
+check("seq: inside window accepted late", trackerW.recordSeq(nodeId: "N1", seq: 8).late)
+_ = trackerW.recordSeq(nodeId: "N1", seq: 12)          // window slides to (8,12]: 7 falls out
+check("seq: slid-out marker rejected", !trackerW.recordSeq(nodeId: "N1", seq: 7).accepted)
+check("seq: slid-in gap accepted late", trackerW.recordSeq(nodeId: "N1", seq: 11).late)
+let t0 = try! InterplanetLTX.createSequenceTracker(planId: "plan-strict", storage: nil, reorderWindow: 0)
+_ = t0.recordSeq(nodeId: "N0", seq: 1)
+_ = t0.recordSeq(nodeId: "N0", seq: 3)
+check("seq: window 0 = strict monotonic", t0.recordSeq(nodeId: "N0", seq: 2).reason == "replay")
+check("seq: negative window throws",
+      (try? InterplanetLTX.createSequenceTracker(planId: "p", storage: nil, reorderWindow: -1)) == nil)
+
+// Persistent adapter without delete(): markers survive a restart.
+final class DictSeqStorage: LtxSeqStorage {
+    var d: [String: Int] = [:]
+    func get(_ key: String) -> Int? { d[key] }
+    func set(_ key: String, _ value: Int) { d[key] = value }
+}
+let persisted = DictSeqStorage()
+let tA = try! InterplanetLTX.createSequenceTracker(planId: "plan-persist", storage: persisted)
+_ = tA.recordSeq(nodeId: "N2", seq: 1)
+_ = tA.recordSeq(nodeId: "N2", seq: 4)
+let tB = try! InterplanetLTX.createSequenceTracker(planId: "plan-persist", storage: persisted)  // "restart"
+check("seq: persisted late accepted", tB.recordSeq(nodeId: "N2", seq: 3).late)
+check("seq: persisted late not replayable", tB.recordSeq(nodeId: "N2", seq: 3).reason == "replay")
+check("seq: persisted replay rejected", tB.recordSeq(nodeId: "N2", seq: 4).reason == "replay")
+check("seq: storage keys match ltx-sdk.js", persisted.d["ltx_seq_plan-persist_N2_rx"] == 4)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Conformance: golden planId vectors (spec/golden/plan-ids.json)
+// ═══════════════════════════════════════════════════════════════════════════
+
+let goldenCandidates = [
+    "../../spec/golden/plan-ids.json",
+    URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent("spec/golden/plan-ids.json").path,
+]
+let goldenText = goldenCandidates.lazy
+    .compactMap { try? String(contentsOfFile: $0, encoding: .utf8) }.first
+check("golden: spec/golden/plan-ids.json found", goldenText != nil)
+var goldenVectors: [(name: String, plan: LtxJSON, planId: String, planHash: String?)] = []
+if let text = goldenText, let root = LtxJSON.parse(text), case .array(let vs)? = root["vectors"] {
+    for v in vs {
+        guard case .string(let name)? = v["name"], let plan = v["plan"],
+              case .string(let pid)? = v["planId"] else { continue }
+        var ph: String? = nil
+        if case .string(let h)? = v["planHash"] { ph = h }
+        goldenVectors.append((name, plan, pid, ph))
+    }
+}
+check("golden: vectors present", goldenVectors.count >= 9)
+var gvByName: [String: (name: String, plan: LtxJSON, planId: String, planHash: String?)] = [:]
+var typedCovered = 0
+for gv in goldenVectors {
+    gvByName[gv.name] = gv
+    let json = gv.plan.stringify()
+    check("golden planId \(gv.name)", InterplanetLTX.makePlanID(json: json) == gv.planId)
+    if let ph = gv.planHash {
+        check("golden planHash \(gv.name)", InterplanetLTX.planHash(json: json) == ph)
+    }
+    // The typed LtxPlan serialises v2 plans in the fixed order v, title,
+    // start, quantum, mode, nodes, segments and drops unmodelled fields, so
+    // its planId is only comparable when that projection is lossless.
+    let dict = gv.plan.foundationValue as? [String: Any] ?? [:]
+    let typed = InterplanetLTX.upgradeConfig(dict)
+    let lossless = typed.v >= 3
+        ? InterplanetLTX.canonicalJSON(InterplanetLTX.planToDict(typed)) == InterplanetLTX.canonicalJSON(dict)
+        : InterplanetLTX.planToJSON(typed) == json
+    if lossless {
+        typedCovered += 1
+        check("golden typed planId \(gv.name)", InterplanetLTX.makePlanID(typed) == gv.planId)
+    }
+}
+check("golden: typed makePlanID covers \(typedCovered) vectors", typedCovered >= 3)
+check("golden v2 freeze anchor", gvByName["v2-freeze-check"]?.planId == "LTX-20260801-EARTHHQ-MARS-v2-d132e85d")
+check("golden v2 unicode anchor", gvByName["v2-unicode-title"]?.planId == "LTX-20261231-EARTHHQ-MARS-v2-7bc93af8")
+check("golden v2 order-sensitive",
+      gvByName["v2-createPlan-default"]?.planId != gvByName["v2-key-order-sensitive"]?.planId)
+check("golden v3 order-insensitive",
+      gvByName["v3-upgrade-delays"]?.planId == gvByName["v3-key-order-insensitive"]?.planId)
+if case .string(let pph)? = gvByName["v3-amendment"]?.plan["prevPlanHash"] {
+    check("golden v3 amendment chain hash", pph == gvByName["v3-upgrade-delays"]?.planHash)
+} else {
+    check("golden v3 amendment chain hash", false)
+}
+check("createPlan default quantum is 5",
+      InterplanetLTX.createPlan().quantum == 5 && InterplanetLTX.defaultQuantum == 5)
+check("LtxJSON stringify round-trips escapes",
+      LtxJSON.parse("{\"a\":\"x\\u0001\\b\\\"y\\ud83d\\ude80\",\"n\":[1,2.5,-0]}")?.stringify()
+          == "{\"a\":\"x\\u0001\\b\\\"y\u{1F680}\",\"n\":[1,2.5,0]}")
+
+// ── Plan validation: reserved streams / branching (§3.5, §7) ──────────────
+
+for gv in goldenVectors {
+    check("validatePlan accepts golden \(gv.name)", InterplanetLTX.validatePlan(gv.plan.foundationValue).valid)
+}
+func withF(_ base: [String: Any], _ extra: [String: Any]) -> [String: Any] {
+    var d = base
+    for (k, v) in extra { d[k] = v }
+    return d
+}
+let vpBase = gvByName["v3-upgrade-delays"]?.plan.foundationValue as? [String: Any] ?? [:]
+let vpV2 = gvByName["v2-freeze-check"]?.plan.foundationValue as? [String: Any] ?? [:]
+check("validatePlan v3 empty streams ok", InterplanetLTX.validatePlan(withF(vpBase, ["streams": [Any]()])).valid)
+let vpStreams = InterplanetLTX.validatePlan(withF(vpBase, ["streams": [["id": "S1"]]]))
+check("validatePlan non-empty streams", !vpStreams.valid && vpStreams.codes.contains("reserved_streams"))
+check("validatePlan streams error path",
+      vpStreams.errors.first { $0.code == "reserved_streams" }?.path == "streams")
+check("validatePlan streams non-array",
+      InterplanetLTX.validatePlan(withF(vpBase, ["streams": "S1"])).codes.contains("reserved_streams"))
+check("validatePlan segment stream",
+      InterplanetLTX.validatePlan(withF(vpBase, ["segments": [["type": "TX", "q": 1, "stream": "S1"]]]))
+          .codes.contains("reserved_streams"))
+check("validatePlan branches",
+      InterplanetLTX.validatePlan(withF(vpBase, ["branches": [Any]()])).codes.contains("reserved_branching"))
+check("validatePlan branching",
+      InterplanetLTX.validatePlan(withF(vpBase, ["branching": ["mode": "local"]])).codes.contains("reserved_branching"))
+let vpSegBranch = InterplanetLTX.validatePlan(withF(vpBase, ["segments": [["type": "CAUCUS", "q": 1, "branch": "B1"]]]))
+check("validatePlan segment branch",
+      vpSegBranch.codes.contains("reserved_branching") && vpSegBranch.errors.first?.path == "segments[0].branch")
+check("validatePlan v2 streams is v3 field",
+      InterplanetLTX.validatePlan(withF(vpV2, ["streams": [Any]()])).codes.contains("v3_field_in_v2"))
+check("validatePlan v2 branching",
+      InterplanetLTX.validatePlan(withF(vpV2, ["branching": true])).codes.contains("reserved_branching"))
+check("validatePlan non-object", InterplanetLTX.validatePlan(nil).codes.contains("not_an_object"))
+check("validatePlan bad version", InterplanetLTX.validatePlan(withF(vpV2, ["v": 7])).codes.contains("invalid_version"))
+check("validatePlan boolean version rejected",
+      InterplanetLTX.validatePlan(withF(vpV2, ["v": true])).codes.contains("invalid_version"))
+check("validatePlan host not first",
+      InterplanetLTX.validatePlan(withF(vpV2, ["nodes": Array((vpV2["nodes"] as? [Any] ?? []).reversed())]))
+          .codes.contains("invalid_host"))
+check("validatePlan unsorted delays key",
+      InterplanetLTX.validatePlan(withF(vpBase, ["delays": ["N1|N0": 860]])).codes.contains("invalid_delays"))
+check("validatePlan unknown speaker",
+      InterplanetLTX.validatePlan(withF(vpV2, ["segments": [["type": "TX", "q": 1, "speaker": "N9"]]]))
+          .codes.contains("unknown_speaker"))
+check("validatePlan quantum out of range",
+      InterplanetLTX.validatePlan(withF(vpV2, ["quantum": 0])).codes.contains("invalid_quantum"))
+check("validatePlan(json:) keeps codes",
+      InterplanetLTX.validatePlan(json: "{\"v\":2,\"branches\":[]}").codes.contains("reserved_branching"))
+func throwsCode(_ fn: () throws -> Any?) -> String? {
+    do { _ = try fn(); return nil }
+    catch let e as LtxReservedFieldError { return e.code }
+    catch { return "other" }
+}
+if let vpSigned = InterplanetLTX.signPlan(vpBase, privateKeyB64: seedB64) {
+    check("createAmendment rejects branching",
+          throwsCode { try InterplanetLTX.createAmendment(vpSigned, changes: ["branching": [String: Any]()],
+                                                          privateKeyB64: seedB64) } == "reserved_branching")
+    check("createAmendment rejects streams",
+          throwsCode { try InterplanetLTX.createAmendment(vpSigned, changes: ["streams": [1]],
+                                                          privateKeyB64: seedB64) } == "reserved_streams")
+    check("createAmendment ok without",
+          throwsCode { try InterplanetLTX.createAmendment(vpSigned, changes: ["title": "x"],
+                                                          privateKeyB64: seedB64) } == nil)
+} else {
+    check("signPlan(vpBase) for amendment checks", false)
+}
+check("createSession accepts typed plan",
+      throwsCode { try InterplanetLTX.createSession(smPlan, planId: "id") } == nil)
+var assertErr: LtxReservedFieldError? = nil
+do { try InterplanetLTX.assertNoReservedFields(withF(vpBase, ["streams": [1]]), "createSession") }
+catch let e as LtxReservedFieldError { assertErr = e } catch {}
+check("assertNoReservedFields throws with code and errors",
+      assertErr?.code == "reserved_streams" && assertErr?.message.hasPrefix("createSession:") == true
+          && assertErr?.errors.count == 1)
+
+// ── Registers: reduceDecisions (§10.3) + merge snapshot ───────────────────
+
+let decHost = InterplanetLTX.generateNIK(validDays: 365, nodeLabel: "HOST")
+let decMars = InterplanetLTX.generateNIK(validDays: 365, nodeLabel: "MARS")
+let decCache: [String: InterplanetLTX.LtxNIK] = ["N0": decHost.nik, "N1": decMars.nik]
+func mkDec(_ type: String, _ content: [String: Any], _ nodeId: String, _ seq: Int, _ ts: String,
+           _ priv: String, entryId: String? = nil) -> [String: Any] {
+    return InterplanetLTX.createRegisterEntry(type: type, content: content, sessionId: "LTX-DEC-TEST",
+        nodeId: nodeId, seq: seq, timestamp: ts, privateKeyB64: priv, entryId: entryId) ?? [:]
+}
+let dec1 = mkDec("decision", ["text": "Proceed with EVA-3", "rationale": "Weather window", "originWindow": "W2"],
+                 "N0", 1, "2026-08-01T12:00:00.000Z", decHost.privateKeyB64)
+check("decision id prefix DEC", dec1["entryId"] as? String == "DEC-N0-1")
+check("decision entry verifies", InterplanetLTX.verifyRegisterEntry(dec1, keyCache: decCache).valid)
+let decReg1 = InterplanetLTX.reduceDecisions([dec1])
+check("decision RECORDED",
+      decReg1.byId["DEC-N0-1"]?["status"] as? String == "RECORDED" && decReg1.byId["DEC-N0-1"]?["version"] as? Int == 1)
+check("decision fields",
+      decReg1.byId["DEC-N0-1"]?["text"] as? String == "Proceed with EVA-3"
+          && decReg1.byId["DEC-N0-1"]?["recordedBy"] as? String == "N0"
+          && decReg1.byId["DEC-N0-1"]?["rationale"] as? String == "Weather window")
+let decRev = mkDec("decision_update", ["did": "DEC-N0-1", "text": "Proceed with EVA-3 at 14:00", "version": 2],
+                   "N1", 1, "2026-08-01T12:10:00.000Z", decMars.privateKeyB64)
+check("decision_update id prefix DEC", decRev["entryId"] as? String == "DEC-N1-1")
+let decRes = mkDec("decision_update", ["did": "DEC-N0-1", "status": "RESCINDED", "version": 3],
+                   "N0", 2, "2026-08-01T12:20:00.000Z", decHost.privateKeyB64)
+let decReg2 = InterplanetLTX.reduceDecisions([decRes, dec1, decRev])
+check("decision update applied", decReg2.byId["DEC-N0-1"]?["text"] as? String == "Proceed with EVA-3 at 14:00")
+check("decision RESCINDED v3",
+      decReg2.byId["DEC-N0-1"]?["status"] as? String == "RESCINDED" && decReg2.byId["DEC-N0-1"]?["version"] as? Int == 3)
+check("decision editor recorded", decReg2.byId["DEC-N0-1"]?["editor"] as? String == "N0")
+check("decision older update superseded", decReg2.superseded.contains(decRev["entryId"] as? String ?? "?"))
+let decA = mkDec("decision_update", ["did": "DEC-N0-1", "text": "From N0", "version": 5],
+                 "N0", 7, "2026-08-01T13:00:00.000Z", decHost.privateKeyB64)
+let decB = mkDec("decision_update", ["did": "DEC-N0-1", "text": "From N1", "version": 5],
+                 "N1", 7, "2026-08-01T13:00:00.000Z", decMars.privateKeyB64)
+let decConf1 = InterplanetLTX.reduceDecisions([dec1, decB, decA])
+let decConf2 = InterplanetLTX.reduceDecisions([decA, dec1, decB])
+check("decision tie lowest nodeId wins", decConf1.byId["DEC-N0-1"]?["text"] as? String == "From N0")
+check("decision tie loser superseded",
+      decConf1.superseded.contains(decB["entryId"] as? String ?? "?")
+          && !decConf1.superseded.contains(decA["entryId"] as? String ?? "?"))
+check("decision reduce order-independent",
+      InterplanetLTX.canonicalJSON(decConf1.byId) == InterplanetLTX.canonicalJSON(decConf2.byId)
+          && decConf1.superseded == decConf2.superseded)
+let decHi = mkDec("decision_update", ["did": "DEC-N0-1", "text": "N1 v6", "version": 6],
+                  "N1", 8, "2026-08-01T12:30:00.000Z", decMars.privateKeyB64)
+check("decision higher version wins",
+      InterplanetLTX.reduceDecisions([dec1, decA, decHi]).byId["DEC-N0-1"]?["text"] as? String == "N1 v6")
+let decOrphan = mkDec("decision_update", ["did": "DEC-NOPE-1", "version": 2],
+                      "N1", 9, "2026-08-01T12:40:00.000Z", decMars.privateKeyB64)
+let decDup = mkDec("decision", ["text": "dup"], "N1", 10, "2026-08-01T12:50:00.000Z",
+                   decMars.privateKeyB64, entryId: "DEC-N0-1")
+let decReg3 = InterplanetLTX.reduceDecisions([dec1, decOrphan, decDup])
+check("decision orphan update superseded", decReg3.superseded.contains("DEC-N1-9"))
+check("decision duplicate create ignored",
+      decReg3.byId["DEC-N0-1"]?["text"] as? String == "Proceed with EVA-3"
+          && decReg3.byId["DEC-N0-1"]?["recordedBy"] as? String == "N0")
+check("decision reducer ignores others",
+      InterplanetLTX.reduceDecisions([dec1, decRev]).byId.count == 1
+          && InterplanetLTX.reduceActions([dec1]).byId.isEmpty)
+let decSnap = InterplanetLTX.runMergeSegment([dec1], [decRev], keyCache: decCache, sessionId: "LTX-DEC-TEST",
+    nodeId: "N0", seq: 99, timestamp: "2026-08-01T15:00:00.000Z", privateKeyB64: decHost.privateKeyB64)
+let snapContent = decSnap.snapshot?["content"] as? [String: Any] ?? [:]
+let snapDecisions = snapContent["decisionRegister"] as? [String: [String: Any]] ?? [:]
+check("snapshot decisionRegister", snapDecisions["DEC-N0-1"]?["version"] as? Int == 2)
+check("snapshot entry id and counts",
+      decSnap.snapshot?["entryId"] as? String == "MRG-N0-99"
+          && snapContent["entryCount"] as? Int == 2 && snapContent["rejectedCount"] as? Int == 0)
+check("snapshot signature verifies",
+      decSnap.snapshot.map { InterplanetLTX.verifyRegisterEntry($0, keyCache: decCache).valid } ?? false)
+let decMergeRej = InterplanetLTX.mergeLogs([dec1], [decRev], keyCache: ["N0": decHost.nik])
+check("mergeLogs rejects unverifiable entries",
+      decMergeRej.entries.count == 1 && decMergeRej.rejected.count == 1
+          && decMergeRej.rejected[0].reason == "key_not_in_cache")
 
 // ── Summary ────────────────────────────────────────────────────────────────
 

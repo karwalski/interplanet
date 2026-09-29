@@ -8,6 +8,7 @@
 
 import 'models.dart';
 import 'constants.dart';
+import 'validate.dart';
 
 /// Session states (LTX-SPECIFICATION.md §5).
 const List<String> kV11SessionStates = [
@@ -160,7 +161,11 @@ num? _declaredDelayS(LtxPlan plan, String nodeId) {
 /// Create a session context in DRAFT state.
 /// [planId] is supplied by the caller (makePlanId) so this module stays pure.
 /// [quorum]: 'all' (default) or 'majority' of PARTICIPANT nodes, or an int.
+/// Throws [ReservedFieldException] if the plan carries reserved streams or
+/// branching fields (§3.5, §7). The typed LtxPlan has no such fields today,
+/// so this guards the map projection against future model growth.
 SessionContext createSession(LtxPlan plan, String planId, {dynamic quorum}) {
+  assertNoReservedFields(plan.toMap(), 'createSession');
   return SessionContext(
     state: 'DRAFT',
     plan: plan,

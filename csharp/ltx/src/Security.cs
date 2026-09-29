@@ -35,6 +35,38 @@ public static class LtxSecurity
         return Convert.FromBase64String(std);
     }
 
+    /// <summary>
+    /// Quote a string exactly as JavaScript JSON.stringify does: escape the
+    /// quote, backslash and control characters (\b \f \n \r \t, others as
+    /// \u00xx) and emit everything else raw. System.Text.Json's default
+    /// encoder also escapes non-ASCII and HTML-sensitive characters, which
+    /// changes canonical JSON bytes, signatures and v2 planIds.
+    /// </summary>
+    public static string JsQuote(string s)
+    {
+        var sb = new StringBuilder(s.Length + 2);
+        sb.Append('"');
+        foreach (char c in s)
+        {
+            switch (c)
+            {
+                case '"': sb.Append("\\\""); break;
+                case '\\': sb.Append("\\\\"); break;
+                case '\b': sb.Append("\\b"); break;
+                case '\f': sb.Append("\\f"); break;
+                case '\n': sb.Append("\\n"); break;
+                case '\r': sb.Append("\\r"); break;
+                case '\t': sb.Append("\\t"); break;
+                default:
+                    if (c < 0x20) sb.Append("\\u").Append(((int)c).ToString("x4"));
+                    else sb.Append(c);
+                    break;
+            }
+        }
+        sb.Append('"');
+        return sb.ToString();
+    }
+
     public static string CanonicalJSON(JsonElement element)
     {
         switch (element.ValueKind)
@@ -42,11 +74,15 @@ public static class LtxSecurity
             case JsonValueKind.Object:
                 var props = element.EnumerateObject()
                     .OrderBy(p => p.Name, StringComparer.Ordinal)
-                    .Select(p => JsonSerializer.Serialize(p.Name) + ":" + CanonicalJSON(p.Value));
+                    .Select(p => JsQuote(p.Name) + ":" + CanonicalJSON(p.Value));
                 return "{" + string.Join(",", props) + "}";
             case JsonValueKind.Array:
                 var items = element.EnumerateArray().Select(CanonicalJSON);
                 return "[" + string.Join(",", items) + "]";
+            case JsonValueKind.String:
+                return JsQuote(element.GetString()!);
+            case JsonValueKind.Number:
+                return LtxPlanJson.JsNumber(element);
             default:
                 return element.GetRawText();
         }
@@ -56,7 +92,7 @@ public static class LtxSecurity
     {
         var sorted = dict.OrderBy(kv => kv.Key, StringComparer.Ordinal);
         var parts = sorted.Select(kv =>
-            JsonSerializer.Serialize(kv.Key) + ":" + SerializeValue(kv.Value));
+            JsQuote(kv.Key) + ":" + SerializeValue(kv.Value));
         return "{" + string.Join(",", parts) + "}";
     }
 
@@ -64,7 +100,8 @@ public static class LtxSecurity
     {
         if (v == null) return "null";
         if (v is bool bval) return bval ? "true" : "false";
-        if (v is string sv) return JsonSerializer.Serialize(sv);
+        if (v is string sv) return JsQuote(sv);
+        if (v is JsonElement je) return CanonicalJSON(je);
         if (v is int iv) return iv.ToString();
         if (v is long lv) return lv.ToString();
         if (v is double dv) return dv.ToString(System.Globalization.CultureInfo.InvariantCulture);
@@ -83,7 +120,7 @@ public static class LtxSecurity
             sb.Append("]");
             return sb.ToString();
         }
-        return JsonSerializer.Serialize(v.ToString());
+        return JsQuote(v.ToString() ?? "");
     }
 
     public static NikResult GenerateNIK(int validDays = 365, string nodeLabel = "")

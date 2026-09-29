@@ -23,3 +23,4 @@ export 'src/amend.dart';
 export 'src/registers.dart';
 export 'src/cbor.dart';
 export 'src/cose.dart';
+export 'src/validate.dart';

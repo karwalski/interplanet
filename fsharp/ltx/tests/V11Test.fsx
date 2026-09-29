@@ -5,6 +5,7 @@
 
 #r "nuget: NSec.Cryptography, 24.4.0"
 #load "../src/Security.fs"
+#load "../src/Validate.fs"
 #load "../src/V11.fs"
 
 open System

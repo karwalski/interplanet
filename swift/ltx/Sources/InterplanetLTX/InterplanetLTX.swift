@@ -4,7 +4,14 @@
 // Pure port of the Ruby/JS LTX SDK.
 
 import Foundation
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto  // swift-crypto on Linux (same API as CryptoKit)
+#endif
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 // ── Error types ─────────────────────────────────────────────────────────────
 
@@ -287,15 +294,14 @@ public enum InterplanetLTX {
 
         var hostStr = "HOST"
         if let first = plan.nodes.first {
-            let raw = first.name.replacingOccurrences(of: " ", with: "").uppercased()
-            hostStr = String(raw.prefix(8))
+            hostStr = jsSlice(jsCompactUpper(first.name), 8)
         }
 
         var nodeStr = "RX"
         if plan.nodes.count > 1 {
-            nodeStr = String(plan.nodes.dropFirst().map { n in
-                String(n.name.replacingOccurrences(of: " ", with: "").uppercased().prefix(4))
-            }.joined(separator: "-").prefix(16))
+            nodeStr = jsSlice(plan.nodes.dropFirst().map { n in
+                jsSlice(jsCompactUpper(n.name), 4)
+            }.joined(separator: "-"), 16)
         }
 
         if plan.v >= 3 {
@@ -497,7 +503,7 @@ public enum InterplanetLTX {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let planJSON = planToJSON(plan)
         req.httpBody = Data("{\"plan\":\(planJSON)}".utf8)
-        let (data, _) = try await URLSession.shared.data(for: req)
+        let (data, _) = try await httpData(req)
         return (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
     }
 
@@ -506,7 +512,7 @@ public enum InterplanetLTX {
         let base    = (apiBase ?? defaultAPIBase).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         let encoded = planID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? planID
         let url     = URL(string: "\(base)/session/\(encoded)")!
-        let (data, _) = try await URLSession.shared.data(from: url)
+        let (data, _) = try await httpData(URLRequest(url: url))
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
         let planData = (obj["plan"] as? [String: Any]) ?? obj
         // Re-encode through hash round-trip to normalise
@@ -548,7 +554,7 @@ public enum InterplanetLTX {
             urlStr += "?node=\(encNid)"
         }
         guard let url = URL(string: urlStr) else { return "" }
-        let (data, _) = try await URLSession.shared.data(from: url)
+        let (data, _) = try await httpData(URLRequest(url: url))
         return String(data: data, encoding: .utf8) ?? ""
     }
 
@@ -561,11 +567,22 @@ public enum InterplanetLTX {
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try? JSONSerialization.data(withJSONObject: payload)
-        let (data, _) = try await URLSession.shared.data(for: req)
+        let (data, _) = try await httpData(req)
         return (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
     }
 
     // ── Private helpers ──────────────────────────────────────────────────────
+
+    /// Portable async HTTP fetch. swift-corelibs-foundation (Linux) lacks the
+    /// async URLSession.data(for:) overload, so wrap dataTask instead.
+    static func httpData(_ req: URLRequest) async throws -> (Data, URLResponse?) {
+        try await withCheckedThrowingContinuation { cont in
+            URLSession.shared.dataTask(with: req) { data, resp, err in
+                if let err = err { cont.resume(throwing: err) }
+                else { cont.resume(returning: (data ?? Data(), resp)) }
+            }.resume()
+        }
+    }
 
     /// Parse an ISO-8601 UTC string to epoch milliseconds.
     static func parseISOMs(_ iso: String) -> Int64 {
@@ -646,9 +663,10 @@ public enum InterplanetLTX {
     /// Compute the polynomial hash hex string (matches ltx-sdk.js makePlanId).
     static func planHashHex(_ plan: LtxPlan) -> String {
         let json = planToJSON(plan)
+        // JS charCodeAt: UTF-16 code units, not UTF-8 bytes (§4.3).
         var h: UInt32 = 0
-        for byte in json.utf8 {
-            h = h &* 31 &+ UInt32(byte)
+        for unit in json.utf16 {
+            h = h &* 31 &+ UInt32(unit)
         }
         return String(format: "%08x", h)
     }
@@ -683,7 +701,8 @@ public enum InterplanetLTX {
     public static func canonicalJSON(_ value: Any?) -> String {
         guard let value = value else { return "null" }
         if let dict = value as? [String: Any] {
-            let sortedKeys = dict.keys.sorted()
+            // RFC 8785 / JS Object.keys().sort(): UTF-16 code unit order.
+            let sortedKeys = dict.keys.sorted(by: utf16Less)
             let parts = sortedKeys.map { k -> String in
                 let escapedKey = canonicalJSONStr(k)
                 return "\(escapedKey):\(canonicalJSON(dict[k]))"
@@ -699,7 +718,7 @@ public enum InterplanetLTX {
         // NSNumber for every scalar, and `as? Bool` would also match 0/1
         // integers. Inspect the underlying CF type / objCType instead.
         if let num = value as? NSNumber {
-            if CFGetTypeID(num) == CFBooleanGetTypeID() {
+            if isBooleanNumber(num) {
                 return num.boolValue ? "true" : "false"
             }
             let objCType = String(cString: num.objCType)
@@ -718,12 +737,23 @@ public enum InterplanetLTX {
         return "null"
     }
 
+    static func isBooleanNumber(_ num: NSNumber) -> Bool {
+        #if canImport(Darwin)
+        return CFGetTypeID(num) == CFBooleanGetTypeID()
+        #else
+        // swift-corelibs-foundation boxes booleans as __NSCFBoolean.
+        return String(describing: type(of: num)) == "__NSCFBoolean"
+        #endif
+    }
+
     private static func canonicalJSONStr(_ s: String) -> String {
         var out = "\""
         for c in s.unicodeScalars {
             switch c.value {
             case 0x22: out += "\\\""
             case 0x5C: out += "\\\\"
+            case 0x08: out += "\\b"
+            case 0x0C: out += "\\f"
             case 0x0A: out += "\\n"
             case 0x0D: out += "\\r"
             case 0x09: out += "\\t"
@@ -881,37 +911,142 @@ public enum InterplanetLTX {
 
     // ── Sequence Tracker ──────────────────────────────────────────
 
+    /// Default reorder window for inbound seqs (LTX-SECURITY.md §11.2): a seq
+    /// up to this far below the highest seen, never seen before, is accepted
+    /// as late.
+    public static let seqReorderWindow = 64
+
+    /// In-memory storage (the default).
+    public final class LtxMemorySeqStorage: LtxSeqStorage {
+        public private(set) var values: [String: Int] = [:]
+        public init() {}
+        public func get(_ key: String) -> Int? { values[key] }
+        public func set(_ key: String, _ value: Int) { values[key] = value }
+        public func delete(_ key: String) { values.removeValue(forKey: key) }
+    }
+
+    public enum LtxSequenceTrackerError: Error {
+        case invalidReorderWindow(Int)
+    }
+
+    /// Sequence tracker for one plan (mirrors createSequenceTracker in
+    /// ltx-sdk.js). Tracks outbound (nextSeq) and inbound (recordSeq) seqs per
+    /// nodeId. Inbound seqs are checked against a sliding reorder window below
+    /// the highest seq seen (the high-water mark): seqs skipped by a gap are
+    /// remembered while they stay inside the window, so a delayed but genuine
+    /// bundle that arrives after a higher seq is accepted and flagged late,
+    /// while an exact duplicate of an accepted (nodeId, seq) is rejected as a
+    /// replay. Seqs below the window are rejected as replays. Missing-seq
+    /// markers live in the storage adapter.
     public class LtxSequenceTracker {
         public let planId: String
-        private var outSeq: [String: Int] = [:]
-        private var inSeq:  [String: Int] = [:]
-        public init(planId: String) { self.planId = planId }
+        public let reorderWindow: Int
+        private let store: LtxSeqStorage
+        private let prefix: String
+
+        /// Tracker with in-memory storage and the default reorder window.
+        public convenience init(planId: String) {
+            // The default window is valid, so this cannot throw.
+            try! self.init(planId: planId, storage: nil, reorderWindow: InterplanetLTX.seqReorderWindow)
+        }
+
+        /// - Parameter reorderWindow: 0 disables late acceptance (strict).
+        /// - Throws: LtxSequenceTrackerError.invalidReorderWindow if negative.
+        public init(planId: String, storage: LtxSeqStorage?, reorderWindow: Int = InterplanetLTX.seqReorderWindow) throws {
+            guard reorderWindow >= 0 else { throw LtxSequenceTrackerError.invalidReorderWindow(reorderWindow) }
+            self.planId = planId
+            self.store = storage ?? LtxMemorySeqStorage()
+            self.reorderWindow = reorderWindow
+            self.prefix = "ltx_seq_\(planId)_"
+        }
+
+        private func rxKey(_ nodeId: String) -> String { prefix + nodeId + "_rx" }
+        private func missKey(_ nodeId: String, _ seq: Int) -> String { "\(rxKey(nodeId))_miss_\(seq)" }
+
+        /// Next outbound sequence number for this node (increments the counter).
         public func nextSeq(nodeId: String) -> Int {
-            let cur = (outSeq[nodeId] ?? 0) + 1
-            outSeq[nodeId] = cur
-            return cur
+            let key = prefix + nodeId
+            let next = (store.get(key) ?? 0) + 1
+            store.set(key, next)
+            return next
         }
+
+        /// Record an inbound seq from a remote node.
+        ///   late: true      seq below the high-water mark, never seen, inside the window
+        ///   reason "replay" exact duplicate, or below the reorder window
         public func recordSeq(nodeId: String, seq: Int) -> LtxSeqResult {
-            let last = inSeq[nodeId] ?? 0
-            if seq <= last { return LtxSeqResult(accepted: false, reason: "replay", gap: false, gapSize: 0) }
+            let key = rxKey(nodeId)
+            let last = store.get(key) ?? 0
+            let W = reorderWindow
+
+            if seq <= last {
+                let mk = missKey(nodeId, seq)
+                if seq > last - W && store.get(mk) == 1 {
+                    store.delete(mk)
+                    return LtxSeqResult(accepted: true, reason: "", gap: false, gapSize: 0, late: true)
+                }
+                return LtxSeqResult(accepted: false, reason: "replay", gap: false, gapSize: 0)
+            }
+
             let gap = seq > last + 1
-            inSeq[nodeId] = seq
-            return LtxSeqResult(accepted: true, reason: "", gap: gap, gapSize: gap ? seq - last - 1 : 0)
+            let gapSize = gap ? seq - last - 1 : 0
+            // Remember skipped seqs that stay inside the new window (seq - W, seq].
+            var s = max(last + 1, seq - W + 1)
+            while s < seq { store.set(missKey(nodeId, s), 1); s += 1 }
+            // Forget markers that slide out of the window.
+            s = max(1, last - W + 1)
+            while s <= min(last, seq - W) {
+                if store.get(missKey(nodeId, s)) == 1 { store.delete(missKey(nodeId, s)) }
+                s += 1
+            }
+            store.set(key, seq)
+            return LtxSeqResult(accepted: true, reason: "", gap: gap, gapSize: gapSize)
         }
+
+        /// Seqs below the high-water mark still missing inside the reorder
+        /// window, ascending (candidates for a retransmission request, §11.3).
+        public func missingSeqs(nodeId: String) -> [Int] {
+            let last = store.get(rxKey(nodeId)) ?? 0
+            var out: [Int] = []
+            var s = max(1, last - reorderWindow + 1)
+            while s < last {
+                if store.get(missKey(nodeId, s)) == 1 { out.append(s) }
+                s += 1
+            }
+            return out
+        }
+
+        /// Highest inbound seq seen from a node (for checkpoints).
+        public func lastSeenSeq(nodeId: String) -> Int { store.get(rxKey(nodeId)) ?? 0 }
+
+        /// Current outbound seq for a node.
+        public func currentSeq(nodeId: String) -> Int { store.get(prefix + nodeId) ?? 0 }
     }
 
     public struct LtxSeqResult {
         public let accepted: Bool
+        /// "" when accepted; otherwise "replay", "invalid_seq" or "missing_seq".
         public let reason:   String
         public let gap:      Bool
         public let gapSize:  Int
-        public init(accepted: Bool, reason: String, gap: Bool, gapSize: Int) {
+        /// True for a seq below the high-water mark accepted from the reorder window.
+        public let late:     Bool
+        public init(accepted: Bool, reason: String, gap: Bool, gapSize: Int, late: Bool = false) {
             self.accepted = accepted; self.reason = reason; self.gap = gap; self.gapSize = gapSize
+            self.late = late
         }
     }
 
     public static func createSequenceTracker(planId: String) -> LtxSequenceTracker {
         return LtxSequenceTracker(planId: planId)
+    }
+
+    /// Tracker with a storage adapter and/or a custom reorder window
+    /// (0 = strict monotonic). Throws for a negative window.
+    public static func createSequenceTracker(planId: String,
+                                             storage: LtxSeqStorage?,
+                                             reorderWindow: Int = seqReorderWindow) throws -> LtxSequenceTracker {
+        return try LtxSequenceTracker(planId: planId, storage: storage, reorderWindow: reorderWindow)
     }
 
     public static func addSeq(_ bundle: [String: Any], tracker: LtxSequenceTracker, nodeId: String) -> [String: Any] {
@@ -920,11 +1055,16 @@ public enum InterplanetLTX {
         return b
     }
 
+    /// Check an inbound bundle's seq. A non-number seq is "missing_seq"; a
+    /// number that is not a safe integer is "invalid_seq" (as in ltx-sdk.js).
     public static func checkSeq(_ bundle: [String: Any], tracker: LtxSequenceTracker, senderNodeId: String) -> LtxSeqResult {
-        guard let seq = bundle["seq"] as? Int else {
+        guard let n = jsonNumber(bundle["seq"]) else {
             return LtxSeqResult(accepted: false, reason: "missing_seq", gap: false, gapSize: 0)
         }
-        return tracker.recordSeq(nodeId: senderNodeId, seq: seq)
+        guard n.isFinite, n.rounded() == n, abs(n) <= 9_007_199_254_740_991 else {
+            return LtxSeqResult(accepted: false, reason: "invalid_seq", gap: false, gapSize: 0)
+        }
+        return tracker.recordSeq(nodeId: senderNodeId, seq: Int(n))
     }
 
     // ── base64url helpers ──────────────────────────────────────────

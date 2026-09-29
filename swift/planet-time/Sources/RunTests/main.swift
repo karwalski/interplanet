@@ -28,6 +28,7 @@ func checkNear(_ name: String, _ a: Double, _ b: Double, accuracy: Double = 0.01
 }
 
 // ── 1. Constants ──────────────────────────────────────────────────────────────
+checkEqual("version",        InterplanetTime.version,      "1.0.0")
 checkEqual("J2000Ms",        InterplanetTime.j2000Ms,      946_728_000_000)
 checkEqual("MarsEpochMs",    InterplanetTime.marsEpochMs, -524_069_761_536)
 checkEqual("MarsSolMs",      InterplanetTime.marsSolMs,    88_775_244)

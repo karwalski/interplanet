@@ -49,15 +49,20 @@ let rec canonicalJson (v: obj) : string =
         "{" + String.concat "," parts + "}"
     | _               -> jsonStr (string v)
 
+/// JSON.stringify string quoting: quote, backslash and control characters
+/// escaped (\b \f \n \r \t, others as \u00xx); everything else raw.
 and jsonStr (s: string) : string =
     let sb = StringBuilder("\"")
     for c in s do
         match c with
         | '"'  -> sb.Append("\\\"") |> ignore
         | '\\' -> sb.Append("\\\\") |> ignore
+        | '\b' -> sb.Append("\\b")  |> ignore
+        | '\012' -> sb.Append("\\f")  |> ignore
         | '\n' -> sb.Append("\\n")  |> ignore
         | '\r' -> sb.Append("\\r")  |> ignore
         | '\t' -> sb.Append("\\t")  |> ignore
+        | c when c < ' ' -> sb.Append("\\u").Append((int c).ToString("x4")) |> ignore
         | c    -> sb.Append(c) |> ignore
     sb.Append('"') |> ignore
     sb.ToString()
@@ -77,6 +82,11 @@ let private importSeedKey (privRaw: byte[]) : NSec.Cryptography.Key =
     NSec.Cryptography.Key.Import(
         ed, ReadOnlySpan<byte>(privRaw),
         NSec.Cryptography.KeyBlobFormat.RawPrivateKey)
+
+/// Ed25519 signature of `data` with a raw 32-byte seed (NSec/libsodium).
+let signBytes (data: byte[]) (privRaw: byte[]) : byte[] =
+    use key = importSeedKey privRaw
+    ed.Sign(key, ReadOnlySpan<byte>(data))
 
 // ---- NIK type ----
 

@@ -31,6 +31,20 @@ string ics = InterplanetLTX.GenerateICS(plan);
 var urls = InterplanetLTX.BuildNodeUrls(plan, "https://interplanet.live/ltx.html");
 ```
 
+### Wire-form plans, validation and registers
+
+- `LtxPlanJson.MakePlanIdFromJson(json)` / `PlanHashFromJson(json)`: planId and
+  planHash over plan JSON with key order preserved, matching
+  `spec/golden/plan-ids.json`. The typed `MakePlanId` methods serialise v2 plans
+  in the fixed order `v, title, start, quantum, mode, nodes, segments`.
+- `LtxPlanJson.ValidatePlan(json | JsonElement | PlanV11)`: `PlanValidation`
+  with `Code`, `Path`, `Message` per error, including `reserved_streams` and
+  `reserved_branching`. `LtxV11.CreateSession` throws `ReservedFieldException`
+  for those fields.
+- `LtxV11.ReduceDecisions` (`decision`, `decision_update`),
+  `CreateRegisterEntry`, `MergeLogs` and `RunMergeSegment` (the merge_snapshot
+  carries `questionRegister`, `actionRegister` and `decisionRegister`).
+
 ## Build & Test
 
 ```

@@ -13,6 +13,7 @@
 import 'dart:convert';
 
 import 'security.dart';
+import 'validate.dart';
 
 /// SHA-256 hex of the RFC 8785 canonical JSON of a plan.
 String planHash(Map<String, dynamic> plan) =>
@@ -87,6 +88,9 @@ Future<VerifyResult> verifyPlanEnvelope(
 /// Create a signed amendment of [signedPlan] (a JSON-envelope signed plan)
 /// with [changes] applied. The successor is always a v3 plan; fields managed
 /// here ('v', 'planVersion', 'prevPlanHash') cannot be overridden.
+/// Throws [ReservedFieldException] (code 'reserved_streams' or
+/// 'reserved_branching') if the successor would carry reserved fields
+/// (§3.5, §7).
 Future<Map<String, dynamic>> createAmendment(Map<String, dynamic> signedPlan,
     Map<String, dynamic> changes, String privKeyB64) async {
   final prev = (signedPlan['plan'] as Map).cast<String, dynamic>();
@@ -98,6 +102,7 @@ Future<Map<String, dynamic>> createAmendment(Map<String, dynamic> signedPlan,
     'planVersion': prevVersion + 1,
     'prevPlanHash': planHash(prev),
   };
+  assertNoReservedFields(successor, 'createAmendment');
   final protectedB64 = b64UrlEncode(utf8.encode(canonicalJson({'alg': -19})));
   final payloadB64 = b64UrlEncode(utf8.encode(canonicalJson(successor)));
   final sigStructure =

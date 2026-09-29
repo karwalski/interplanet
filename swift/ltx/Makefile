@@ -16,6 +16,12 @@ else
   SDK_FLAG =
 endif
 
+# CryptoKit exists only on Apple platforms. Elsewhere (Linux) the same API
+# comes from apple/swift-crypto, which only SwiftPM can fetch, so the
+# non-Darwin targets go through `swift build` / `swift run`.
+UNAME_S := $(shell uname -s)
+
+ifeq ($(UNAME_S),Darwin)
 test:
 	swiftc $(SDK_FLAG) -module-name InterplanetLTX $(SRC) $(TEST) -o $(BIN) 2>&1 && $(BIN)
 
@@ -24,7 +30,18 @@ lint:
 
 build:
 	swiftc $(SDK_FLAG) -c $(SRC) -module-name InterplanetLTX 2>&1
+else
+test:
+	swift run InterplanetLTXTests 2>&1
+
+lint:
+	swift build 2>&1
+
+build:
+	swift build 2>&1
+endif
 
 clean:
 	rm -f $(BIN)
+	rm -rf .build
 

@@ -10,6 +10,10 @@ module InterplanetTime
 
 open System
 
+/// Library version; keep in step with <Version> in InterplanetTime.fsproj.
+[<Literal>]
+let VERSION = "1.0.0"
+
 // ── Planet discriminated union ────────────────────────────────────────────────
 
 type Planet =

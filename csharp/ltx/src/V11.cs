@@ -116,6 +116,24 @@ public record ActionStateV11
     public int Version { get; init; } = 1;
 }
 
+/// <summary>Decision register object state (LTX-SPECIFICATION.md §10.3).</summary>
+public record DecisionStateV11
+{
+    public string Did { get; init; } = "";
+    public string Text { get; init; } = "";
+    public string RecordedBy { get; init; } = "";
+    public string? Rationale { get; init; }
+    public string? OriginWindow { get; init; }
+    /// <summary>"RECORDED" or "RESCINDED".</summary>
+    public string Status { get; init; } = "RECORDED";
+    /// <summary>Node that made the winning decision_update, if any.</summary>
+    public string? Editor { get; init; }
+    public int Version { get; init; } = 1;
+}
+
+/// <summary>Result of <see cref="LtxV11.MergeLogs"/>: verified entries in §8.2 order plus rejects.</summary>
+public record MergedLogsV11(List<RegisterEntryV11> Entries, List<(RegisterEntryV11 Entry, string Reason)> Rejected);
+
 public record RegisterReductionV11<T>(Dictionary<string, T> ById, List<string> Superseded);
 
 // ── Session state machine (LTX-SPECIFICATION.md §5) ─────────────────────────
@@ -192,20 +210,20 @@ public static class LtxV11
         var sb = new StringBuilder();
         sb.Append('{');
         sb.Append("\"v\":").Append(p.V);
-        sb.Append(",\"title\":").Append(JsonSerializer.Serialize(p.Title));
-        sb.Append(",\"start\":").Append(JsonSerializer.Serialize(p.Start));
+        sb.Append(",\"title\":").Append(LtxSecurity.JsQuote(p.Title));
+        sb.Append(",\"start\":").Append(LtxSecurity.JsQuote(p.Start));
         sb.Append(",\"quantum\":").Append(p.Quantum);
-        sb.Append(",\"mode\":").Append(JsonSerializer.Serialize(p.Mode));
+        sb.Append(",\"mode\":").Append(LtxSecurity.JsQuote(p.Mode));
         sb.Append(",\"nodes\":[");
         for (int i = 0; i < p.Nodes.Count; i++)
         {
             var n = p.Nodes[i];
             if (i > 0) sb.Append(',');
-            sb.Append("{\"id\":").Append(JsonSerializer.Serialize(n.Id));
-            sb.Append(",\"name\":").Append(JsonSerializer.Serialize(n.Name));
-            sb.Append(",\"role\":").Append(JsonSerializer.Serialize(n.Role));
+            sb.Append("{\"id\":").Append(LtxSecurity.JsQuote(n.Id));
+            sb.Append(",\"name\":").Append(LtxSecurity.JsQuote(n.Name));
+            sb.Append(",\"role\":").Append(LtxSecurity.JsQuote(n.Role));
             sb.Append(",\"delay\":").Append(n.Delay);
-            sb.Append(",\"location\":").Append(JsonSerializer.Serialize(n.Location));
+            sb.Append(",\"location\":").Append(LtxSecurity.JsQuote(n.Location));
             sb.Append('}');
         }
         sb.Append("],\"segments\":[");
@@ -213,10 +231,10 @@ public static class LtxV11
         {
             var s = p.Segments[i];
             if (i > 0) sb.Append(',');
-            sb.Append("{\"type\":").Append(JsonSerializer.Serialize(s.Type));
+            sb.Append("{\"type\":").Append(LtxSecurity.JsQuote(s.Type));
             sb.Append(",\"q\":").Append(s.Q);
-            if (s.Speaker != null) sb.Append(",\"speaker\":").Append(JsonSerializer.Serialize(s.Speaker));
-            if (s.Label != null) sb.Append(",\"label\":").Append(JsonSerializer.Serialize(s.Label));
+            if (s.Speaker != null) sb.Append(",\"speaker\":").Append(LtxSecurity.JsQuote(s.Speaker));
+            if (s.Label != null) sb.Append(",\"label\":").Append(LtxSecurity.JsQuote(s.Label));
             sb.Append('}');
         }
         sb.Append("]}");
@@ -378,8 +396,8 @@ public static class LtxV11
 
     /// <summary>Canonical JSON of the Sig_structure array (security.ts).</summary>
     private static string SigStructureJson(string protectedB64, string payloadB64) =>
-        "[\"Signature1\"," + JsonSerializer.Serialize(protectedB64) +
-        ",\"\"," + JsonSerializer.Serialize(payloadB64) + "]";
+        "[\"Signature1\"," + LtxSecurity.JsQuote(protectedB64) +
+        ",\"\"," + LtxSecurity.JsQuote(payloadB64) + "]";
 
     /// <summary>
     /// Verify the TRANSITIONAL JSON COSE_Sign1 plan envelope (LTX-SECURITY §7.2):
@@ -505,6 +523,7 @@ public static class LtxV11
         int i => i,
         long l => (int)l,
         double d => (int)d,
+        JsonElement { ValueKind: JsonValueKind.Number } je => (int)je.GetDouble(),
         string s when int.TryParse(s, out int p) => p,
         _ => fallback,
     };
@@ -612,6 +631,164 @@ public static class LtxV11
             }
         }
         return new RegisterReductionV11<ActionStateV11>(byId, superseded);
+    }
+
+    private static readonly string[] DecisionStatuses = { "RECORDED", "RESCINDED" };
+
+    /// <summary>
+    /// Reduce decision register state from log entries (§10.3). Pure.
+    /// `decision` entries record a decision (did = entryId, version 1);
+    /// `decision_update` entries reference content.did and revise
+    /// text/rationale or rescind it. Conflicts follow §8.2 exactly as for
+    /// questions and actions: higher object version wins, then the lowest
+    /// editor nodeId; losers are returned in Superseded.
+    /// </summary>
+    public static RegisterReductionV11<DecisionStateV11> ReduceDecisions(
+        IEnumerable<RegisterEntryV11> entries)
+    {
+        var byId = new Dictionary<string, DecisionStateV11>();
+        var winners = new Dictionary<string, (int Version, string Editor, string EntryId)>();
+        var superseded = new List<string>();
+
+        foreach (var e in OrderEntries(entries))
+        {
+            if (e.Type == "decision")
+            {
+                string did = e.EntryId;
+                if (byId.ContainsKey(did)) { superseded.Add(e.EntryId); continue; }
+                winners[did] = (1, e.NodeId, e.EntryId);
+                byId[did] = new DecisionStateV11
+                {
+                    Did = did,
+                    Text = e.Content.TryGetValue("text", out var t) ? t?.ToString() ?? "" : "",
+                    RecordedBy = e.NodeId,
+                    Rationale = e.Content.TryGetValue("rationale", out var r) ? r?.ToString() : null,
+                    OriginWindow = e.Content.TryGetValue("originWindow", out var w) ? w?.ToString() : null,
+                    Status = "RECORDED",
+                    Version = 1,
+                };
+            }
+            else if (e.Type == "decision_update")
+            {
+                string did = e.Content.TryGetValue("did", out var d0) ? d0?.ToString() ?? "" : "";
+                if (!byId.TryGetValue(did, out var d)) { superseded.Add(e.EntryId); continue; }
+                int version = AsInt(e.Content.TryGetValue("version", out var v) ? v : null, d.Version + 1);
+                if (winners.TryGetValue(did, out var cur))
+                {
+                    if (!Wins(version, e.NodeId, cur.Version, cur.Editor)) { superseded.Add(e.EntryId); continue; }
+                    if (cur.EntryId != d.Did) superseded.Add(cur.EntryId);
+                }
+                winners[did] = (version, e.NodeId, e.EntryId);
+                string status = e.Content.TryGetValue("status", out var st) &&
+                    DecisionStatuses.Contains(st?.ToString()) ? st!.ToString()! : d.Status;
+                byId[did] = d with
+                {
+                    Status = status,
+                    Text = e.Content.TryGetValue("text", out var t2) ? t2?.ToString() ?? d.Text : d.Text,
+                    Rationale = e.Content.TryGetValue("rationale", out var r2) ? r2?.ToString() : d.Rationale,
+                    Editor = e.NodeId,
+                    Version = version,
+                };
+            }
+        }
+        return new RegisterReductionV11<DecisionStateV11>(byId, superseded);
+    }
+
+    // ── Register entry creation + merge (registers.ts / merge.ts, §8.4) ──────
+
+    private static readonly Dictionary<string, string> EntryPrefix = new()
+    {
+        ["question"] = "QST", ["question_response"] = "QST",
+        ["action"] = "ACT", ["action_update"] = "ACT",
+        ["amendment"] = "AMD", ["state_transition"] = "STA",
+        ["merge_snapshot"] = "MRG", ["decision"] = "DEC", ["decision_update"] = "DEC",
+    };
+
+    /// <summary>
+    /// Create a signed register entry (LTX-SECURITY.md §9.5): Ed25519 over the
+    /// canonical JSON of the entry without sig. entryId defaults to
+    /// PREFIX-nodeId-seq (decision and decision_update use DEC).
+    /// </summary>
+    public static RegisterEntryV11 CreateRegisterEntry(
+        string type, Dictionary<string, object?> content, string sessionId, string nodeId,
+        int seq, string timestamp, string privateKeyB64, string? entryId = null)
+    {
+        string id = entryId ?? $"{(EntryPrefix.TryGetValue(type, out var p) ? p : "ENT")}-{nodeId}-{seq}";
+        var unsigned = new RegisterEntryV11(id, sessionId, nodeId, seq, type, content, timestamp, "");
+        byte[] data = Encoding.UTF8.GetBytes(LtxSecurity.CanonicalJSON(UnsignedDict(unsigned)));
+        using var key = Key.Import(Ed, LtxSecurity.FromBase64Url(privateKeyB64), KeyBlobFormat.RawPrivateKey);
+        return unsigned with { Sig = LtxSecurity.ToBase64Url(Ed.Sign(key, data)) };
+    }
+
+    /// <summary>
+    /// Deterministic merge of two entry logs (§8.2): verify, union
+    /// de-duplicated by (nodeId, seq), order totally. Symmetric.
+    /// </summary>
+    public static MergedLogsV11 MergeLogs(IEnumerable<RegisterEntryV11> entriesA,
+        IEnumerable<RegisterEntryV11> entriesB, Dictionary<string, NikV11> keyCache)
+    {
+        var verified = new List<RegisterEntryV11>();
+        var rejected = new List<(RegisterEntryV11 Entry, string Reason)>();
+        foreach (var entry in entriesA.Concat(entriesB))
+        {
+            var v = VerifyRegisterEntry(entry, keyCache);
+            if (v.Valid) verified.Add(entry);
+            else rejected.Add((entry, v.Reason ?? "invalid"));
+        }
+        return new MergedLogsV11(OrderEntries(verified), rejected);
+    }
+
+    private static Dictionary<string, object?> StateDict(params (string Key, object? Value, bool Present)[] fields)
+    {
+        var d = new Dictionary<string, object?>();
+        foreach (var (k, v, present) in fields) if (present) d[k] = v;
+        return d;
+    }
+
+    private static Dictionary<string, object?> ToDict(QuestionStateV11 q) => StateDict(
+        ("qid", q.Qid, true), ("text", q.Text, true), ("submitter", q.Submitter, true),
+        ("urgency", q.Urgency, q.Urgency != null), ("intendedWindow", q.IntendedWindow, q.IntendedWindow != null),
+        ("status", q.Status, true), ("response", q.Response, q.Response != null),
+        ("responder", q.Responder, q.Responder != null), ("version", q.Version, true));
+
+    private static Dictionary<string, object?> ToDict(ActionStateV11 a) => StateDict(
+        ("aid", a.Aid, true), ("description", a.Description, true), ("owner", a.Owner, a.Owner != null),
+        ("dueTimeUTC", a.DueTimeUTC, a.DueTimeUTC != null), ("originWindow", a.OriginWindow, a.OriginWindow != null),
+        ("status", a.Status, true), ("version", a.Version, true));
+
+    private static Dictionary<string, object?> ToDict(DecisionStateV11 d) => StateDict(
+        ("did", d.Did, true), ("text", d.Text, true), ("recordedBy", d.RecordedBy, true),
+        ("rationale", d.Rationale, d.Rationale != null), ("originWindow", d.OriginWindow, d.OriginWindow != null),
+        ("status", d.Status, true), ("editor", d.Editor, d.Editor != null), ("version", d.Version, true));
+
+    /// <summary>
+    /// MERGE segment (§8.4): merge plus a HOST-signed merge_snapshot entry
+    /// carrying the question, action and decision registers and every
+    /// superseded entryId.
+    /// </summary>
+    public static (MergedLogsV11 Merged, RegisterEntryV11 Snapshot) RunMergeSegment(
+        IEnumerable<RegisterEntryV11> localEntries, IEnumerable<RegisterEntryV11> remoteEntries,
+        Dictionary<string, NikV11> keyCache, string sessionId, string nodeId, int seq,
+        string timestamp, string privateKeyB64)
+    {
+        var merged = MergeLogs(localEntries, remoteEntries, keyCache);
+        var questions = ReduceQuestions(merged.Entries);
+        var actions = ReduceActions(merged.Entries);
+        var decisions = ReduceDecisions(merged.Entries);
+        var content = new Dictionary<string, object?>
+        {
+            ["mergedRoot"] = EntriesRoot(merged.Entries),
+            ["entryCount"] = merged.Entries.Count,
+            ["rejectedCount"] = merged.Rejected.Count,
+            ["questionRegister"] = questions.ById.ToDictionary(kv => kv.Key, kv => (object?)ToDict(kv.Value)),
+            ["actionRegister"] = actions.ById.ToDictionary(kv => kv.Key, kv => (object?)ToDict(kv.Value)),
+            ["decisionRegister"] = decisions.ById.ToDictionary(kv => kv.Key, kv => (object?)ToDict(kv.Value)),
+            ["superseded"] = questions.Superseded.Concat(actions.Superseded).Concat(decisions.Superseded)
+                .Select(s => (object?)s).ToList(),
+        };
+        var snapshot = CreateRegisterEntry("merge_snapshot", content, sessionId, nodeId, seq,
+            timestamp, privateKeyB64);
+        return (merged, snapshot);
     }
 
     // ── Merkle root over ordered entries (merkle.ts / merge.ts) ─────────────
@@ -865,8 +1042,19 @@ public static class LtxV11
         return total; // "all" (default)
     }
 
-    /// <summary>Create a session context in DRAFT state (§5).</summary>
-    public static SessionCtxV11 CreateSession(PlanV11 plan, string planId, object? quorum = null) => new()
+    /// <summary>
+    /// Create a session context in DRAFT state (§5). Throws
+    /// <see cref="ReservedFieldException"/> if the plan carries reserved
+    /// streams or branching fields (§3.5, §7); PlanV11 has no such fields
+    /// today, so this guards its wire projection against model growth.
+    /// </summary>
+    public static SessionCtxV11 CreateSession(PlanV11 plan, string planId, object? quorum = null)
+    {
+        LtxPlanJson.AssertNoReservedFields(plan.ToDict(), "createSession");
+        return NewSession(plan, planId, quorum);
+    }
+
+    private static SessionCtxV11 NewSession(PlanV11 plan, string planId, object? quorum) => new()
     {
         State = "DRAFT",
         Plan = plan,

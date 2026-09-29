@@ -466,10 +466,13 @@ void main() async {
   // LTX v1.1 core subset — golden conformance vectors (Epic 72.4)
   // ══════════════════════════════════════════════════════════════════════════
 
-  final vectorsFile = File('../../../conformance/vectors.json');
-  check(vectorsFile.existsSync(), 'v11: conformance/vectors.json found');
-  final v11 = (jsonDecode(vectorsFile.readAsStringSync())
-      as Map<String, dynamic>)['v11'] as Map<String, dynamic>;
+  // test/v11.json is a copy of the .v11 section of conformance/vectors.json
+  // (identical to go/ltx/testdata/v11.json); paths are relative to dart/ltx.
+  final vectorsFile = File('test/v11.json');
+  check(vectorsFile.existsSync(), 'v11: test/v11.json found');
+  final v11Root =
+      jsonDecode(vectorsFile.readAsStringSync()) as Map<String, dynamic>;
+  final v11 = (v11Root['v11'] as Map<String, dynamic>?) ?? v11Root;
 
   final keyVec = v11['key'] as Map<String, dynamic>;
   final nikVec = keyVec['nik'] as Map<String, dynamic>;
@@ -801,6 +804,345 @@ void main() async {
   eokCtx = transition(eokCtx,
       {'type': 'HOST_DECISION', 'nowMs': 8, 'decision': 'abort'}).ctx;
   check(eokCtx.state == 'ABORTED', 'v11: HOST abort');
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Conformance: golden planId vectors (spec/golden/plan-ids.json)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  final goldenFile = File('../../spec/golden/plan-ids.json');
+  check(goldenFile.existsSync(), 'golden: spec/golden/plan-ids.json found');
+  final golden =
+      jsonDecode(goldenFile.readAsStringSync()) as Map<String, dynamic>;
+  final gVectors = (golden['vectors'] as List)
+      .map((e) => (e as Map).cast<String, dynamic>())
+      .toList();
+  check(gVectors.length >= 9, 'golden: vectors present');
+  final gvByName = {for (final gv in gVectors) gv['name'] as String: gv};
+  var typedCovered = 0;
+  for (final gv in gVectors) {
+    final raw = (gv['plan'] as Map).cast<String, dynamic>();
+    check(makePlanIdFromMap(raw) == gv['planId'], 'golden planId ${gv['name']}');
+    if (gv['planHash'] != null) {
+      check(planHash(raw) == gv['planHash'], 'golden planHash ${gv['name']}');
+    }
+    // The typed LtxPlan serialises v2 plans in the fixed order v, title,
+    // start, quantum, mode, nodes, segments and drops unmodelled fields, so
+    // its planId is only comparable when that projection is lossless.
+    final typed = LtxPlan.fromJson(jsonEncode(raw));
+    final lossless = typed != null &&
+        ((raw['v'] as int) >= 3
+            ? canonicalJson(typed.toMap()) == canonicalJson(raw)
+            : typed.toJson() == jsonEncode(raw));
+    if (lossless) {
+      typedCovered++;
+      check(makePlanId(typed) == gv['planId'],
+          'golden typed planId ${gv['name']}');
+    }
+  }
+  check(typedCovered >= 3,
+      'golden: typed makePlanId covers $typedCovered vectors');
+  check(
+      gvByName['v2-freeze-check']!['planId'] ==
+          'LTX-20260801-EARTHHQ-MARS-v2-d132e85d',
+      'golden v2 freeze anchor');
+  check(
+      gvByName['v2-unicode-title']!['planId'] ==
+          'LTX-20261231-EARTHHQ-MARS-v2-7bc93af8',
+      'golden v2 unicode anchor');
+  check(
+      gvByName['v2-createPlan-default']!['planId'] !=
+          gvByName['v2-key-order-sensitive']!['planId'],
+      'golden v2 order-sensitive');
+  check(
+      gvByName['v3-upgrade-delays']!['planId'] ==
+          gvByName['v3-key-order-insensitive']!['planId'],
+      'golden v3 order-insensitive');
+  check(
+      (gvByName['v3-amendment']!['plan'] as Map)['prevPlanHash'] ==
+          gvByName['v3-upgrade-delays']!['planHash'],
+      'golden v3 amendment chain hash');
+  check(createPlan().quantum == 5 && kDefaultQuantum == 5,
+      'createPlan default quantum is 5');
+
+  // ── Plan validation: reserved streams / branching (§3.5, §7) ────────────
+
+  for (final gv in gVectors) {
+    check(validatePlan(gv['plan']).valid,
+        'validatePlan accepts golden ${gv['name']}');
+  }
+  Map<String, dynamic> withF(
+          Map<String, dynamic> base, Map<String, dynamic> extra) =>
+      {...base, ...extra};
+  final vpBase =
+      (gvByName['v3-upgrade-delays']!['plan'] as Map).cast<String, dynamic>();
+  final vpV2 =
+      (gvByName['v2-freeze-check']!['plan'] as Map).cast<String, dynamic>();
+  check(validatePlan(withF(vpBase, {'streams': []})).valid,
+      'validatePlan v3 empty streams ok');
+  final vpStreams = validatePlan(withF(vpBase, {
+    'streams': [
+      {'id': 'S1'}
+    ]
+  }));
+  check(!vpStreams.valid && vpStreams.codes.contains('reserved_streams'),
+      'validatePlan non-empty streams');
+  check(
+      vpStreams.errors.firstWhere((e) => e.code == 'reserved_streams').path ==
+          'streams',
+      'validatePlan streams error path');
+  check(
+      validatePlan(withF(vpBase, {'streams': 'S1'}))
+          .codes
+          .contains('reserved_streams'),
+      'validatePlan streams non-array');
+  check(
+      validatePlan(withF(vpBase, {
+        'segments': [
+          {'type': 'TX', 'q': 1, 'stream': 'S1'}
+        ]
+      })).codes.contains('reserved_streams'),
+      'validatePlan segment stream');
+  check(
+      validatePlan(withF(vpBase, {'branches': []}))
+          .codes
+          .contains('reserved_branching'),
+      'validatePlan branches');
+  check(
+      validatePlan(withF(vpBase, {
+        'branching': {'mode': 'local'}
+      })).codes.contains('reserved_branching'),
+      'validatePlan branching');
+  final vpSegBranch = validatePlan(withF(vpBase, {
+    'segments': [
+      {'type': 'CAUCUS', 'q': 1, 'branch': 'B1'}
+    ]
+  }));
+  check(
+      vpSegBranch.codes.contains('reserved_branching') &&
+          vpSegBranch.errors[0].path == 'segments[0].branch',
+      'validatePlan segment branch');
+  check(
+      validatePlan(withF(vpV2, {'streams': []}))
+          .codes
+          .contains('v3_field_in_v2'),
+      'validatePlan v2 streams is v3 field');
+  check(
+      validatePlan(withF(vpV2, {'branching': true}))
+          .codes
+          .contains('reserved_branching'),
+      'validatePlan v2 branching');
+  check(validatePlan(null).codes.contains('not_an_object'),
+      'validatePlan non-object');
+  check(validatePlan(withF(vpV2, {'v': 7})).codes.contains('invalid_version'),
+      'validatePlan bad version');
+  check(
+      validatePlan(withF(
+              vpV2, {'nodes': (vpV2['nodes'] as List).reversed.toList()}))
+          .codes
+          .contains('invalid_host'),
+      'validatePlan host not first');
+  check(
+      validatePlan(withF(vpBase, {
+        'delays': {'N1|N0': 860}
+      })).codes.contains('invalid_delays'),
+      'validatePlan unsorted delays key');
+  check(
+      validatePlan(withF(vpV2, {
+        'segments': [
+          {'type': 'TX', 'q': 1, 'speaker': 'N9'}
+        ]
+      })).codes.contains('unknown_speaker'),
+      'validatePlan unknown speaker');
+  check(
+      validatePlan(withF(vpV2, {'quantum': 0}))
+          .codes
+          .contains('invalid_quantum'),
+      'validatePlan quantum out of range');
+  Future<String?> throwsCode(Future<Object?> Function() fn) async {
+    try {
+      await fn();
+      return null;
+    } on ReservedFieldException catch (e) {
+      return e.code;
+    }
+  }
+
+  final vpSigned = await signPlanEnvelope(vpBase, seedB64);
+  check(
+      await throwsCode(() =>
+              createAmendment(vpSigned, {'branching': {}}, seedB64)) ==
+          'reserved_branching',
+      'createAmendment rejects branching');
+  check(
+      await throwsCode(() => createAmendment(vpSigned, {
+                'streams': [1]
+              }, seedB64)) ==
+          'reserved_streams',
+      'createAmendment rejects streams');
+  check(
+      await throwsCode(
+              () => createAmendment(vpSigned, {'title': 'x'}, seedB64)) ==
+          null,
+      'createAmendment ok without');
+  check(await throwsCode(() async => createSession(smPlan, 'id')) == null,
+      'createSession accepts typed plan');
+  var assertThrew = false;
+  try {
+    assertNoReservedFields(withF(vpBase, {
+      'streams': [1]
+    }), 'createSession');
+  } on ReservedFieldException catch (e) {
+    assertThrew = e.code == 'reserved_streams' &&
+        e.message.startsWith('createSession:') &&
+        e.errors.length == 1;
+  }
+  check(assertThrew, 'assertNoReservedFields throws with code and errors');
+
+  // ── Registers: reduceDecisions (§10.3) + merge snapshot ─────────────────
+
+  final decHost = await generateNik(nodeLabel: 'HOST');
+  final decMars = await generateNik(nodeLabel: 'MARS');
+  final decCache = <String, Nik>{'N0': decHost.nik, 'N1': decMars.nik};
+  Future<Map<String, dynamic>> mkDec(String type, Map<String, dynamic> content,
+          String nodeId, int seq, String ts, String priv,
+          {String? entryId}) =>
+      createRegisterEntry(type, content,
+          sessionId: 'LTX-DEC-TEST',
+          nodeId: nodeId,
+          seq: seq,
+          timestamp: ts,
+          privateKeyB64: priv,
+          entryId: entryId);
+  final dec1 = await mkDec(
+      'decision',
+      {
+        'text': 'Proceed with EVA-3',
+        'rationale': 'Weather window',
+        'originWindow': 'W2'
+      },
+      'N0',
+      1,
+      '2026-08-01T12:00:00.000Z',
+      decHost.privateKeyB64);
+  check(dec1['entryId'] == 'DEC-N0-1', 'decision id prefix DEC');
+  check((await verifyRegisterEntry(dec1, decCache)).valid,
+      'decision entry verifies');
+  final decReg1 = reduceDecisions([dec1]);
+  check(
+      decReg1.byId['DEC-N0-1']!['status'] == 'RECORDED' &&
+          decReg1.byId['DEC-N0-1']!['version'] == 1,
+      'decision RECORDED');
+  check(
+      decReg1.byId['DEC-N0-1']!['text'] == 'Proceed with EVA-3' &&
+          decReg1.byId['DEC-N0-1']!['recordedBy'] == 'N0' &&
+          decReg1.byId['DEC-N0-1']!['rationale'] == 'Weather window',
+      'decision fields');
+  final decRev = await mkDec(
+      'decision_update',
+      {'did': 'DEC-N0-1', 'text': 'Proceed with EVA-3 at 14:00', 'version': 2},
+      'N1',
+      1,
+      '2026-08-01T12:10:00.000Z',
+      decMars.privateKeyB64);
+  check(decRev['entryId'] == 'DEC-N1-1', 'decision_update id prefix DEC');
+  final decRes = await mkDec(
+      'decision_update',
+      {'did': 'DEC-N0-1', 'status': 'RESCINDED', 'version': 3},
+      'N0',
+      2,
+      '2026-08-01T12:20:00.000Z',
+      decHost.privateKeyB64);
+  final decReg2 = reduceDecisions([decRes, dec1, decRev]);
+  check(decReg2.byId['DEC-N0-1']!['text'] == 'Proceed with EVA-3 at 14:00',
+      'decision update applied');
+  check(
+      decReg2.byId['DEC-N0-1']!['status'] == 'RESCINDED' &&
+          decReg2.byId['DEC-N0-1']!['version'] == 3,
+      'decision RESCINDED v3');
+  check(decReg2.byId['DEC-N0-1']!['editor'] == 'N0',
+      'decision editor recorded');
+  check(decReg2.superseded.contains(decRev['entryId']),
+      'decision older update superseded');
+  final decA = await mkDec(
+      'decision_update',
+      {'did': 'DEC-N0-1', 'text': 'From N0', 'version': 5},
+      'N0',
+      7,
+      '2026-08-01T13:00:00.000Z',
+      decHost.privateKeyB64);
+  final decB = await mkDec(
+      'decision_update',
+      {'did': 'DEC-N0-1', 'text': 'From N1', 'version': 5},
+      'N1',
+      7,
+      '2026-08-01T13:00:00.000Z',
+      decMars.privateKeyB64);
+  final decConf1 = reduceDecisions([dec1, decB, decA]);
+  final decConf2 = reduceDecisions([decA, dec1, decB]);
+  check(decConf1.byId['DEC-N0-1']!['text'] == 'From N0',
+      'decision tie lowest nodeId wins');
+  check(
+      decConf1.superseded.contains(decB['entryId']) &&
+          !decConf1.superseded.contains(decA['entryId']),
+      'decision tie loser superseded');
+  check(
+      jsonEncode(decConf1.byId) == jsonEncode(decConf2.byId) &&
+          jsonEncode(decConf1.superseded) == jsonEncode(decConf2.superseded),
+      'decision reduce order-independent');
+  final decHi = await mkDec(
+      'decision_update',
+      {'did': 'DEC-N0-1', 'text': 'N1 v6', 'version': 6},
+      'N1',
+      8,
+      '2026-08-01T12:30:00.000Z',
+      decMars.privateKeyB64);
+  check(
+      reduceDecisions([dec1, decA, decHi]).byId['DEC-N0-1']!['text'] ==
+          'N1 v6',
+      'decision higher version wins');
+  final decOrphan = await mkDec(
+      'decision_update',
+      {'did': 'DEC-NOPE-1', 'version': 2},
+      'N1',
+      9,
+      '2026-08-01T12:40:00.000Z',
+      decMars.privateKeyB64);
+  final decDup = await mkDec('decision', {'text': 'dup'}, 'N1', 10,
+      '2026-08-01T12:50:00.000Z', decMars.privateKeyB64,
+      entryId: 'DEC-N0-1');
+  final decReg3 = reduceDecisions([dec1, decOrphan, decDup]);
+  check(decReg3.superseded.contains('DEC-N1-9'),
+      'decision orphan update superseded');
+  check(
+      decReg3.byId['DEC-N0-1']!['text'] == 'Proceed with EVA-3' &&
+          decReg3.byId['DEC-N0-1']!['recordedBy'] == 'N0',
+      'decision duplicate create ignored');
+  check(
+      reduceDecisions([dec1, decRev]).byId.length == 1 &&
+          reduceActions([dec1]).byId.isEmpty,
+      'decision reducer ignores others');
+  final decSnap = await runMergeSegment([dec1], [decRev], decCache,
+      sessionId: 'LTX-DEC-TEST',
+      nodeId: 'N0',
+      seq: 99,
+      timestamp: '2026-08-01T15:00:00.000Z',
+      privateKeyB64: decHost.privateKeyB64);
+  final snapContent = decSnap.snapshot['content'] as Map;
+  check((snapContent['decisionRegister'] as Map)['DEC-N0-1']['version'] == 2,
+      'snapshot decisionRegister');
+  check(
+      decSnap.snapshot['entryId'] == 'MRG-N0-99' &&
+          snapContent['entryCount'] == 2 &&
+          snapContent['rejectedCount'] == 0,
+      'snapshot entry id and counts');
+  check((await verifyRegisterEntry(decSnap.snapshot, decCache)).valid,
+      'snapshot signature verifies');
+  final decMergeRej =
+      await mergeLogs([dec1], [decRev], <String, Nik>{'N0': decHost.nik});
+  check(
+      decMergeRej.entries.length == 1 &&
+          decMergeRej.rejected.single['reason'] == 'key_not_in_cache',
+      'mergeLogs rejects unverifiable entries');
 
   // ── Summary ───────────────────────────────────────────────────────────────
 
