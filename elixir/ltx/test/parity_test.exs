@@ -41,6 +41,32 @@ for gv <- vectors do
   end
 end
 
+# ── Conformance: planId prefix vectors (spec/golden/plan-id-prefixes.json) ──
+# Unicode upper-casing and UTF-16 slicing of HOSTSTR / NODESTR (issue #37).
+# Elixir strings are UTF-8 and cannot hold a lone surrogate, so the expected
+# id is planIdUtf8 (a surrogate pair split by the cut becomes U+FFFD).
+
+prefix_vectors =
+  Path.expand("../../../spec/golden/plan-id-prefixes.json", __DIR__)
+  |> File.read!()
+  |> Json.decode_ordered!()
+  |> Json.get("vectors")
+
+check length(prefix_vectors) >= 18, "prefix vectors present"
+
+for gv <- prefix_vectors do
+  name = Json.get(gv, "name")
+  plan = Json.get(gv, "plan")
+  want = Json.get(gv, "planIdUtf8")
+  got = Segments.make_plan_id(plan)
+  check got == want, "prefix planId #{name} (got #{got})"
+  check Segments.plan_id_from_json(Json.stringify(plan)) == want, "prefix planId from JSON text #{name}"
+  # Typed %LtxPlan{} (v2 model): same prefix.
+  typed = InterplanetLtx.make_plan_id(InterplanetLtx.upgrade_config(Json.to_plain(plan)))
+  cut = fn id -> binary_part(id, 0, byte_size(id) - 12) end
+  check cut.(typed) == cut.(want), "prefix typed planId #{name} (got #{typed})"
+end
+
 by_name = Map.new(vectors, fn gv -> {Json.get(gv, "name"), gv} end)
 pid_of = fn n -> Json.get(by_name[n], "planId") end
 plan_of = fn n -> Json.to_plain(Json.get(by_name[n], "plan")) end
